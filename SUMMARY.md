@@ -244,7 +244,7 @@ Cannot find module 'page1/Routes' or its corresponding type declarations.
 
 Path aliases are resolved relative to `baseUrl`. With `"baseUrl": "."` (= `apps/shell/`), TypeScript looked for `apps/shell/apps/page1/src/...` which doesn't exist. The remote apps (page1, page2) built fine because they don't use those aliases themselves.
 
-**Fix:** Set `"baseUrl": "../../"` in `apps/shell/tsconfig.app.json` so path resolution starts from the workspace root, where `apps/page1/src/...` is valid. Remote apps kept `"baseUrl": "."`.
+**Fix:** Set `"baseUrl": "../../"` in `apps/shell/tsconfig.app.json` so path resolution starts from the workspace root, where `apps/page1/src/...` is valid. Remote apps kept `"baseUrl": "."` .
 
 ---
 
@@ -364,6 +364,33 @@ jobs:
 ```
 
 CI now passes in ~2 minutes.
+
+---
+
+## Step 19: Debug — Shell Root Path Shows Blank White Screen
+
+After a successful `podman-build` and `podman-up`, navigating to `http://localhost:8080/` showed a blank white screen, while `/page1/` and `/page2/` rendered correctly.
+
+**Diagnosis:** The shell bootstraps Angular and Webpack Module Federation simultaneously tries to fetch the remote entry files (`/page1/remoteEntry.mjs` and `/page2/remoteEntry.mjs`). The `nginx:alpine` image's default `mime.types` file does not include a mapping for the `.mjs` extension, so nginx served those files with `Content-Type: application/octet-stream`. Browsers enforce strict MIME type checking for ES module scripts and refuse to execute them, causing the shell's Module Federation initialization to fail before Angular could render anything.
+
+The `/page1/` and `/page2/` paths appeared to work because nginx served each remote's standalone `index.html` directly — completely bypassing Module Federation.
+
+Browser console confirmed:
+```
+Failed to load module script: Expected a JavaScript-or-Wasm module script but the
+server responded with a MIME type of "application/octet-stream". Strict MIME type
+checking is enforced for module scripts per HTML spec.
+```
+
+**Fix:** Added a `sed` command to the Containerfile's runner stage to patch nginx's built-in `mime.types` file, appending `mjs` to the existing `application/javascript` entry:
+
+```dockerfile
+FROM nginx:alpine AS runner
+COPY nginx/nginx.conf /etc/nginx/nginx.conf
+RUN sed -i 's|application/javascript\s*js;|application/javascript js mjs;|' /etc/nginx/mime.types
+```
+
+A `types {}` block in `nginx.conf` was considered but rejected — a second `types` block in the same context *replaces* the included `mime.types` entirely rather than merging with it, which would break MIME types for all other file extensions.
 
 ---
 
