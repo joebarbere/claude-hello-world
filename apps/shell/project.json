@@ -114,7 +114,7 @@
     "podman-up": {
       "executor": "nx:run-commands",
       "options": {
-        "command": "podman compose up",
+        "command": "podman compose up --no-build",
         "cwd": "{workspaceRoot}"
       }
     },
