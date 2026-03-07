@@ -314,6 +314,59 @@ podman rm -f claude-hello-world
 
 ---
 
+## Step 18: Debug — GitHub Actions Failing (Nx Cloud Not Configured)
+
+Every push to `main` triggered a CI run that failed after ~10 minutes with:
+
+```
+NX  Action Required - Retrying in 30 seconds (Attempt N of 20)
+Repository connected: Action Required
+Finish your setup for CI to continue: https://cloud.nx.app/connect/...
+
+NX  Action Required - Finish your Nx Cloud setup then restart this job.
+```
+
+**Diagnosis:** Nx 22 generates a `.github/workflows/ci.yml` that uses distributed task execution via Nx Cloud:
+
+```yaml
+- run: npx nx start-ci-run --distribute-on="3 linux-medium-js" --stop-agents-after="e2e-ci"
+```
+
+This step waits for the repository to be connected to `cloud.nx.app` before proceeding. Since Nx Cloud was never configured for this repo, it retried every 30 seconds for 20 attempts (~10 minutes) and then failed. All CI runs since the first commit were affected.
+
+The generated workflow also referenced targets that don't apply here (`typecheck`, `e2e-ci`) and used `nx record` and `nx fix-ci` — all Nx Cloud features.
+
+**Debugging:**
+```bash
+gh run list --repo joebarbere/claude-hello-world --limit 5
+# All runs: completed / failure / ~10m26s each
+
+gh run view <run-id> --repo joebarbere/claude-hello-world --log-failed
+# => NX  Action Required - Retrying in 30 seconds (Attempt 1 of 20)
+# => NX  Action Required - Finish your Nx Cloud setup then restart this job.
+```
+
+**Fix:** Replaced `.github/workflows/ci.yml` entirely with a minimal workflow — no Nx Cloud, no distributed agents, no external service dependencies:
+
+```yaml
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+      - run: npm ci
+      - run: npx nx run-many --target=lint --projects=shell,page1,page2 --parallel=3
+      - run: npx nx run-many --target=build --projects=shell,page1,page2 --configuration=production --parallel=3
+```
+
+CI now passes in ~2 minutes.
+
+---
+
 ## Final Verification
 
 ```bash
