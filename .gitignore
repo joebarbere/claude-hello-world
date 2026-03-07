@@ -47,3 +47,4 @@ Thumbs.db
 
 vitest.config.*.timestamp*
 test-output
+.claude/settings.local.json
