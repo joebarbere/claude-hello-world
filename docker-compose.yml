@@ -1,0 +1,8 @@
+services:
+  mfe-app:
+    build:
+      context: .
+      dockerfile: Containerfile
+    ports:
+      - "8080:80"
+    container_name: claude-hello-world
