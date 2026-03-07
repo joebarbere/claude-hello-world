@@ -114,14 +114,14 @@
     "podman-up": {
       "executor": "nx:run-commands",
       "options": {
-        "command": "podman compose up --no-build",
+        "command": "podman run -d --name claude-hello-world -p 8080:80 localhost/claude-hello-world:latest",
         "cwd": "{workspaceRoot}"
       }
     },
     "podman-down": {
       "executor": "nx:run-commands",
       "options": {
-        "command": "podman compose down",
+        "command": "podman rm -f claude-hello-world",
         "cwd": "{workspaceRoot}"
       }
     }
