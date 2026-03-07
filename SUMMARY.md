@@ -1,0 +1,290 @@
+# Project Creation Summary
+
+Steps taken to scaffold, configure, debug, and containerize this Nx Angular micro-frontend monorepo.
+
+---
+
+## Step 1: Scaffold the Nx Workspace
+
+```bash
+cd /Users/joe/play
+npx create-nx-workspace@latest claude-hello-world --preset=apps --nxCloud=skip --pm=npm
+```
+
+Used `--preset=apps` for an empty workspace with no pre-generated apps, and `--pm=npm` to pin the package manager. Nx 22.5.4 was installed. The workspace was created at `/Users/joe/play/claude-hello-world` with git already initialized.
+
+---
+
+## Step 2: Add the Angular Plugin
+
+```bash
+cd claude-hello-world
+NX_IGNORE_UNSUPPORTED_TS_SETUP=true npx nx add @nx/angular
+```
+
+The first attempt without the env var failed:
+
+```
+NX  The "@nx/angular" plugin doesn't support the existing TypeScript setup
+The Angular framework doesn't support a TypeScript setup with project references.
+```
+
+Nx 22 scaffolds workspaces with TypeScript project references enabled (`composite: true` in `tsconfig.base.json`). Angular doesn't support that mode. The env var bypasses the check so the plugin installs anyway — the TS incompatibilities are fixed manually later (Step 9).
+
+---
+
+## Step 3: Generate the Host and Remote Apps
+
+```bash
+NX_IGNORE_UNSUPPORTED_TS_SETUP=true npx nx g @nx/angular:host apps/shell \
+  --remotes=page1,page2 --standalone --bundler=webpack --no-interactive
+```
+
+The `host` generator creates:
+- `apps/shell/` — the host (shell) application with `module-federation.config.ts` and webpack configs
+- `apps/page1/` and `apps/page2/` — remote apps each exposing `./Routes`
+- Corresponding `-e2e` projects for Playwright tests
+
+The `--standalone` flag uses standalone Angular components (no NgModule). `--bundler=webpack` is required for Module Federation (rspack support is separate).
+
+---
+
+## Step 4: Create the GitHub Repository
+
+Used the `mcp__github__create_repository` MCP tool to create a public repo named `claude-hello-world` under `joebarbere`. HTTPS authentication with a PAT was required since SSH keys were not configured in this environment:
+
+```bash
+git remote set-url origin https://joebarbere:${GITHUB_PERSONAL_ACCESS_TOKEN}@github.com/joebarbere/claude-hello-world.git
+git push -u origin main
+```
+
+---
+
+## Step 5: Configure Production Remote URLs in the Shell
+
+Edited `apps/shell/webpack.prod.config.ts` to add production remote URL overrides. Nx generates this file with a placeholder comment. The remotes are served at path-based URLs inside the nginx container:
+
+```ts
+// apps/shell/webpack.prod.config.ts
+export default withModuleFederation(
+  {
+    ...config,
+    remotes: [
+      ['page1', '/page1/remoteEntry.mjs'],
+      ['page2', '/page2/remoteEntry.mjs'],
+    ],
+  },
+  { dts: false }
+);
+```
+
+The dev webpack config (`webpack.config.ts`) keeps `remotes: ['page1', 'page2']` for localhost dev server use.
+
+---
+
+## Step 6: Set baseHref for Remote Apps
+
+Added `"baseHref": "/page1/"` and `"baseHref": "/page2/"` to the production configuration in each remote's `project.json`. This ensures Angular sets `<base href="/page1/">` in the generated HTML so asset paths resolve correctly when served from a sub-path.
+
+---
+
+## Step 7: Create the nginx Configuration
+
+Created `nginx/nginx.conf` with path-based routing:
+- `/` → shell app (`/usr/share/nginx/html/shell`)
+- `/page1/` → page1 remote (`/usr/share/nginx/html/page1/`)
+- `/page2/` → page2 remote (`/usr/share/nginx/html/page2/`)
+
+Used `try_files $uri $uri/ /index.html` for the shell (SPA fallback) and `try_files $uri /page1/index.html` for remotes.
+
+---
+
+## Step 8: Create the Containerfile and docker-compose.yml
+
+**`Containerfile`** — multi-stage build:
+1. Stage 1 (`builder`): `node:20-alpine`, runs `npm ci` then `npx nx run-many --target=build --projects=shell,page1,page2 --configuration=production --parallel=3`
+2. Stage 2 (`runner`): `nginx:alpine`, copies each app's build output to its nginx serving directory
+
+**`docker-compose.yml`** — `podman compose` orchestration, maps host port 8080 to container port 80.
+
+---
+
+## Step 9: Add Nx Custom Targets to shell/project.json
+
+Added four targets to `apps/shell/project.json`:
+
+| Target | Command |
+|--------|---------|
+| `build-all` | `npx nx run-many --target=build --projects=shell,page1,page2 --configuration=production --parallel=3` |
+| `podman-build` | `podman build -t claude-hello-world -f Containerfile .` (depends on `build-all`) |
+| `podman-up` | `podman compose up` |
+| `podman-down` | `podman compose down` |
+
+---
+
+## Step 10: Initial Commit and Push
+
+```bash
+# Commit 1: all scaffolded files
+git add --all -- ':!Containerfile' ':!docker-compose.yml' ':!nginx/'
+git commit -m "feat: initial Nx Angular MFE monorepo"
+
+# Commit 2: infra files
+git add Containerfile docker-compose.yml nginx/nginx.conf
+git commit -m "feat: add Podman, nginx, and Nx podman targets"
+
+git push -u origin main
+```
+
+---
+
+## Step 11: Debug — BUILD-001 (Failed to find expose module)
+
+Running `npx nx podman-build shell` failed with:
+
+```
+<e> [EnhancedModuleFederationPlugin] Failed to find expose module. #BUILD-001
+<e> args: {"exposeModules":[{"name":"./Routes","module":null,
+    "request":"apps/page1/src/app/remote-entry/entry.routes.ts"}]}
+```
+
+**Diagnosis:** The `exposes` path in `module-federation.config.ts` was `apps/page1/src/app/remote-entry/entry.routes.ts` — no leading `./`. Webpack's resolver treats paths without a `./`/`../`/`/` prefix as bare module specifiers (node_modules lookups), not file paths. The `ContainerEntryModule` in `@module-federation/enhanced` has a null context, so webpack uses the compilation context (workspace root) for resolution. Without `./`, the file is never found.
+
+**Debugging steps:**
+```bash
+# Confirmed file exists at workspace-root-relative path
+node -e "
+  const path = require('path');
+  const fs = require('fs');
+  console.log(fs.existsSync(path.resolve(process.cwd(), 'apps/page1/src/app/remote-entry/entry.routes.ts')));
+"
+# => true (file exists, so the problem is how webpack resolves it, not where it is)
+
+# Traced the error source to ContainerEntryModule.js line ~145
+grep -n "BUILD-001\|exposeModules" \
+  node_modules/@module-federation/enhanced/dist/src/lib/container/ContainerEntryModule.js
+
+# Found: moduleGraph.getModule(dep) returns null when dep can't be resolved
+# Confirmed ContainerEntryModule calls super(JAVASCRIPT_MODULE_TYPE_DYNAMIC, null)
+# — null context means webpack falls back to compilation.options.context (workspace root)
+grep -n "context:" \
+  node_modules/@angular-devkit/build-angular/src/tools/webpack/configs/common.js
+# => context: root  (root = workspaceRoot)
+```
+
+**Fix:** Use `path.join(__dirname, ...)` in the MF config so the path is absolute:
+
+```ts
+// apps/page1/module-federation.config.ts
+import { join } from 'path';
+exposes: {
+  './Routes': join(__dirname, 'src/app/remote-entry/entry.routes.ts'),
+}
+```
+
+`__dirname` at Node.js config-evaluation time is `apps/page1/`, giving an unambiguous absolute path.
+
+---
+
+## Step 12: Debug — `Cannot find name 'console'` (missing DOM lib)
+
+After fixing BUILD-001, the build failed with:
+
+```
+Error: apps/page1/src/bootstrap.ts:5:61 - error TS2584:
+Cannot find name 'console'. Do you need to change your target library?
+Try changing the 'lib' compiler option to include 'dom'.
+```
+
+**Diagnosis:** `tsconfig.base.json` was generated with `"lib": ["es2022"]` only. The `dom` lib (which provides `console`, `window`, `document`, etc.) was missing.
+
+**Fix:** Added `"lib": ["es2022", "dom"]` to the `compilerOptions` of every `tsconfig.app.json` (shell, page1, page2).
+
+---
+
+## Step 13: Debug — Angular Compiler Rejects Project Reference Options
+
+The next build attempt failed with:
+
+```
+Error: NG4006: TS compiler option "emitDeclarationOnly" is not supported.
+Error: TS5069: Option 'emitDeclarationOnly' cannot be specified without specifying 'declaration' or 'composite'.
+Error: TS5090: Non-relative paths are not allowed when 'baseUrl' is not set.
+```
+
+**Diagnosis:** `tsconfig.base.json` inherited into `tsconfig.app.json` carries project-reference settings (`composite: true`, `emitDeclarationOnly: true`, `declarationMap: true`) that Angular's compiler explicitly rejects. Additionally, the path aliases (`"page1/Routes": [...]`) in `tsconfig.base.json` require a `baseUrl` to resolve, but none was set on the app-level tsconfigs.
+
+**Fix:** Overrode those options in every `tsconfig.app.json`:
+
+```json
+"composite": false,
+"declarationMap": false,
+"emitDeclarationOnly": false,
+"baseUrl": "."
+```
+
+---
+
+## Step 14: Debug — `Cannot find module 'page1/Routes'` in Shell
+
+Shell build failed with:
+
+```
+Error: apps/shell/src/app/app.routes.ts:11:32 - error TS2307:
+Cannot find module 'page1/Routes' or its corresponding type declarations.
+```
+
+**Diagnosis:** The shell imports remotes as `import('page1/Routes')`. TypeScript resolves this using the `paths` aliases in `tsconfig.base.json`:
+
+```json
+"paths": {
+  "page1/Routes": ["apps/page1/src/app/remote-entry/entry.routes.ts"]
+}
+```
+
+Path aliases are resolved relative to `baseUrl`. With `"baseUrl": "."` (= `apps/shell/`), TypeScript looked for `apps/shell/apps/page1/src/...` which doesn't exist. The remote apps (page1, page2) built fine because they don't use those aliases themselves.
+
+**Fix:** Set `"baseUrl": "../../"` in `apps/shell/tsconfig.app.json` so path resolution starts from the workspace root, where `apps/page1/src/...` is valid. Remote apps kept `"baseUrl": "."`.
+
+---
+
+## Step 15: Debug — Containerfile Copies Wrong Path
+
+With all JS builds passing, `podman build` failed at the COPY stage:
+
+```
+Error: COPY --from=builder /app/dist/apps/shell/browser: no such file or directory
+```
+
+**Diagnosis:** The plan assumed output at `dist/apps/shell/browser/` (common for `@angular-devkit/build-angular:browser`), but `@nx/angular:webpack-browser` outputs directly to `dist/apps/shell/` with no `browser/` subdirectory.
+
+**Debugging:**
+```bash
+ls dist/apps/shell/
+# => index.html  main.*.js  remoteEntry.mjs  ...  (no browser/ subdir)
+```
+
+**Fix:** Removed `/browser` suffix from all three COPY lines in the Containerfile:
+
+```dockerfile
+COPY --from=builder /app/dist/apps/shell /usr/share/nginx/html/shell
+COPY --from=builder /app/dist/apps/page1 /usr/share/nginx/html/page1
+COPY --from=builder /app/dist/apps/page2 /usr/share/nginx/html/page2
+```
+
+---
+
+## Final Verification
+
+```bash
+npx nx podman-build shell
+# NX  Successfully ran target podman-build for project shell
+
+podman images | grep claude-hello-world
+# localhost/claude-hello-world  latest  ...
+
+npx nx podman-up shell
+# → http://localhost:8080        (shell)
+# → http://localhost:8080/page1/remoteEntry.mjs
+# → http://localhost:8080/page2/remoteEntry.mjs
+```
