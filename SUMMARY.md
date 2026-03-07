@@ -105,7 +105,7 @@ Used `try_files $uri $uri/ /index.html` for the shell (SPA fallback) and `try_fi
 1. Stage 1 (`builder`): `node:20-alpine`, runs `npm ci` then `npx nx run-many --target=build --projects=shell,page1,page2 --configuration=production --parallel=3`
 2. Stage 2 (`runner`): `nginx:alpine`, copies each app's build output to its nginx serving directory
 
-**`docker-compose.yml`** — `podman compose` orchestration, maps host port 8080 to container port 80.
+**`docker-compose.yml`** — kept for reference but not used at runtime (see Step 16). Maps host port 8080 to container port 80 and references the pre-built image by name.
 
 ---
 
@@ -117,8 +117,8 @@ Added four targets to `apps/shell/project.json`:
 |--------|---------|
 | `build-all` | `npx nx run-many --target=build --projects=shell,page1,page2 --configuration=production --parallel=3` |
 | `podman-build` | `podman build -t claude-hello-world -f Containerfile .` (depends on `build-all`) |
-| `podman-up` | `podman compose up` |
-| `podman-down` | `podman compose down` |
+| `podman-up` | `podman run -d --name claude-hello-world -p 8080:80 localhost/claude-hello-world:latest` |
+| `podman-down` | `podman rm -f claude-hello-world` |
 
 ---
 
@@ -270,6 +270,46 @@ ls dist/apps/shell/
 COPY --from=builder /app/dist/apps/shell /usr/share/nginx/html/shell
 COPY --from=builder /app/dist/apps/page1 /usr/share/nginx/html/page1
 COPY --from=builder /app/dist/apps/page2 /usr/share/nginx/html/page2
+```
+
+---
+
+## Step 16: Debug — `podman-up` Triggered an Image Rebuild
+
+Running `npx nx podman-up shell` failed with:
+
+```
+error listing credentials - err: exec: "docker-credential-osxkeychain":
+executable file not found in $PATH
+```
+
+**Diagnosis:** The original `docker-compose.yml` had a `build: context/dockerfile` section. `podman compose up` (delegating to Docker Compose v2) saw the build context and attempted to rebuild the image from scratch, which required the `docker-credential-osxkeychain` helper — not present in this environment.
+
+**Fix:** Removed the `build:` block from `docker-compose.yml` and replaced it with `image: localhost/claude-hello-world:latest` so compose uses the image already produced by `podman-build`. Also added `--no-build` to the `podman compose up` command as a safeguard.
+
+---
+
+## Step 17: Debug — Docker Compose v2 Nil Pointer Panic
+
+After the rebuild was suppressed, `podman compose up` still failed:
+
+```
+panic: runtime error: invalid memory address or nil pointer dereference
+github.com/docker/compose/v2/pkg/compose.(*monitor).Start(...)
+  github.com/docker/compose/v2/pkg/compose/monitor.go:150
+Error: executing /usr/local/bin/docker-compose up --no-build: exit status 2
+```
+
+**Diagnosis:** `podman compose` delegates to `/usr/local/bin/docker-compose` (Docker Compose v2). The compose monitor goroutine, which watches container state after startup, dereferences a nil pointer when running via the podman shim. This is a bug in Docker Compose v2's integration with podman. The container itself started successfully (verified with `curl -s http://localhost:8080` returning 200) — only the compose supervisor process crashed.
+
+**Fix:** Replaced both `podman-up` and `podman-down` targets with direct `podman` commands, bypassing compose entirely:
+
+```bash
+# podman-up
+podman run -d --name claude-hello-world -p 8080:80 localhost/claude-hello-world:latest
+
+# podman-down
+podman rm -f claude-hello-world
 ```
 
 ---

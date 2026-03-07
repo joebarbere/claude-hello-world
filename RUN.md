@@ -136,13 +136,13 @@ To verify the image was created:
 podman images | grep claude-hello-world
 ```
 
-### Start the container via Podman Compose
+### Start the container
 
 ```bash
 npx nx podman-up shell
 ```
 
-Runs `podman compose up` using `docker-compose.yml`, which starts the `claude-hello-world` container and maps port 8080 on the host to port 80 in the container.
+Runs `podman run -d` to start the `claude-hello-world` container in detached mode, mapping port 8080 on the host to port 80 in the container. The image must have been built first with `podman-build`.
 
 | URL | Serves |
 |-----|--------|
@@ -152,27 +152,13 @@ Runs `podman compose up` using `docker-compose.yml`, which starts the `claude-he
 | http://localhost:8080/page1/remoteEntry.mjs | page1 Module Federation entry point |
 | http://localhost:8080/page2/remoteEntry.mjs | page2 Module Federation entry point |
 
-To start in detached mode (background):
-
-```bash
-podman compose up -d
-```
-
 ### Stop the container
 
 ```bash
 npx nx podman-down shell
 ```
 
-Runs `podman compose down`, stopping and removing the container. The image is preserved — you can restart with `podman-up` without rebuilding.
-
-### Run the image directly (without Compose)
-
-```bash
-podman run -p 8080:80 claude-hello-world
-```
-
-Starts the container directly from the image, bypassing Compose. Useful for quick tests when you don't need the full Compose configuration.
+Runs `podman rm -f claude-hello-world`, forcibly stopping and removing the container. The image is preserved — you can restart with `podman-up` without rebuilding.
 
 ---
 
