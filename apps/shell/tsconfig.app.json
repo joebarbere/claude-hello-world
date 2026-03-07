@@ -3,7 +3,12 @@
   "compilerOptions": {
     "outDir": "../../dist/out-tsc",
     "types": [],
-    "target": "ES2020"
+    "lib": ["es2022", "dom"],
+    "target": "ES2020",
+    "composite": false,
+    "declarationMap": false,
+    "emitDeclarationOnly": false,
+    "baseUrl": "../../"
   },
   "include": ["src/**/*.ts"],
   "exclude": [

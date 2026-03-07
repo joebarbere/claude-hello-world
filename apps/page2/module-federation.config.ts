@@ -1,9 +1,10 @@
 import { ModuleFederationConfig } from '@nx/module-federation';
+import { join } from 'path';
 
 const config: ModuleFederationConfig = {
   name: 'page2',
   exposes: {
-    './Routes': 'apps/page2/src/app/remote-entry/entry.routes.ts',
+    './Routes': join(__dirname, 'src/app/remote-entry/entry.routes.ts'),
   },
 };
 

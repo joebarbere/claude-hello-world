@@ -9,8 +9,8 @@ RUN npx nx run-many --target=build --projects=shell,page1,page2 --configuration=
 # Stage 2: Serve
 FROM nginx:alpine AS runner
 COPY nginx/nginx.conf /etc/nginx/nginx.conf
-COPY --from=builder /app/dist/apps/shell/browser /usr/share/nginx/html/shell
-COPY --from=builder /app/dist/apps/page1/browser /usr/share/nginx/html/page1
-COPY --from=builder /app/dist/apps/page2/browser /usr/share/nginx/html/page2
+COPY --from=builder /app/dist/apps/shell /usr/share/nginx/html/shell
+COPY --from=builder /app/dist/apps/page1 /usr/share/nginx/html/page1
+COPY --from=builder /app/dist/apps/page2 /usr/share/nginx/html/page2
 EXPOSE 80
 CMD ["nginx", "-g", "daemon off;"]
