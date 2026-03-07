@@ -16,6 +16,10 @@
     "skipLibCheck": true,
     "strict": true,
     "target": "es2022",
-    "customConditions": ["@org/source"]
+    "customConditions": ["@org/source"],
+    "paths": {
+      "page1/Routes": ["apps/page1/src/app/remote-entry/entry.routes.ts"],
+      "page2/Routes": ["apps/page2/src/app/remote-entry/entry.routes.ts"]
+    }
   }
 }
