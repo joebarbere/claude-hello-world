@@ -490,6 +490,57 @@ location /weather {
 
 ---
 
+## Step 24: Fix Weather Table Not Visible in Dev Mode
+
+The weather table rendered correctly in the containerized setup but was invisible when running the dev server (`nx serve shell`). The Angular component showed the error state instead of data.
+
+**Diagnosis:** In dev mode the webpack dev server handles all requests at `localhost:4200`. There was no proxy rule for `/weather`, so requests from the page1 component fell through to the dev server, which returned a 404. The nginx `/weather` proxy only exists inside the container — it has no effect during local development.
+
+**Fix:** Added `apps/shell/proxy.conf.json` to proxy `/weather` to the local weather-api dev server:
+
+```json
+{
+  "/weather": {
+    "target": "http://localhost:5220",
+    "pathRewrite": {
+      "^/weather": "/weatherforecast"
+    },
+    "secure": false,
+    "changeOrigin": true
+  }
+}
+```
+
+Wired it into the `serve` target in `apps/shell/project.json`:
+
+```json
+"options": {
+  "port": 4200,
+  "publicHost": "http://localhost:4200",
+  "proxyConfig": "apps/shell/proxy.conf.json"
+}
+```
+
+To see the table in dev mode, run both servers:
+
+```bash
+# Terminal 1
+NX_DAEMON=false npx nx serve weather-api
+
+# Terminal 2
+npx nx serve shell --devRemotes=page1,page2
+```
+
+---
+
+## Step 25: Add build dependsOn to podman-build Targets
+
+`npx nx podman-build weather-api` would run the container build against whatever was already on disk — there was no guarantee the .NET project had been compiled first. Added `"dependsOn": ["build"]` to the `podman-build` target in `apps/weather-api/project.json` so Nx always runs `dotnet build` before the container build.
+
+The shell's `podman-build` already had `"dependsOn": ["build-all"]`, which covers the production builds for shell, page1, and page2 before the nginx container image is assembled.
+
+---
+
 ## Final Verification
 
 ```bash
