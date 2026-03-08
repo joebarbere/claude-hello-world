@@ -27,6 +27,9 @@ spec:
       ports:
         - containerPort: 8080
           hostPort: 5221
+      env:
+        - name: ConnectionStrings__DefaultConnection
+          value: Host=host.containers.internal;Port=5432;Database=appdb;Username=appuser;Password=apppassword
 
 ---
 
