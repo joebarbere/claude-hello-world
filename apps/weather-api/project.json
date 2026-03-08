@@ -25,6 +25,27 @@
         "command": "dotnet format apps/weather-api/WeatherApi.csproj --verify-no-changes",
         "cwd": "{workspaceRoot}"
       }
+    },
+    "podman-build": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "podman build -t weather-api -f apps/weather-api/Containerfile .",
+        "cwd": "{workspaceRoot}"
+      }
+    },
+    "podman-up": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "podman run -d --name weather-api -p 5221:8080 localhost/weather-api:latest",
+        "cwd": "{workspaceRoot}"
+      }
+    },
+    "podman-down": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "podman rm -f weather-api",
+        "cwd": "{workspaceRoot}"
+      }
     }
   },
   "tags": ["type:app", "platform:dotnet"]

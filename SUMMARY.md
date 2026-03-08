@@ -416,6 +416,30 @@ dotnet new webapi --language "C#" --name WeatherApi --output apps/weather-api
 
 ---
 
+## Step 21: Containerize the Weather API
+
+Added a lightweight Containerfile and Nx podman targets for the weather-api.
+
+**`apps/weather-api/Containerfile`** — two-stage build:
+1. Stage 1 (`builder`): `mcr.microsoft.com/dotnet/sdk:9.0-alpine` — copies only `apps/weather-api/` into the image (no workspace tooling needed), runs `dotnet restore` then `dotnet publish -c Release -o /app/publish`
+2. Stage 2 (`runner`): `mcr.microsoft.com/dotnet/aspnet:9.0-alpine` — copies the published output from the builder; contains only the ASP.NET runtime, not the SDK
+
+The build context is the workspace root so the `COPY apps/weather-api/ ./` path resolves correctly. `Directory.Build.props` and `Directory.Build.targets` are not copied into the image — the `-o /app/publish` flag makes the workspace output path overrides irrelevant inside the container.
+
+**Nx targets added to `apps/weather-api/project.json`:**
+
+| Target | Command |
+|--------|---------|
+| `podman-build` | `podman build -t weather-api -f apps/weather-api/Containerfile .` |
+| `podman-up` | `podman run -d --name weather-api -p 5221:8080 localhost/weather-api:latest` |
+| `podman-down` | `podman rm -f weather-api` |
+
+Port 5221 on the host maps to 8080 in the container (ASP.NET Core's default HTTP port in container environments, set via `ASPNETCORE_HTTP_PORTS`). Port 5221 was chosen to avoid conflicts with the dev server (5220) and the Angular MFE container (8080).
+
+The Scalar API reference UI (`/scalar/v1`) is not available in the containerized build — `MapScalarApiReference()` is only registered when `ASPNETCORE_ENVIRONMENT=Development`.
+
+---
+
 ## Final Verification
 
 ```bash

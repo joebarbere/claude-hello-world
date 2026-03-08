@@ -1,0 +1,13 @@
+# Stage 1: Build
+FROM mcr.microsoft.com/dotnet/sdk:9.0-alpine AS builder
+WORKDIR /src
+COPY apps/weather-api/ ./
+RUN dotnet restore WeatherApi.csproj
+RUN dotnet publish WeatherApi.csproj -c Release -o /app/publish --no-restore
+
+# Stage 2: Run
+FROM mcr.microsoft.com/dotnet/aspnet:9.0-alpine AS runner
+WORKDIR /app
+COPY --from=builder /app/publish .
+EXPOSE 8080
+ENTRYPOINT ["dotnet", "WeatherApi.dll"]

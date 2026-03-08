@@ -186,6 +186,42 @@ Runs `dotnet watch run` against the project, enabling hot reload. The API listen
 | http://localhost:5220/scalar/v1 | Scalar API reference UI (dev only) |
 | http://localhost:5220/openapi/v1.json | Raw OpenAPI JSON spec |
 
+### Build the container image
+
+```bash
+npx nx podman-build weather-api
+```
+
+Runs a two-stage Podman build using `apps/weather-api/Containerfile` with the workspace root as the build context:
+
+1. **builder** — `mcr.microsoft.com/dotnet/sdk:9.0-alpine`: restores packages and publishes a Release build to `/app/publish`
+2. **runner** — `mcr.microsoft.com/dotnet/aspnet:9.0-alpine`: copies the published output and sets the entrypoint
+
+The resulting image is tagged `localhost/weather-api:latest`. The runtime image contains only the ASP.NET runtime (no SDK), keeping the image size minimal.
+
+### Start the container
+
+```bash
+npx nx podman-up weather-api
+```
+
+Runs the container in detached mode, mapping host port 5221 to the container's port 8080 (ASP.NET Core's default HTTP port in containers).
+
+| URL | Description |
+|-----|-------------|
+| http://localhost:5221/weatherforecast | Weather forecast endpoint |
+| http://localhost:5221/openapi/v1.json | OpenAPI JSON spec |
+
+Note: Scalar UI is not available in the containerized build — `app.MapScalarApiReference()` is only registered in the `Development` environment.
+
+### Stop the container
+
+```bash
+npx nx podman-down weather-api
+```
+
+Runs `podman rm -f weather-api`, forcibly stopping and removing the container. The image is preserved.
+
 ---
 
 ## Nx Workspace Utilities
