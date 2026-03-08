@@ -126,12 +126,20 @@
         "cwd": "{workspaceRoot}"
       }
     },
+    "podman-build-postgres": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "podman build -t postgres -f Containerfile.postgres .",
+        "cwd": "{workspaceRoot}"
+      }
+    },
     "kube-up": {
       "executor": "nx:run-commands",
       "options": {
         "command": "podman play kube k8s/pod.yaml",
         "cwd": "{workspaceRoot}"
-      }
+      },
+      "dependsOn": ["podman-build-postgres"]
     },
     "kube-down": {
       "executor": "nx:run-commands",

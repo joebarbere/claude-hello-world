@@ -572,6 +572,61 @@ error MSB3073: The command "node ../..//node_modules/@nx-dotnet/core/src/tasks/c
 
 ---
 
+## Step 28: Add PostgreSQL Container
+
+Added a lightweight PostgreSQL 17 image and wired it into the Kubernetes kube workflow.
+
+**`Containerfile.postgres`** — extends `postgres:17-alpine` (the official Alpine-based image, ~90 MB) with default dev credentials baked in as `ENV` defaults:
+
+```dockerfile
+FROM postgres:17-alpine
+
+ENV POSTGRES_DB=appdb
+ENV POSTGRES_USER=appuser
+ENV POSTGRES_PASSWORD=apppassword
+
+EXPOSE 5432
+```
+
+**`k8s/pod.yaml`** — added a third Pod spec:
+
+```yaml
+apiVersion: v1
+kind: Pod
+metadata:
+  name: postgres
+  labels:
+    app: postgres
+spec:
+  containers:
+    - name: postgres
+      image: localhost/postgres:latest
+      ports:
+        - containerPort: 5432
+          hostPort: 5432
+      env:
+        - name: POSTGRES_DB
+          value: appdb
+        - name: POSTGRES_USER
+          value: appuser
+        - name: POSTGRES_PASSWORD
+          value: apppassword
+```
+
+The env vars in the pod spec override the `ENV` defaults from the image, making credentials configurable at runtime without rebuilding.
+
+**`apps/shell/project.json`** — added `podman-build-postgres` target and `dependsOn` on `kube-up`:
+
+| Target | Command |
+|--------|---------|
+| `podman-build-postgres` | `podman build -t postgres -f Containerfile.postgres .` |
+
+`kube-up` now has `"dependsOn": ["podman-build-postgres"]` so the image is always current before the pods start.
+
+Connect with: `psql -h localhost -p 5432 -U appuser -d appdb`
+
+---
+
 ## Final Verification
 
 ```bash

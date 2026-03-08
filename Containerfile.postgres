@@ -1,0 +1,7 @@
+FROM postgres:17-alpine
+
+ENV POSTGRES_DB=appdb
+ENV POSTGRES_USER=appuser
+ENV POSTGRES_PASSWORD=apppassword
+
+EXPOSE 5432
