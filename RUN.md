@@ -125,10 +125,10 @@ npx nx podman-build shell
 First runs `build-all` (production builds for all three apps), then runs:
 
 ```
-podman build -t claude-hello-world -f Containerfile .
+podman build -t claude-hello-world -f Containerfile.nginx .
 ```
 
-The multi-stage `Containerfile` compiles the apps inside a `node:20-alpine` container and copies the outputs into an `nginx:alpine` image. The resulting image is tagged `localhost/claude-hello-world:latest`.
+The multi-stage `Containerfile.nginx` compiles the apps inside a `node:20-alpine` container and copies the outputs into an `nginx:alpine` image. The resulting image is tagged `localhost/claude-hello-world:latest`.
 
 To verify the image was created:
 

@@ -107,7 +107,7 @@
     "podman-build": {
       "executor": "nx:run-commands",
       "options": {
-        "command": "podman build -t claude-hello-world -f Containerfile .",
+        "command": "podman build -t claude-hello-world -f Containerfile.nginx .",
         "cwd": "{workspaceRoot}"
       },
       "dependsOn": ["build-all"]

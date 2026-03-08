@@ -99,9 +99,9 @@ Used `try_files $uri $uri/ /index.html` for the shell (SPA fallback) and `try_fi
 
 ---
 
-## Step 8: Create the Containerfile and docker-compose.yml
+## Step 8: Create the Containerfile.nginx and docker-compose.yml
 
-**`Containerfile`** — multi-stage build:
+**`Containerfile.nginx`** — multi-stage build:
 1. Stage 1 (`builder`): `node:20-alpine`, runs `npm ci` then `npx nx run-many --target=build --projects=shell,page1,page2 --configuration=production --parallel=3`
 2. Stage 2 (`runner`): `nginx:alpine`, copies each app's build output to its nginx serving directory
 
@@ -116,7 +116,7 @@ Added four targets to `apps/shell/project.json`:
 | Target | Command |
 |--------|---------|
 | `build-all` | `npx nx run-many --target=build --projects=shell,page1,page2 --configuration=production --parallel=3` |
-| `podman-build` | `podman build -t claude-hello-world -f Containerfile .` (depends on `build-all`) |
+| `podman-build` | `podman build -t claude-hello-world -f Containerfile.nginx .` (depends on `build-all`) |
 | `podman-up` | `podman run -d --name claude-hello-world -p 8080:80 localhost/claude-hello-world:latest` |
 | `podman-down` | `podman rm -f claude-hello-world` |
 
@@ -126,11 +126,11 @@ Added four targets to `apps/shell/project.json`:
 
 ```bash
 # Commit 1: all scaffolded files
-git add --all -- ':!Containerfile' ':!docker-compose.yml' ':!nginx/'
+git add --all -- ':!Containerfile.nginx' ':!docker-compose.yml' ':!nginx/'
 git commit -m "feat: initial Nx Angular MFE monorepo"
 
 # Commit 2: infra files
-git add Containerfile docker-compose.yml nginx/nginx.conf
+git add Containerfile.nginx docker-compose.yml nginx/nginx.conf
 git commit -m "feat: add Podman, nginx, and Nx podman targets"
 
 git push -u origin main
@@ -248,7 +248,7 @@ Path aliases are resolved relative to `baseUrl`. With `"baseUrl": "."` (= `apps/
 
 ---
 
-## Step 15: Debug — Containerfile Copies Wrong Path
+## Step 15: Debug — Containerfile.nginx Copies Wrong Path
 
 With all JS builds passing, `podman build` failed at the COPY stage:
 
@@ -264,7 +264,7 @@ ls dist/apps/shell/
 # => index.html  main.*.js  remoteEntry.mjs  ...  (no browser/ subdir)
 ```
 
-**Fix:** Removed `/browser` suffix from all three COPY lines in the Containerfile:
+**Fix:** Removed `/browser` suffix from all three COPY lines in `Containerfile.nginx`:
 
 ```dockerfile
 COPY --from=builder /app/dist/apps/shell /usr/share/nginx/html/shell
@@ -382,7 +382,7 @@ server responded with a MIME type of "application/octet-stream". Strict MIME typ
 checking is enforced for module scripts per HTML spec.
 ```
 
-**Fix:** Added a `sed` command to the Containerfile's runner stage to patch nginx's built-in `mime.types` file, appending `mjs` to the existing `application/javascript` entry:
+**Fix:** Added a `sed` command to the `Containerfile.nginx` runner stage to patch nginx's built-in `mime.types` file, appending `mjs` to the existing `application/javascript` entry:
 
 ```dockerfile
 FROM nginx:alpine AS runner
@@ -541,7 +541,17 @@ The shell's `podman-build` already had `"dependsOn": ["build-all"]`, which cover
 
 ---
 
-## Step 26: Fix — Nx Daemon Hangs in dotnet Build Context
+## Step 26: Rename Containerfile to Containerfile.nginx
+
+Renamed the root `Containerfile` to `Containerfile.nginx` to distinguish it from `apps/weather-api/Containerfile` and make its purpose (nginx MFE image) clear at a glance.
+
+Updated references:
+- `apps/shell/project.json` — `podman-build` target: `-f Containerfile` → `-f Containerfile.nginx`
+- `RUN.md` — build command and description
+
+---
+
+## Step 27: Fix — Nx Daemon Hangs in dotnet Build Context
 
 `npx nx podman-build weather-api` failed during the `dotnet build` step with:
 
