@@ -1,0 +1,10 @@
+{
+  "/weather": {
+    "target": "http://localhost:5220",
+    "pathRewrite": {
+      "^/weather": "/weatherforecast"
+    },
+    "secure": false,
+    "changeOrigin": true
+  }
+}
