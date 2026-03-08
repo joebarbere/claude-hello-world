@@ -394,6 +394,28 @@ A `types {}` block in `nginx.conf` was considered but rejected — a second `typ
 
 ---
 
+## Step 20: Add .NET Weather API to the Monorepo
+
+Added a .NET 9 Web API project (`weather-api`) to the Nx monorepo.
+
+**Plugin install:** Installed the `@nx-dotnet/core` community plugin (v3.0.2) and ran `nx g @nx-dotnet/core:init` to scaffold the required config files (`Directory.Build.props`, `Directory.Build.targets`, `.config/dotnet-tools.json`).
+
+**Generator incompatibility:** The `@nx-dotnet/core:app` generator failed due to a version mismatch — the plugin bundles `@nx/js@21.4.1`, which references an internal module path (`nx/src/command-line/release/config/use-legacy-versioning`) removed in `nx@22.5.1`. Scaffolded the project manually instead:
+
+```bash
+dotnet new webapi --language "C#" --name WeatherApi --output apps/weather-api
+```
+
+**Nx registration:** Created `apps/weather-api/project.json` manually, wiring in `@nx-dotnet/core` executors for `build`, `serve`, `test`, and `lint` targets. Tagged `type:app` and `platform:dotnet`.
+
+**Scalar API UI:** The .NET 9 webapi template uses the new built-in OpenAPI support (`AddOpenApi` / `MapOpenApi`) rather than Swashbuckle — `/swagger` returns 404 by default. Added the `Scalar.AspNetCore` package and `app.MapScalarApiReference()` to expose an API reference UI at `/scalar/v1`.
+
+**Executor fix:** The `project.json` initially used `@nx-dotnet/core:run` for the serve target, which does not exist in the plugin's `executors.json`. Corrected to `@nx-dotnet/core:serve`.
+
+**NX_DAEMON workaround:** After a successful `dotnet build`, the Nx Daemon hangs indefinitely while recalculating the project graph. Prefixing commands with `NX_DAEMON=false` resolves this.
+
+---
+
 ## Final Verification
 
 ```bash

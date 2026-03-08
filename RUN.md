@@ -162,6 +162,32 @@ Runs `podman rm -f claude-hello-world`, forcibly stopping and removing the conta
 
 ---
 
+## Weather API (.NET)
+
+### Build the API
+
+```bash
+NX_DAEMON=false npx nx build weather-api
+```
+
+Runs `dotnet build` on `apps/weather-api/WeatherApi.csproj` in Debug configuration. Output lands in `dist/apps/weather-api/net9.0/`. The `NX_DAEMON=false` flag avoids a known Nx Daemon hang when calculating the project graph after a .NET build.
+
+### Serve the API (with hot reload)
+
+```bash
+NX_DAEMON=false npx nx serve weather-api
+```
+
+Runs `dotnet watch run` against the project, enabling hot reload. The API listens on:
+
+| URL | Description |
+|-----|-------------|
+| http://localhost:5220/weatherforecast | Sample weather forecast endpoint |
+| http://localhost:5220/scalar/v1 | Scalar API reference UI (dev only) |
+| http://localhost:5220/openapi/v1.json | Raw OpenAPI JSON spec |
+
+---
+
 ## Nx Workspace Utilities
 
 ### View all targets for a project
