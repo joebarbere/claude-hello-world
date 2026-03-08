@@ -464,6 +464,32 @@ Both images (`localhost/claude-hello-world:latest` and `localhost/weather-api:la
 
 ---
 
+## Step 23: Weather Data Table in page1 via nginx Proxy
+
+Connected the page1 Angular remote to the weather-api through an nginx reverse proxy.
+
+**`nginx/nginx.conf`** — added a `/weather` proxy location:
+
+```nginx
+location /weather {
+  proxy_pass http://host.containers.internal:5221/weatherforecast;
+  proxy_set_header Host $host;
+  proxy_set_header X-Real-IP $remote_addr;
+}
+```
+
+`host.containers.internal` is the Podman-provided hostname that resolves to the host machine from within a container. Since the weather-api pod binds `hostPort: 5221`, nginx can reach it at `host.containers.internal:5221` regardless of whether the containers are started with `podman-up` or `kube-up`. The path is rewritten from `/weather` to `/weatherforecast` by the `proxy_pass` directive.
+
+**`apps/shell/src/app/app.config.ts`** — added `provideHttpClient()` to the shell's environment providers. Module Federation remotes share the shell's Angular DI environment injector at runtime, so HttpClient must be provided at the shell level for remote components to inject it.
+
+**`apps/page1/src/app/remote-entry/entry.ts`** — replaced the NxWelcome placeholder with a weather forecast component:
+- Uses `inject(HttpClient)` and Angular signals (`signal()`) for state
+- On `ngOnInit`, fetches `GET /weather` and stores the response
+- Renders a styled HTML table with Date, Temp (°C), Temp (°F), and Summary columns using Angular's `@for` / `@if` control flow syntax
+- Shows a loading state while the request is in flight and an error message on failure
+
+---
+
 ## Final Verification
 
 ```bash
