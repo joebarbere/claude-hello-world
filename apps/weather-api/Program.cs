@@ -1,44 +1,100 @@
+using Microsoft.EntityFrameworkCore;
 using Scalar.AspNetCore;
+using WeatherApi.Data;
+using WeatherApi.Models;
+using WeatherApi.Repositories;
 
 var builder = WebApplication.CreateBuilder(args);
 
-// Add services to the container.
-// Learn more about configuring OpenAPI at https://aka.ms/aspnet/openapi
 builder.Services.AddOpenApi();
+
+var repositoryType = builder.Configuration.GetValue<string>("Repository") ?? "Random";
+
+switch (repositoryType)
+{
+    case "EfCore":
+        var connectionString = builder.Configuration.GetConnectionString("DefaultConnection");
+        builder.Services.AddDbContext<WeatherDbContext>(options => options.UseNpgsql(connectionString));
+        builder.Services.AddScoped<IWeatherForecastRepository, EfWeatherForecastRepository>();
+        break;
+    case "InMemory":
+        builder.Services.AddSingleton<IWeatherForecastRepository, InMemoryWeatherForecastRepository>();
+        break;
+    default: // "Random"
+        builder.Services.AddSingleton<IWeatherForecastRepository, RandomWeatherForecastRepository>();
+        break;
+}
 
 var app = builder.Build();
 
-// Configure the HTTP request pipeline.
 if (app.Environment.IsDevelopment())
 {
     app.MapOpenApi();
     app.MapScalarApiReference();
 }
 
+if (repositoryType == "EfCore")
+{
+    using var scope = app.Services.CreateScope();
+    var db = scope.ServiceProvider.GetRequiredService<WeatherDbContext>();
+    db.Database.Migrate();
+}
+
 app.UseHttpsRedirection();
 
-var summaries = new[]
-{
-    "Freezing", "Bracing", "Chilly", "Cool", "Mild", "Warm", "Balmy", "Hot", "Sweltering", "Scorching"
-};
+var forecasts = app.MapGroup("/weatherforecast");
 
-app.MapGet("/weatherforecast", () =>
+forecasts.MapGet("/", async (IWeatherForecastRepository repo) =>
+    Results.Ok(await repo.GetAllAsync()))
+    .WithName("GetWeatherForecasts");
+
+forecasts.MapGet("/{id:int}", async (int id, IWeatherForecastRepository repo) =>
 {
-    var forecast =  Enumerable.Range(1, 5).Select(index =>
-        new WeatherForecast
-        (
-            DateOnly.FromDateTime(DateTime.Now.AddDays(index)),
-            Random.Shared.Next(-20, 55),
-            summaries[Random.Shared.Next(summaries.Length)]
-        ))
-        .ToArray();
-    return forecast;
+    var result = await repo.GetByIdAsync(id);
+    return result is null ? Results.NotFound() : Results.Ok(result);
 })
-.WithName("GetWeatherForecast");
+.WithName("GetWeatherForecastById");
+
+forecasts.MapPost("/", async (WeatherForecast input, IWeatherForecastRepository repo) =>
+{
+    try
+    {
+        var created = await repo.CreateAsync(input);
+        return Results.Created($"/weatherforecast/{created.Id}", created);
+    }
+    catch (NotSupportedException ex)
+    {
+        return Results.Problem(ex.Message, statusCode: StatusCodes.Status405MethodNotAllowed);
+    }
+})
+.WithName("CreateWeatherForecast");
+
+forecasts.MapPut("/{id:int}", async (int id, WeatherForecast input, IWeatherForecastRepository repo) =>
+{
+    try
+    {
+        var updated = await repo.UpdateAsync(id, input);
+        return updated is null ? Results.NotFound() : Results.Ok(updated);
+    }
+    catch (NotSupportedException ex)
+    {
+        return Results.Problem(ex.Message, statusCode: StatusCodes.Status405MethodNotAllowed);
+    }
+})
+.WithName("UpdateWeatherForecast");
+
+forecasts.MapDelete("/{id:int}", async (int id, IWeatherForecastRepository repo) =>
+{
+    try
+    {
+        var deleted = await repo.DeleteAsync(id);
+        return deleted ? Results.NoContent() : Results.NotFound();
+    }
+    catch (NotSupportedException ex)
+    {
+        return Results.Problem(ex.Message, statusCode: StatusCodes.Status405MethodNotAllowed);
+    }
+})
+.WithName("DeleteWeatherForecast");
 
 app.Run();
-
-record WeatherForecast(DateOnly Date, int TemperatureC, string? Summary)
-{
-    public int TemperatureF => 32 + (int)(TemperatureC / 0.5556);
-}
