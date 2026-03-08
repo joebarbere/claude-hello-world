@@ -1,6 +1,0 @@
-services:
-  mfe-app:
-    image: localhost/claude-hello-world:latest
-    ports:
-      - "8080:80"
-    container_name: claude-hello-world
