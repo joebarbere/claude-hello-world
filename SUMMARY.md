@@ -541,17 +541,7 @@ The shell's `podman-build` already had `"dependsOn": ["build-all"]`, which cover
 
 ---
 
-## Step 26: Rename Containerfile to Containerfile.nginx
-
-Renamed the root `Containerfile` to `Containerfile.nginx` to distinguish it from `apps/weather-api/Containerfile` and make its purpose (nginx MFE image) clear at a glance.
-
-Updated references:
-- `apps/shell/project.json` — `podman-build` target: `-f Containerfile` → `-f Containerfile.nginx`
-- `RUN.md` — build command and description
-
----
-
-## Step 27: Fix — Nx Daemon Hangs in dotnet Build Context
+## Step 26: Fix — Nx Daemon Hangs in dotnet Build Context
 
 `npx nx podman-build weather-api` failed during the `dotnet build` step with:
 
@@ -569,6 +559,16 @@ error MSB3073: The command "node ../..//node_modules/@nx-dotnet/core/src/tasks/c
   --project-root &quot;$(MSBuildProjectDirRelativePath)&quot;"
   EnvironmentVariables="NX_DAEMON=false"/>
 ```
+
+---
+
+## Step 27: Rename Containerfile to Containerfile.nginx
+
+Renamed the root `Containerfile` to `Containerfile.nginx` to distinguish it from `apps/weather-api/Containerfile` and make its purpose (nginx MFE image) clear at a glance.
+
+Updated references:
+- `apps/shell/project.json` — `podman-build` target: `-f Containerfile` → `-f Containerfile.nginx`
+- `RUN.md` — build command and description
 
 ---
 
@@ -694,15 +694,58 @@ Write endpoints return `405 Method Not Allowed` when the `Random` repository is 
 
 ## Final Verification
 
+### Individual container workflow
+
 ```bash
-npx nx podman-build shell
-# NX  Successfully ran target podman-build for project shell
+# Build all images
+npx nx podman-build shell          # builds nginx MFE image (claude-hello-world)
+npx nx podman-build weather-api    # builds .NET API image
+npx nx podman-build-postgres shell # builds PostgreSQL image
 
-podman images | grep claude-hello-world
-# localhost/claude-hello-world  latest  ...
+# Run individually
+npx nx podman-up shell             # → http://localhost:8080 (Angular MFE)
+npx nx podman-up weather-api       # → http://localhost:5221/weatherforecast
 
-npx nx podman-up shell
-# → http://localhost:8080        (shell)
-# → http://localhost:8080/page1/remoteEntry.mjs
-# → http://localhost:8080/page2/remoteEntry.mjs
+# Stop
+npx nx podman-down shell
+npx nx podman-down weather-api
 ```
+
+### Kubernetes workflow (all three containers together)
+
+```bash
+# Build images (postgres image built automatically by dependsOn)
+npx nx podman-build shell
+npx nx podman-build weather-api
+
+# Start all pods
+npx nx kube-up shell
+
+# Verify
+curl http://localhost:8080              # Angular shell
+curl http://localhost:8080/page1/       # page1 remote (weather table)
+curl http://localhost:8080/weather      # nginx → weather-api proxy
+curl http://localhost:5221/weatherforecast  # weather-api direct
+psql -h localhost -p 5432 -U appuser -d appdb  # PostgreSQL
+
+# Stop all pods
+npx nx kube-down shell
+```
+
+### Weather API repository selection
+
+Change `"Repository"` in `apps/weather-api/appsettings.json`:
+
+| Value | Behavior |
+|-------|----------|
+| `"Random"` (default) | Read-only, random data, no DB |
+| `"InMemory"` | Full CRUD, in-process storage, no DB |
+| `"EfCore"` | Full CRUD, persisted to PostgreSQL |
+
+### Containerfiles
+
+| File | Base image | Purpose |
+|------|-----------|---------|
+| `Containerfile.nginx` | `node:20-alpine` → `nginx:alpine` | Angular MFE (shell + page1 + page2) |
+| `apps/weather-api/Containerfile` | `dotnet/sdk:9.0-alpine` → `dotnet/aspnet:9.0-alpine` | .NET Weather API |
+| `Containerfile.postgres` | `postgres:17-alpine` | PostgreSQL database |
