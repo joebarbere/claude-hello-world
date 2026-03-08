@@ -736,6 +736,29 @@ Write operations return `405` when the weather-api is configured with `"Reposito
 
 ---
 
+## Step 31: Debug — weather-api Cannot Reach PostgreSQL in Container
+
+After switching `appsettings.json` to `"Repository": "EfCore"` and running `nx kube-up shell`, the weather-api pod crashed on startup:
+
+```
+Npgsql.NpgsqlException: Failed to connect to 127.0.0.1:5432
+  ---> System.Net.Sockets.SocketException (111): Connection refused
+```
+
+**Diagnosis:** Inside a container, `localhost` (and `127.0.0.1`) resolves to the container's own loopback interface — not the host machine. The connection string `Host=localhost;Port=5432` therefore never reaches the postgres pod, which is bound to `hostPort: 5432` on the host. The same pattern was already solved for the nginx → weather-api proxy using `host.containers.internal`, which is the hostname Podman provides inside containers to reach the host.
+
+**Fix:** Added a `ConnectionStrings__DefaultConnection` environment variable to the weather-api pod spec in `k8s/pod.yaml`:
+
+```yaml
+env:
+  - name: ConnectionStrings__DefaultConnection
+    value: Host=host.containers.internal;Port=5432;Database=appdb;Username=appuser;Password=apppassword
+```
+
+ASP.NET Core's configuration system treats `__` as a hierarchy separator in environment variable names, so `ConnectionStrings__DefaultConnection` overrides `ConnectionStrings:DefaultConnection` from `appsettings.json` at runtime without any code changes. Local dev continues to use `localhost` from `appsettings.json` unchanged.
+
+---
+
 ## Final Verification
 
 ### Individual container workflow
