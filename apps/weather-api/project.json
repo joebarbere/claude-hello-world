@@ -31,7 +31,8 @@
       "options": {
         "command": "podman build -t weather-api -f apps/weather-api/Containerfile .",
         "cwd": "{workspaceRoot}"
-      }
+      },
+      "dependsOn": ["build"]
     },
     "podman-up": {
       "executor": "nx:run-commands",
