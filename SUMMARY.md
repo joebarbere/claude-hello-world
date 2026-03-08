@@ -541,6 +541,27 @@ The shell's `podman-build` already had `"dependsOn": ["build-all"]`, which cover
 
 ---
 
+## Step 26: Fix — Nx Daemon Hangs in dotnet Build Context
+
+`npx nx podman-build weather-api` failed during the `dotnet build` step with:
+
+```
+error MSB3073: The command "node ../..//node_modules/@nx-dotnet/core/src/tasks/check-module-boundaries.js
+  --project-root "apps/weather-api"" exited with code 1.
+```
+
+**Diagnosis:** `Directory.Build.targets` runs the `check-module-boundaries.js` script as a `BeforeTargets="Build"` hook via MSBuild's `<Exec>`. When called from within dotnet, the script attempts to connect to the Nx Daemon to calculate the project graph, but the daemon connection hangs indefinitely and eventually exits with code 1. Running the script directly with `NX_DAEMON=false` confirmed it completes successfully — the issue is specific to the daemon being unavailable or unreachable from within the MSBuild subprocess context.
+
+**Fix:** Added `EnvironmentVariables="NX_DAEMON=false"` to the `<Exec>` task in `Directory.Build.targets` so the script bypasses the daemon and calculates the project graph inline:
+
+```xml
+<Exec Command="node $(NodeModulesRelativePath)/node_modules/@nx-dotnet/core/src/tasks/check-module-boundaries.js
+  --project-root &quot;$(MSBuildProjectDirRelativePath)&quot;"
+  EnvironmentVariables="NX_DAEMON=false"/>
+```
+
+---
+
 ## Final Verification
 
 ```bash
