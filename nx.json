@@ -40,8 +40,7 @@
       "options": {
         "targetName": "lint"
       }
-    },
-    "@nx-dotnet/core"
+    }
   ],
   "nxCloudId": "69ac50a2215e7c4ada855a45",
   "targetDefaults": {
