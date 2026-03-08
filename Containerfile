@@ -2,7 +2,7 @@
 FROM node:20-alpine AS builder
 WORKDIR /app
 COPY package*.json ./
-RUN npm ci --ignore-scripts
+RUN npm ci
 COPY . .
 RUN npx nx run-many --target=build --projects=shell,page1,page2 --configuration=production --parallel=3
 
