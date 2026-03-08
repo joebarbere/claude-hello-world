@@ -692,6 +692,50 @@ Write endpoints return `405 Method Not Allowed` when the `Random` repository is 
 
 ---
 
+## Step 30: Weather Forecast CRUD Interface in page2
+
+Replaced the placeholder `NxWelcome` component in `apps/page2` with a full CRUD management interface for the weather-api.
+
+### Files
+
+| File | Description |
+|------|-------------|
+| `apps/page2/src/app/remote-entry/entry.ts` | Standalone Angular component — full CRUD UI |
+| `apps/page2/src/app/remote-entry/entry.css` | External stylesheet (moved out of inline to avoid component CSS budget warning) |
+| `apps/page2/project.json` | Raised `anyComponentStyle` budget from 4 kB to 8 kB |
+
+The unused `nx-welcome.ts` was deleted.
+
+### Features
+
+- **List** — fetches all forecasts on load via `GET /weather`
+- **Create** — "New Forecast" button opens an inline form; `POST /weather` on submit
+- **Edit** — pencil icon prefills the form with the row's values; `PUT /weather/{id}` on submit
+- **Delete** — trash icon shows an inline "Delete? Yes / No" confirmation; `DELETE /weather/{id}` on confirm
+- Loading spinner, empty state with call-to-action, and dismissible error alert
+- Row fades out while a delete request is in flight
+- Save button disabled and shows spinner while saving; form submission disabled while invalid
+
+### Styling
+
+Professionally styled with a card-based layout, subtle shadows, and a neutral gray/blue palette:
+
+- Temperature badges color-coded by range: cold (blue) → cool (sky) → mild (green) → warm (amber) → hot (rose)
+- Tabular-numeric columns for IDs and temperatures
+- Responsive 3-column form grid (collapses to 1 on narrow viewports)
+- Focus ring on form inputs, hover/active states on all buttons
+- SVG icons for Edit and Delete actions
+
+### API compatibility
+
+All five HTTP methods (`GET`, `POST`, `PUT`, `DELETE`) route through the existing `/weather` proxy:
+- Dev: `proxy.conf.json` rewrites `^/weather` → `/weatherforecast`
+- Container: nginx `location /weather` proxies to `host.containers.internal:5221/weatherforecast`
+
+Write operations return `405` when the weather-api is configured with `"Repository": "Random"`. Switch to `"InMemory"` or `"EfCore"` for full CRUD support.
+
+---
+
 ## Final Verification
 
 ### Individual container workflow
