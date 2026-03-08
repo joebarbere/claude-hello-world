@@ -162,6 +162,43 @@ Runs `podman rm -f claude-hello-world`, forcibly stopping and removing the conta
 
 ---
 
+## Kubernetes (podman play kube)
+
+Runs both the nginx MFE and weather-api containers together using a Kubernetes Pod manifest (`k8s/pod.yaml`) and `podman play kube`. Both images must be built before running.
+
+### Prerequisites — build both images
+
+```bash
+npx nx podman-build shell
+npx nx podman-build weather-api
+```
+
+### Start all containers
+
+```bash
+npx nx kube-up shell
+```
+
+Runs `podman play kube k8s/pod.yaml`, which creates and starts both pods defined in the manifest.
+
+| URL | Serves |
+|-----|--------|
+| http://localhost:8080 | Shell (host app) |
+| http://localhost:8080/page1/ | page1 remote |
+| http://localhost:8080/page2/ | page2 remote |
+| http://localhost:5221/weatherforecast | Weather API endpoint |
+| http://localhost:5221/openapi/v1.json | Weather API OpenAPI spec |
+
+### Stop all containers
+
+```bash
+npx nx kube-down shell
+```
+
+Runs `podman play kube k8s/pod.yaml --down`, stopping and removing all pods defined in the manifest.
+
+---
+
 ## Weather API (.NET)
 
 ### Build the API

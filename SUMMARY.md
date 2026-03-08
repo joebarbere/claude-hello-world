@@ -440,6 +440,30 @@ The Scalar API reference UI (`/scalar/v1`) is not available in the containerized
 
 ---
 
+## Step 22: Kubernetes Configuration and podman play kube
+
+Added a Kubernetes Pod manifest and Nx targets to run both containers together via `podman play kube`.
+
+**`k8s/pod.yaml`** — two Pod specs in a single YAML file (separated by `---`):
+
+| Pod | Image | Host Port | Container Port |
+|-----|-------|-----------|----------------|
+| `claude-hello-world` | `localhost/claude-hello-world:latest` | 8080 | 80 |
+| `weather-api` | `localhost/weather-api:latest` | 5221 | 8080 |
+
+Each app gets its own Pod so they have independent lifecycle management. `hostPort` in the container spec is how `podman play kube` binds host ports without a separate Service resource.
+
+**Nx targets added to `apps/shell/project.json`:**
+
+| Target | Command |
+|--------|---------|
+| `kube-up` | `podman play kube k8s/pod.yaml` |
+| `kube-down` | `podman play kube k8s/pod.yaml --down` |
+
+Both images (`localhost/claude-hello-world:latest` and `localhost/weather-api:latest`) must be built before running `kube-up`. The `--down` flag on `kube-down` stops and removes all pods defined in the manifest.
+
+---
+
 ## Final Verification
 
 ```bash

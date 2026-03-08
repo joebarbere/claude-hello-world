@@ -124,6 +124,20 @@
         "command": "podman rm -f claude-hello-world",
         "cwd": "{workspaceRoot}"
       }
+    },
+    "kube-up": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "podman play kube k8s/pod.yaml",
+        "cwd": "{workspaceRoot}"
+      }
+    },
+    "kube-down": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "podman play kube k8s/pod.yaml --down",
+        "cwd": "{workspaceRoot}"
+      }
     }
   }
 }
