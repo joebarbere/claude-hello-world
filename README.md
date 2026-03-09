@@ -1,106 +1,112 @@
-# New Nx Repository
+# claude-hello-world
 
-<a alt="Nx logo" href="https://nx.dev" target="_blank" rel="noreferrer"><img src="https://raw.githubusercontent.com/nrwl/nx/master/images/nx-logo.png" width="45"></a>
+An Nx monorepo demonstrating Angular Module Federation micro-frontends with a .NET 9 Weather API backend and PostgreSQL, all containerized with Podman and orchestrated via `podman play kube`.
 
-✨ Your new, shiny [Nx workspace](https://nx.dev) is ready ✨.
+## Architecture
 
-[Learn more about this workspace setup and its capabilities](https://nx.dev/nx-api/js?utm_source=nx_project&utm_medium=readme&utm_campaign=nx_projects) or run `npx nx graph` to visually explore what was created. Now, let's get you up to speed!
-## Finish your Nx platform setup
+```
+Browser
+  └── Shell (Angular MFE host, :4200 / :8080)
+        ├── page1 (remote, :4201) — weather forecast table
+        └── page2 (remote, :4202) — weather forecast CRUD
 
-🚀 [Finish setting up your workspace](https://cloud.nx.app/connect/zUZPimwAGw) to get faster builds with remote caching, distributed task execution, and self-healing CI. [Learn more about Nx Cloud](https://nx.dev/ci/intro/why-nx-cloud).
-## Generate a library
+nginx (container, :8080)
+  ├── /           → shell app
+  ├── /page1/     → page1 remote
+  ├── /page2/     → page2 remote
+  └── /weather    → proxy → weather-api
+
+weather-api (.NET 9, :5220 dev / :5221 container)
+  └── Repository layer
+        ├── Random   (default, read-only)
+        ├── InMemory (full CRUD, in-process)
+        └── EfCore   (full CRUD, PostgreSQL)
+
+PostgreSQL 17 (:5432)
+```
+
+## Prerequisites
+
+| Tool | Version |
+|------|---------|
+| Node.js | 20+ |
+| .NET SDK | 9.0 |
+| Podman | any recent |
 
 ```sh
-npx nx g @nx/js:lib packages/pkg1 --publishable --importPath=@my-org/pkg1
+npm install
 ```
 
-## Run tasks
-
-To build the library use:
+## Development
 
 ```sh
-npx nx build pkg1
+# Start all apps with hot reload (Angular on :4200, remotes on :4201/:4202)
+npx nx serve shell --devRemotes=page1,page2
+
+# Start weather API (required for weather data in dev)
+NX_DAEMON=false npx nx serve weather-api
 ```
 
-To run any task with Nx use:
+## Build
 
 ```sh
-npx nx <target> <project-name>
+# Build all Angular apps (production)
+npx nx build-all shell
+
+# Build weather API
+NX_DAEMON=false npx nx build weather-api
+
+# Build container images
+npx nx podman-build shell          # nginx image (Angular MFE)
+npx nx podman-build weather-api    # .NET API image
+npx nx podman-build-postgres shell # PostgreSQL image
 ```
 
-These targets are either [inferred automatically](https://nx.dev/concepts/inferred-tasks?utm_source=nx_project&utm_medium=readme&utm_campaign=nx_projects) or defined in the `project.json` or `package.json` files.
+## Run (containers)
 
-[More about running tasks in the docs &raquo;](https://nx.dev/features/run-tasks?utm_source=nx_project&utm_medium=readme&utm_campaign=nx_projects)
-
-## Versioning and releasing
-
-To version and release the library use
-
-```
-npx nx release
-```
-
-Pass `--dry-run` to see what would happen without actually releasing the library.
-
-[Learn more about Nx release &raquo;](https://nx.dev/features/manage-releases?utm_source=nx_project&utm_medium=readme&utm_campaign=nx_projects)
-
-## Keep TypeScript project references up to date
-
-Nx automatically updates TypeScript [project references](https://www.typescriptlang.org/docs/handbook/project-references.html) in `tsconfig.json` files to ensure they remain accurate based on your project dependencies (`import` or `require` statements). This sync is automatically done when running tasks such as `build` or `typecheck`, which require updated references to function correctly.
-
-To manually trigger the process to sync the project graph dependencies information to the TypeScript project references, run the following command:
+### All services via Kubernetes (recommended)
 
 ```sh
-npx nx sync
+# Build images first, then start all pods
+npx nx podman-build shell
+npx nx podman-build weather-api
+npx nx kube-up shell
+
+# Stop all pods
+npx nx kube-down shell
 ```
 
-You can enforce that the TypeScript project references are always in the correct state when running in CI by adding a step to your CI job configuration that runs the following command:
+| URL | Service |
+|-----|---------|
+| http://localhost:8080 | Shell |
+| http://localhost:8080/page1/ | Weather table |
+| http://localhost:8080/page2/ | Weather CRUD |
+| http://localhost:5221/weatherforecast | Weather API |
+| localhost:5432 | PostgreSQL |
+
+### Individual containers
 
 ```sh
-npx nx sync:check
+npx nx podman-up shell        # Angular MFE on :8080
+npx nx podman-up weather-api  # Weather API on :5221
+
+npx nx podman-down shell
+npx nx podman-down weather-api
 ```
 
-[Learn more about nx sync](https://nx.dev/reference/nx-commands#sync)
-
-## Nx Cloud
-
-Nx Cloud ensures a [fast and scalable CI](https://nx.dev/ci/intro/why-nx-cloud?utm_source=nx_project&utm_medium=readme&utm_campaign=nx_projects) pipeline. It includes features such as:
-
-- [Remote caching](https://nx.dev/ci/features/remote-cache?utm_source=nx_project&utm_medium=readme&utm_campaign=nx_projects)
-- [Task distribution across multiple machines](https://nx.dev/ci/features/distribute-task-execution?utm_source=nx_project&utm_medium=readme&utm_campaign=nx_projects)
-- [Automated e2e test splitting](https://nx.dev/ci/features/split-e2e-tasks?utm_source=nx_project&utm_medium=readme&utm_campaign=nx_projects)
-- [Task flakiness detection and rerunning](https://nx.dev/ci/features/flaky-tasks?utm_source=nx_project&utm_medium=readme&utm_campaign=nx_projects)
-
-### Set up CI (non-Github Actions CI)
-
-**Note:** This is only required if your CI provider is not GitHub Actions.
-
-Use the following command to configure a CI workflow for your workspace:
+## Test & Lint
 
 ```sh
-npx nx g ci-workflow
+npx nx run-many --target=test --all
+npx nx run-many --target=lint --all
 ```
 
-[Learn more about Nx on CI](https://nx.dev/ci/intro/ci-with-nx#ready-get-started-with-your-provider?utm_source=nx_project&utm_medium=readme&utm_campaign=nx_projects)
+## Weather API repository mode
 
-## Install Nx Console
+Change `"Repository"` in `apps/weather-api/appsettings.json`:
 
-Nx Console is an editor extension that enriches your developer experience. It lets you run tasks, generate code, and improves code autocompletion in your IDE. It is available for VSCode and IntelliJ.
-
-[Install Nx Console &raquo;](https://nx.dev/getting-started/editor-setup?utm_source=nx_project&utm_medium=readme&utm_campaign=nx_projects)
-
-## Useful links
-
-Learn more:
-
-- [Learn more about this workspace setup](https://nx.dev/nx-api/js?utm_source=nx_project&utm_medium=readme&utm_campaign=nx_projects)
-- [Learn about Nx on CI](https://nx.dev/ci/intro/ci-with-nx?utm_source=nx_project&utm_medium=readme&utm_campaign=nx_projects)
-- [Releasing Packages with Nx release](https://nx.dev/features/manage-releases?utm_source=nx_project&utm_medium=readme&utm_campaign=nx_projects)
-- [What are Nx plugins?](https://nx.dev/concepts/nx-plugins?utm_source=nx_project&utm_medium=readme&utm_campaign=nx_projects)
-
-And join the Nx community:
-
-- [Discord](https://go.nx.dev/community)
-- [Follow us on X](https://twitter.com/nxdevtools) or [LinkedIn](https://www.linkedin.com/company/nrwl)
-- [Our Youtube channel](https://www.youtube.com/@nxdevtools)
-- [Our blog](https://nx.dev/blog?utm_source=nx_project&utm_medium=readme&utm_campaign=nx_projects)
+| Value | Behavior |
+|-------|----------|
+| `"Random"` (default) | Read-only, no DB needed |
+| `"InMemory"` | Full CRUD, in-process |
+| `"EfCore"` | Full CRUD, PostgreSQL |
