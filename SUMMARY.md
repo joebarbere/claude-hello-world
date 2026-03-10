@@ -816,3 +816,90 @@ Change `"Repository"` in `apps/weather-api/appsettings.json`:
 | `Containerfile.nginx` | `node:20-alpine` → `nginx:alpine` | Angular MFE (shell + weather-app + weatheredit-app) |
 | `apps/weather-api/Containerfile` | `dotnet/sdk:9.0-alpine` → `dotnet/aspnet:9.0-alpine` | .NET Weather API |
 | `apps/postgres/Containerfile` | `postgres:17-alpine` | PostgreSQL database |
+
+---
+
+## Step 32: Playwright E2E Test Suites for EKS Pods
+
+Added dedicated Playwright e2e specs that target the apps as they run inside the EKS pods (via the nginx container on `:8080`), rather than the local dev servers.
+
+### Playwright config changes (all three e2e projects)
+
+| Change | Detail |
+|--------|--------|
+| Default `BASE_URL` | Changed to the nginx pod paths: `http://localhost:8080`, `/weather-app/`, `/weatheredit-app/` |
+| `webServer` conditional | `webServer` block only starts when `BASE_URL` is **not** set, so dev-server startup is skipped automatically when pointing at a live pod |
+| CI reporters | When `CI=true`, emits `['github', 'html', 'junit']` — GitHub annotations, an HTML report, and JUnit XML consumed by `dorny/test-reporter` |
+
+### New test files
+
+**`apps/shell-e2e/src/eks.spec.ts`**
+
+| Suite | Tests |
+|-------|-------|
+| Home page | Loads with "Welcome shell" heading; hero banner visible; HTTP 200 |
+| MFE navigation | `/weather-app` renders "Weather Forecast" h2; `/weatheredit-app` renders "Weather Forecasts" h1; loading state or table visible |
+| API proxy | `GET /weather` returns HTTP 200 with a JSON array |
+
+**`apps/weather-app-e2e/src/eks.spec.ts`**
+
+| Suite | Tests |
+|-------|-------|
+| Page load | HTTP 200; "Weather Forecast" h2; loading indicator or table on first render |
+| Forecast table | Correct headers (Date, Temp °C, Temp °F, Summary); at least one row; non-empty date; numeric temperatures; no error message |
+
+**`apps/weatheredit-app-e2e/src/eks.spec.ts`**
+
+| Suite | Tests |
+|-------|-------|
+| Page load | HTTP 200; "Weather Forecasts" h1; loading state or card visible; "New Forecast" button |
+| Forecast table | Table or empty-state visible; column headers validated when data exists |
+| Create | Form opens; cancel works; submit creates row in table |
+| Edit | Opens prefilled form; update changes the row |
+| Delete | Confirm "Yes" removes row; "No" leaves row in place |
+| Error handling | No error alert on successful load |
+
+---
+
+## Step 33: GitHub Actions EKS E2E Workflow and README Badge
+
+### `.github/workflows/eks-e2e.yml`
+
+New workflow that runs on every push to `main` (i.e., every merged PR). It simulates the EKS pod environment inside the GitHub Actions runner using Podman:
+
+**Build phase:**
+1. Install Node 20, .NET 9 SDK, Playwright (chromium only)
+2. `npx nx podman-build shell` — triggers `build-all` (Angular production builds) then builds the nginx container image
+3. `NX_DAEMON=false npx nx podman-build weather-api` — runs `dotnet build` then builds the ASP.NET container image
+4. `npx nx podman-build postgres` — builds the postgres container image
+
+**Pod lifecycle:**
+5. `npx nx kube-up shell` — `podman play kube k8s/pod.yaml` starts all three pods
+6. Health checks: `curl` polls nginx `:8080` and weather-api `:5221/weatherforecast` until ready (90 s timeout each)
+
+**E2E suites** — each with `continue-on-error: true` so all run regardless of individual failures:
+7. `shell-e2e` at `BASE_URL=http://localhost:8080`
+8. `weather-app-e2e` at `BASE_URL=http://localhost:8080/weather-app/`
+9. `weatheredit-app-e2e` at `BASE_URL=http://localhost:8080/weatheredit-app/`
+
+**Teardown & reporting** (`if: always()`):
+10. `npx nx kube-down shell` — stops and removes all pods
+11. `dorny/test-reporter@v1` — publishes JUnit XML as a **GitHub Check Run** (visible in the PR Checks tab); requires `checks: write` permission
+12. `actions/upload-artifact@v4` — uploads all three `playwright-report/` directories as a 30-day artifact
+13. `actions/github-script` — calls `listPullRequestsAssociatedWithCommit` to find the merged PR, then posts a Markdown table comment with per-suite ✅/❌ status and a link to the run
+14. Fail step — exits 1 if any suite outcome is `failure`, so the workflow shows red on the commit
+
+**Permissions required:**
+- `contents: read` — checkout
+- `pull-requests: write` — PR comment
+- `checks: write` — Check Run via `dorny/test-reporter`
+
+### README badge
+
+Added an EKS E2E Tests status badge directly under the `h1` title:
+
+```markdown
+[![EKS E2E Tests](https://github.com/joebarbere/claude-hello-world/actions/workflows/eks-e2e.yml/badge.svg)](https://github.com/joebarbere/claude-hello-world/actions/workflows/eks-e2e.yml)
+```
+
+The badge reflects the latest workflow run on `main` (green = all suites passed, red = any suite failed).
