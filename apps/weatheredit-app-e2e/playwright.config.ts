@@ -24,7 +24,7 @@ export default defineConfig({
   },
   /* Run your local dev server before starting the tests */
   webServer: {
-    command: 'npx nx run page2:serve',
+    command: 'npx nx run weatheredit-app:serve',
     url: 'http://localhost:4202',
     reuseExistingServer: true,
     cwd: workspaceRoot,

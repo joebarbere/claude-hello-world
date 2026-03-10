@@ -4,14 +4,14 @@ import angular from '@analogjs/vite-plugin-angular';
 
 export default defineConfig(() => ({
   root: __dirname,
-  cacheDir: '../../node_modules/.vite/apps/page2',
+  cacheDir: '../../node_modules/.vite/apps/weatheredit-app',
   plugins: [angular()],
   // Uncomment this if you are using workers.
   // worker: {
   //  plugins: [],
   // },
   test: {
-    name: 'page2',
+    name: 'weatheredit-app',
     watch: false,
     globals: true,
     environment: 'jsdom',
