@@ -7,7 +7,7 @@
       "path": "./apps/shell-e2e"
     },
     {
-      "path": "./apps/page1-e2e"
+      "path": "./apps/weather-app-e2e"
     },
     {
       "path": "./apps/page2-e2e"

@@ -9,15 +9,15 @@ All commands are run from the workspace root (`claude-hello-world/`).
 ### Serve all apps locally (hot reload)
 
 ```bash
-npx nx serve shell --devRemotes=page1,page2
+npx nx serve shell --devRemotes=weather-app,page2
 ```
 
-Starts the Module Federation dev server for the shell on port 4200. `--devRemotes` tells Nx to also start live webpack dev servers for page1 (port 4201) and page2 (port 4202) rather than serving their static builds. Changes in any app trigger a live reload in the browser.
+Starts the Module Federation dev server for the shell on port 4200. `--devRemotes` tells Nx to also start live webpack dev servers for weather-app (port 4201) and page2 (port 4202) rather than serving their static builds. Changes in any app trigger a live reload in the browser.
 
 | App | URL |
 |-----|-----|
 | Shell (host) | http://localhost:4200 |
-| page1 (remote) | http://localhost:4201 |
+| weather-app (remote) | http://localhost:4201 |
 | page2 (remote) | http://localhost:4202 |
 
 ### Serve shell only (remotes served as static builds)
@@ -31,7 +31,7 @@ Starts only the shell dev server. The remotes must have been built previously â€
 ### Serve a single remote app
 
 ```bash
-npx nx serve page1
+npx nx serve weather-app
 npx nx serve page2
 ```
 
@@ -45,17 +45,17 @@ Starts a standalone dev server for one remote at its port (4201 or 4202). Depend
 
 ```bash
 npx nx build shell
-npx nx build page1
+npx nx build weather-app
 npx nx build page2
 ```
 
-Runs a production webpack build for one app. Output lands in `dist/apps/<name>/`. The default configuration is `production` (optimized, hashed filenames, no source maps). page1 and page2 builds include `baseHref` set to `/page1/` and `/page2/` respectively for correct asset resolution when served from sub-paths.
+Runs a production webpack build for one app. Output lands in `dist/apps/<name>/`. The default configuration is `production` (optimized, hashed filenames, no source maps). weather-app and page2 builds include `baseHref` set to `/weather-app/` and `/page2/` respectively for correct asset resolution when served from sub-paths.
 
 ### Build a single app (development)
 
 ```bash
 npx nx build shell --configuration=development
-npx nx build page1 --configuration=development
+npx nx build weather-app --configuration=development
 npx nx build page2 --configuration=development
 ```
 
@@ -67,9 +67,9 @@ Runs a development build with source maps, named chunks, and no optimization. Fa
 npx nx build-all shell
 ```
 
-Runs production builds for shell, page1, and page2 in parallel (`--parallel=3`). This is the same build step that `podman-build` triggers automatically as a dependency. Outputs to:
+Runs production builds for shell, weather-app, and page2 in parallel (`--parallel=3`). This is the same build step that `podman-build` triggers automatically as a dependency. Outputs to:
 - `dist/apps/shell/`
-- `dist/apps/page1/`
+- `dist/apps/weather-app/`
 - `dist/apps/page2/`
 
 ---
@@ -80,7 +80,7 @@ Runs production builds for shell, page1, and page2 in parallel (`--parallel=3`).
 
 ```bash
 npx nx test shell
-npx nx test page1
+npx nx test weather-app
 npx nx test page2
 ```
 
@@ -98,7 +98,7 @@ Runs Vitest for every project in the workspace in parallel. Nx caches test resul
 
 ```bash
 npx nx lint shell
-npx nx lint page1
+npx nx lint weather-app
 npx nx lint page2
 ```
 
@@ -147,9 +147,9 @@ Runs `podman run -d` to start the `claude-hello-world` container in detached mod
 | URL | Serves |
 |-----|--------|
 | http://localhost:8080 | Shell (host app) |
-| http://localhost:8080/page1/ | page1 remote |
+| http://localhost:8080/weather-app/ | weather-app remote |
 | http://localhost:8080/page2/ | page2 remote |
-| http://localhost:8080/page1/remoteEntry.mjs | page1 Module Federation entry point |
+| http://localhost:8080/weather-app/remoteEntry.mjs | weather-app Module Federation entry point |
 | http://localhost:8080/page2/remoteEntry.mjs | page2 Module Federation entry point |
 
 ### Stop the container
@@ -184,7 +184,7 @@ Runs `podman play kube k8s/pod.yaml`, which creates and starts both pods defined
 | URL | Serves |
 |-----|--------|
 | http://localhost:8080 | Shell (host app) |
-| http://localhost:8080/page1/ | page1 remote |
+| http://localhost:8080/weather-app/ | weather-app remote |
 | http://localhost:8080/page2/ | page2 remote |
 | http://localhost:5221/weatherforecast | Weather API endpoint |
 | http://localhost:5221/openapi/v1.json | Weather API OpenAPI spec |
@@ -267,7 +267,7 @@ Runs `podman rm -f weather-api`, forcibly stopping and removing the container. T
 
 ```bash
 npx nx show project shell
-npx nx show project page1
+npx nx show project weather-app
 npx nx show project page2
 ```
 

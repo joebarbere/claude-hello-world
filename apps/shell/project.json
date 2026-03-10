@@ -101,7 +101,7 @@
     "build-all": {
       "executor": "nx:run-commands",
       "options": {
-        "command": "npx nx run-many --target=build --projects=shell,page1,page2 --configuration=production --parallel=3"
+        "command": "npx nx run-many --target=build --projects=shell,weather-app,page2 --configuration=production --parallel=3"
       }
     },
     "podman-build": {

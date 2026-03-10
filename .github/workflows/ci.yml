@@ -23,6 +23,6 @@ jobs:
 
       - run: npm ci
 
-      - run: npx nx run-many --target=lint --projects=shell,page1,page2 --parallel=3
+      - run: npx nx run-many --target=lint --projects=shell,weather-app,page2 --parallel=3
 
-      - run: npx nx run-many --target=build --projects=shell,page1,page2 --configuration=production --parallel=3
+      - run: npx nx run-many --target=build --projects=shell,weather-app,page2 --configuration=production --parallel=3

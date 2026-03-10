@@ -1,0 +1,9 @@
+{
+  "name": "weather-app-e2e",
+  "$schema": "../../node_modules/nx/schemas/project-schema.json",
+  "projectType": "application",
+  "sourceRoot": "apps/weather-app-e2e/src",
+  "implicitDependencies": ["weather-app"],
+  "// targets": "to see all targets run: nx show project weather-app-e2e --web",
+  "targets": {}
+}

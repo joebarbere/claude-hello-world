@@ -2,7 +2,7 @@ import { ModuleFederationConfig } from '@nx/module-federation';
 import { join } from 'path';
 
 const config: ModuleFederationConfig = {
-  name: 'page1',
+  name: 'weather-app',
   exposes: {
     './Routes': join(__dirname, 'src/app/remote-entry/entry.routes.ts'),
   },
