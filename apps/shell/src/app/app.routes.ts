@@ -7,8 +7,8 @@ export const appRoutes: Route[] = [
     loadChildren: () => import('page2/Routes').then((m) => m!.remoteRoutes),
   },
   {
-    path: 'page1',
-    loadChildren: () => import('page1/Routes').then((m) => m!.remoteRoutes),
+    path: 'weather-app',
+    loadChildren: () => import('weather-app/Routes').then((m) => m!.remoteRoutes),
   },
   {
     path: '',

@@ -9,7 +9,7 @@ interface WeatherForecast {
 }
 
 @Component({
-  selector: 'app-page1-entry',
+  selector: 'app-weather-app-entry',
   template: `
     <h2>Weather Forecast</h2>
     @if (loading()) {
