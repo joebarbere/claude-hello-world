@@ -59,7 +59,7 @@ NX_DAEMON=false npx nx build weather-api
 # Build container images
 npx nx podman-build shell          # nginx image (Angular MFE)
 npx nx podman-build weather-api    # .NET API image
-npx nx podman-build-postgres shell # PostgreSQL image
+npx nx podman-build postgres       # PostgreSQL image
 ```
 
 ## Run (containers)
