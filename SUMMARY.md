@@ -615,13 +615,13 @@ spec:
 
 The env vars in the pod spec override the `ENV` defaults from the image, making credentials configurable at runtime without rebuilding.
 
-**`apps/postgres/project.json`** — new project with a `build` target:
+**`apps/postgres/project.json`** — new project with a `podman-build` target:
 
 | Target | Command |
 |--------|---------|
-| `build` | `podman build -t postgres -f Containerfile .` |
+| `podman-build` | `podman build -t postgres -f Containerfile .` |
 
-`kube-up` in the shell project now has `"dependsOn": ["postgres:build"]` so the image is always current before the pods start.
+`kube-up` in the shell project now has `"dependsOn": ["postgres:podman-build"]` so the image is always current before the pods start.
 
 Connect with: `psql -h localhost -p 5432 -U appuser -d appdb`
 
@@ -767,7 +767,7 @@ ASP.NET Core's configuration system treats `__` as a hierarchy separator in envi
 # Build all images
 npx nx podman-build shell          # builds nginx MFE image (claude-hello-world)
 npx nx podman-build weather-api    # builds .NET API image
-npx nx build postgres              # builds PostgreSQL image
+npx nx podman-build postgres       # builds PostgreSQL image
 
 # Run individually
 npx nx podman-up shell             # → http://localhost:8080 (Angular MFE)

@@ -132,7 +132,7 @@
         "command": "podman play kube k8s/pod.yaml",
         "cwd": "{workspaceRoot}"
       },
-      "dependsOn": ["postgres:build"]
+      "dependsOn": ["postgres:podman-build"]
     },
     "kube-down": {
       "executor": "nx:run-commands",
