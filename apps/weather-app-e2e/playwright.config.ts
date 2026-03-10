@@ -2,8 +2,10 @@ import { defineConfig, devices } from '@playwright/test';
 import { nxE2EPreset } from '@nx/playwright/preset';
 import { workspaceRoot } from '@nx/devkit';
 
-// For CI, you may want to set BASE_URL to the deployed application.
-const baseURL = process.env['BASE_URL'] || 'http://localhost:4201';
+// For EKS pods, set BASE_URL to the nginx pod path for weather-app
+// (e.g. http://<eks-node>:8080/weather-app/).
+// When BASE_URL is set, no local dev server is started.
+const baseURL = process.env['BASE_URL'] || 'http://localhost:8080/weather-app/';
 
 /**
  * Read environment variables from file.
@@ -22,13 +24,17 @@ export default defineConfig({
     /* Collect trace when retrying the failed test. See https://playwright.dev/docs/trace-viewer */
     trace: 'on-first-retry',
   },
-  /* Run your local dev server before starting the tests */
-  webServer: {
-    command: 'npx nx run weather-app:serve',
-    url: 'http://localhost:4201',
-    reuseExistingServer: true,
-    cwd: workspaceRoot,
-  },
+  /* Only start the local dev server when BASE_URL is not explicitly set */
+  ...(process.env['BASE_URL']
+    ? {}
+    : {
+        webServer: {
+          command: 'npx nx run weather-app:serve',
+          url: 'http://localhost:4201',
+          reuseExistingServer: true,
+          cwd: workspaceRoot,
+        },
+      }),
   projects: [
     {
       name: 'chromium',
@@ -62,7 +68,7 @@ export default defineConfig({
     },
     {
       name: 'Google Chrome',
-      use: { ...devices['Desktop Chrome'], channel: 'chrome' },
+      use: { ...devices['Desktop Chrome'], channel: 'chrome'] },
     } */
   ],
 });
