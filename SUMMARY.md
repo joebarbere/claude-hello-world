@@ -576,7 +576,7 @@ Updated references:
 
 Added a lightweight PostgreSQL 17 image and wired it into the Kubernetes kube workflow.
 
-**`Containerfile.postgres`** — extends `postgres:17-alpine` (the official Alpine-based image, ~90 MB) with default dev credentials baked in as `ENV` defaults:
+**`apps/postgres/Containerfile`** — extends `postgres:17-alpine` (the official Alpine-based image, ~90 MB) with default dev credentials baked in as `ENV` defaults:
 
 ```dockerfile
 FROM postgres:17-alpine
@@ -615,13 +615,13 @@ spec:
 
 The env vars in the pod spec override the `ENV` defaults from the image, making credentials configurable at runtime without rebuilding.
 
-**`apps/shell/project.json`** — added `podman-build-postgres` target and `dependsOn` on `kube-up`:
+**`apps/postgres/project.json`** — new project with a `build` target:
 
 | Target | Command |
 |--------|---------|
-| `podman-build-postgres` | `podman build -t postgres -f Containerfile.postgres .` |
+| `build` | `podman build -t postgres -f Containerfile .` |
 
-`kube-up` now has `"dependsOn": ["podman-build-postgres"]` so the image is always current before the pods start.
+`kube-up` in the shell project now has `"dependsOn": ["postgres:build"]` so the image is always current before the pods start.
 
 Connect with: `psql -h localhost -p 5432 -U appuser -d appdb`
 
@@ -767,7 +767,7 @@ ASP.NET Core's configuration system treats `__` as a hierarchy separator in envi
 # Build all images
 npx nx podman-build shell          # builds nginx MFE image (claude-hello-world)
 npx nx podman-build weather-api    # builds .NET API image
-npx nx podman-build-postgres shell # builds PostgreSQL image
+npx nx build postgres              # builds PostgreSQL image
 
 # Run individually
 npx nx podman-up shell             # → http://localhost:8080 (Angular MFE)
@@ -815,4 +815,4 @@ Change `"Repository"` in `apps/weather-api/appsettings.json`:
 |------|-----------|---------|
 | `Containerfile.nginx` | `node:20-alpine` → `nginx:alpine` | Angular MFE (shell + weather-app + weatheredit-app) |
 | `apps/weather-api/Containerfile` | `dotnet/sdk:9.0-alpine` → `dotnet/aspnet:9.0-alpine` | .NET Weather API |
-| `Containerfile.postgres` | `postgres:17-alpine` | PostgreSQL database |
+| `apps/postgres/Containerfile` | `postgres:17-alpine` | PostgreSQL database |
