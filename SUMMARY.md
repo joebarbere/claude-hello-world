@@ -903,3 +903,29 @@ Added an EKS E2E Tests status badge directly under the `h1` title:
 ```
 
 The badge reflects the latest workflow run on `main` (green = all suites passed, red = any suite failed).
+
+---
+
+## Step 34: Fix CI — Disable Nx Cloud Authorization
+
+**Problem:** Both GitHub Actions workflows (`ci.yml`, `eks-e2e.yml`) were failing immediately with:
+
+```
+NX  Nx Cloud: Workspace is unable to be authorized. Exiting run.
+This workspace is more than three days old and is not connected.
+```
+
+The `nx.json` contains an `nxCloudId` for an unclaimed workspace. Every `nx` command exits 1 before doing any work.
+
+**Fix:** Added `NX_NO_CLOUD: true` as a workflow-level environment variable to both workflows:
+
+```yaml
+env:
+  NX_NO_CLOUD: true
+```
+
+This tells Nx to skip all cloud communication — caching, authorization, and distributed task execution — and run tasks locally inside the runner. No `nx.json` changes were needed; the env var takes precedence at runtime.
+
+**Files changed:**
+- `.github/workflows/ci.yml` — added `env: NX_NO_CLOUD: true` at the workflow level
+- `.github/workflows/eks-e2e.yml` — added `env: NX_NO_CLOUD: true` at the workflow level
