@@ -759,6 +759,146 @@ ASP.NET Core's configuration system treats `__` as a hierarchy separator in envi
 
 ---
 
+---
+
+## Step 32: Integrate Ory Kratos Authentication
+
+Added role-based authentication using [Ory Kratos](https://www.ory.sh/kratos/) (open-source identity infrastructure). Access to the `weatheredit-app` and all write operations on the weather-api are restricted to users with the `admin` or `weather_admin` role.
+
+### `apps/ory/` — new Nx project
+
+**`apps/ory/project.json`** — registers `ory` as an Nx application with a single `podman-build` target that runs two sequential container builds.
+
+**`apps/ory/identity.schema.json`** — JSON Schema defining the identity shape. Two traits:
+- `email` — the login identifier (marked with `ory.sh/kratos.credentials.password.identifier: true`)
+- `role` — an enum restricted to `admin` or `weather_admin`
+
+**`apps/ory/kratos.yml`** — Kratos server configuration:
+- `dsn: sqlite:///var/lib/kratos/db.sqlite` — SQLite keeps the stack dependency-free; no separate DB pod needed for auth
+- Self-service `login` flow configured to redirect to `http://localhost:4200/auth/login` (the Angular shell's login page)
+- `allowed_return_urls` includes both the dev origin (`localhost:4200`) and the containerized origin (`localhost:8080`)
+- Password method enabled; recovery/verification flows omitted to avoid a mail server dependency
+- Cookie and cipher secrets are placeholders — replace before any non-local deployment
+
+**`apps/ory/Containerfile`** — extends `oryd/kratos:v1.3.0-distroless` (the official minimal image with no shell or package manager). Copies `kratos.yml` and `identity.schema.json` into `/etc/config/kratos/`. Uses the `--dev` flag to enable permissive CORS and disable TLS.
+
+**`apps/ory/Containerfile.init`** — `alpine:3.21` with only `wget` installed. Copies `init-users.sh` and sets it as the entrypoint.
+
+**`apps/ory/init-users.sh`** — shell script run by the init container:
+1. Polls `GET /health/ready` on the Kratos Admin API (up to 30 attempts, 2-second intervals)
+2. For each user, checks if the identity already exists (`GET /admin/identities?credentials_identifier=<email>`) and skips if found
+3. Creates the identity via `POST /admin/identities` with the password embedded in the `credentials.password.config` block — this bypasses self-service flows and email verification, making it suitable for seeding programmatic defaults
+
+| User | Email | Password | Role |
+|------|-------|----------|------|
+| Admin | `admin@example.com` | `Admin1234!` | `admin` |
+| Weather Admin | `weatheradmin@example.com` | `WeatherAdmin1234!` | `weather_admin` |
+
+### `apps/weather-api/Middleware/KratosAuthMiddleware.cs` — new
+
+ASP.NET Core middleware that enforces role-based access on write operations:
+
+1. **Pass-through for reads:** `GET` and `HEAD` requests are forwarded to the next middleware unconditionally — the weather forecast list remains public.
+2. **Session extraction:** All request cookies are concatenated into a `Cookie` header and forwarded to `GET {OryKratosPublicUrl}/sessions/whoami` via an `HttpClient` call. This endpoint validates the session and returns the full identity.
+3. **Role check:** The `identity.traits.role` field is extracted from the JSON response. Only `admin` and `weather_admin` are in the `AllowedRoles` set; anything else (including missing roles) returns `403 Forbidden`.
+4. **Error handling:** Connection failures return `503 Service Unavailable`; invalid/expired sessions return `401 Unauthorized`.
+
+`OryKratosPublicUrl` defaults to `http://localhost:4433` and is overridden per environment via `appsettings.json` or the pod's `env:` block.
+
+Registered in `Program.cs` after `UseHttpsRedirection()`:
+
+```csharp
+app.UseMiddleware<KratosAuthMiddleware>();
+```
+
+### Angular auth — shell app
+
+Three new files added to `apps/shell/src/app/auth/`:
+
+**`auth.service.ts`** — injectable service that:
+- Calls `GET /.ory/kratos/public/sessions/whoami` with `withCredentials: true` (so the session cookie is included); returns `null` on any error
+- `canAccessWeatherEdit(session)` — returns `true` if the session is active and the role is `admin` or `weather_admin`
+- `initiateLogin(returnTo)` — redirects `window.location.href` to `/.ory/kratos/public/self-service/login/browser?return_to=<url>`, triggering a full browser-based Kratos login flow
+- `logout()` — fetches the Kratos logout URL and redirects the browser to it (invalidates the session server-side)
+- `getLoginFlow(flowId)` — fetches flow details from `/.ory/kratos/public/self-service/login/flows?id=<flowId>`
+
+**`auth.guard.ts`** — `CanActivateFn` that:
+1. Calls `authService.getSession()` (observable)
+2. If no session → calls `authService.initiateLogin(state.url)` and returns `false` (browser navigates away to Kratos)
+3. If session present but wrong role → returns `router.createUrlTree(['/auth/unauthorized'])`
+4. Otherwise → returns `true`
+
+**`auth/login/login.component.ts`** — standalone component that implements the Kratos browser login UI:
+- On `ngOnInit`, reads `?flow=` from the query string
+- If absent, calls `authService.initiateLogin(returnTo)` — Kratos will redirect back to `/auth/login?flow=<id>`
+- If present, fetches the flow object and stores it in `this.flow`
+- Template renders a `<form>` with `[attr.action]="flow.ui.action"` and `[attr.method]="flow.ui.method"` — the form submits **natively** (no Angular `ngSubmit`), so Kratos handles the POST, sets the session cookie, and redirects to `return_to`
+- Hidden nodes (including the CSRF token) are rendered as `<input type="hidden">` elements
+- Field-level messages from Kratos (e.g. "wrong credentials") are displayed below each input
+- Flow expiry is handled: a failed `getLoginFlow` call re-initiates a fresh login flow
+
+**`auth/unauthorized/unauthorized.component.ts`** — shown when a logged-in user's role is not permitted. Offers "Go to Home" and "Sign out" actions.
+
+### Shell routing — `app.routes.ts`
+
+The `weatheredit-app` route now has `canActivate: [weatherEditAuthGuard]`. Two new routes are added:
+
+```ts
+{ path: 'auth/login',        component: LoginComponent },
+{ path: 'auth/unauthorized', component: UnauthorizedComponent },
+```
+
+### nginx — Kratos proxy
+
+Added to `nginx/nginx.conf`:
+
+```nginx
+location /.ory/kratos/public/ {
+  proxy_pass http://host.containers.internal:4433/;
+  proxy_set_header Host $host;
+  proxy_set_header X-Real-IP $remote_addr;
+  proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+  proxy_set_header X-Forwarded-Proto $scheme;
+  proxy_set_header X-Forwarded-Host $host;
+}
+```
+
+This allows the Angular app (served by nginx on port 8080) to reach Kratos without CORS issues — all requests go to the same origin and nginx forwards them to `host.containers.internal:4433`. The Kratos `X-Forwarded-*` headers are used to correctly construct redirect URLs back to the Angular app.
+
+The existing `/weather` proxy location also gained `proxy_set_header Cookie $http_cookie;` to ensure session cookies are forwarded to the weather-api for validation.
+
+### Kubernetes — `k8s/pod.yaml`
+
+Added the `ory-kratos` pod with an `initContainers` block:
+
+```yaml
+initContainers:
+  - name: ory-kratos-init
+    image: localhost/ory-kratos-init:latest
+    env:
+      - name: KRATOS_ADMIN_URL
+        value: http://host.containers.internal:4434
+containers:
+  - name: ory-kratos
+    image: localhost/ory-kratos:latest
+    ports:
+      - containerPort: 4433  # public API
+        hostPort: 4433
+      - containerPort: 4434  # admin API
+        hostPort: 4434
+```
+
+The `initContainer` runs to completion before Kubernetes starts the main `ory-kratos` container. The init container waits for Kratos to be healthy before seeding users, but since both share the same pod, the Kratos server starts concurrently — the health poll loop in `init-users.sh` handles the race.
+
+The `weather-api` pod gained an `OryKratosPublicUrl` env var:
+
+```yaml
+- name: OryKratosPublicUrl
+  value: http://host.containers.internal:4433
+```
+
+---
+
 ## Final Verification
 
 ### Individual container workflow
@@ -768,6 +908,7 @@ ASP.NET Core's configuration system treats `__` as a hierarchy separator in envi
 npx nx podman-build shell          # builds nginx MFE image (claude-hello-world)
 npx nx podman-build weather-api    # builds .NET API image
 npx nx podman-build postgres       # builds PostgreSQL image
+npx nx podman-build ory            # builds ory-kratos and ory-kratos-init images
 
 # Run individually
 npx nx podman-up shell             # → http://localhost:8080 (Angular MFE)
@@ -778,26 +919,36 @@ npx nx podman-down shell
 npx nx podman-down weather-api
 ```
 
-### Kubernetes workflow (all three containers together)
+### Kubernetes workflow (all containers together)
 
 ```bash
-# Build images (postgres image built automatically by dependsOn)
+# Build images (postgres image built automatically via dependsOn)
 npx nx podman-build shell
 npx nx podman-build weather-api
+npx nx podman-build ory
 
 # Start all pods
 npx nx kube-up shell
 
 # Verify
-curl http://localhost:8080              # Angular shell
-curl http://localhost:8080/weather-app/       # weather-app remote (weather table)
-curl http://localhost:8080/weather      # nginx → weather-api proxy
-curl http://localhost:5221/weatherforecast  # weather-api direct
-psql -h localhost -p 5432 -U appuser -d appdb  # PostgreSQL
+curl http://localhost:8080                    # Angular shell
+curl http://localhost:8080/weather-app/       # weather-app remote (public)
+curl http://localhost:8080/weatheredit-app/   # weatheredit-app (redirects to login)
+curl http://localhost:8080/weather            # nginx → weather-api proxy (GET, public)
+curl http://localhost:5221/weatherforecast    # weather-api direct
+curl http://localhost:4433/health/ready       # Kratos public health check
+psql -h localhost -p 5432 -U appuser -d appdb # PostgreSQL
 
 # Stop all pods
 npx nx kube-down shell
 ```
+
+### Authentication
+
+| User | Email | Password | Role | Access |
+|------|-------|----------|------|--------|
+| Admin | `admin@example.com` | `Admin1234!` | `admin` | weatheredit-app + all API writes |
+| Weather Admin | `weatheradmin@example.com` | `WeatherAdmin1234!` | `weather_admin` | weatheredit-app + all API writes |
 
 ### Weather API repository selection
 
@@ -816,3 +967,5 @@ Change `"Repository"` in `apps/weather-api/appsettings.json`:
 | `Containerfile.nginx` | `node:20-alpine` → `nginx:alpine` | Angular MFE (shell + weather-app + weatheredit-app) |
 | `apps/weather-api/Containerfile` | `dotnet/sdk:9.0-alpine` → `dotnet/aspnet:9.0-alpine` | .NET Weather API |
 | `apps/postgres/Containerfile` | `postgres:17-alpine` | PostgreSQL database |
+| `apps/ory/Containerfile` | `oryd/kratos:v1.3.0-distroless` | Ory Kratos identity server |
+| `apps/ory/Containerfile.init` | `alpine:3.21` | One-shot user seeding container |
