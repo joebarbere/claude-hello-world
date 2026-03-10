@@ -3,8 +3,8 @@ import { Route } from '@angular/router';
 
 export const appRoutes: Route[] = [
   {
-    path: 'page2',
-    loadChildren: () => import('page2/Routes').then((m) => m!.remoteRoutes),
+    path: 'weatheredit-app',
+    loadChildren: () => import('weatheredit-app/Routes').then((m) => m!.remoteRoutes),
   },
   {
     path: 'weather-app',

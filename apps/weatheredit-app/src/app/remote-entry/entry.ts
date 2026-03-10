@@ -17,7 +17,7 @@ interface ForecastFormData {
 }
 
 @Component({
-  selector: 'app-page2-entry',
+  selector: 'app-weatheredit-app-entry',
   imports: [FormsModule],
   styleUrl: './entry.css',
   template: `

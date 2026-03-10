@@ -8,12 +8,12 @@ An Nx monorepo demonstrating Angular Module Federation micro-frontends with a .N
 Browser
   └── Shell (Angular MFE host, :4200 / :8080)
         ├── weather-app (remote, :4201) — weather forecast table
-        └── page2 (remote, :4202) — weather forecast CRUD
+        └── weatheredit-app (remote, :4202) — weather forecast CRUD
 
 nginx (container, :8080)
   ├── /              → shell app
   ├── /weather-app/  → weather-app remote
-  ├── /page2/        → page2 remote
+  ├── /weatheredit-app/        → weatheredit-app remote
   └── /weather    → proxy → weather-api
 
 weather-api (.NET 9, :5220 dev / :5221 container)
@@ -41,7 +41,7 @@ npm install
 
 ```sh
 # Start all apps with hot reload (Angular on :4200, remotes on :4201/:4202)
-npx nx serve shell --devRemotes=weather-app,page2
+npx nx serve shell --devRemotes=weather-app,weatheredit-app
 
 # Start weather API (required for weather data in dev)
 NX_DAEMON=false npx nx serve weather-api
@@ -80,7 +80,7 @@ npx nx kube-down shell
 |-----|---------|
 | http://localhost:8080 | Shell |
 | http://localhost:8080/weather-app/ | Weather table |
-| http://localhost:8080/page2/ | Weather CRUD |
+| http://localhost:8080/weatheredit-app/ | Weather CRUD |
 | http://localhost:5221/weatherforecast | Weather API |
 | localhost:5432 | PostgreSQL |
 

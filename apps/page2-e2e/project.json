@@ -1,9 +1,0 @@
-{
-  "name": "page2-e2e",
-  "$schema": "../../node_modules/nx/schemas/project-schema.json",
-  "projectType": "application",
-  "sourceRoot": "apps/page2-e2e/src",
-  "implicitDependencies": ["page2"],
-  "// targets": "to see all targets run: nx show project page2-e2e --web",
-  "targets": {}
-}

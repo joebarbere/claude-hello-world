@@ -37,12 +37,12 @@ Nx 22 scaffolds workspaces with TypeScript project references enabled (`composit
 
 ```bash
 NX_IGNORE_UNSUPPORTED_TS_SETUP=true npx nx g @nx/angular:host apps/shell \
-  --remotes=weather-app,page2 --standalone --bundler=webpack --no-interactive
+  --remotes=weather-app,weatheredit-app --standalone --bundler=webpack --no-interactive
 ```
 
 The `host` generator creates:
 - `apps/shell/` — the host (shell) application with `module-federation.config.ts` and webpack configs
-- `apps/weather-app/` and `apps/page2/` — remote apps each exposing `./Routes`
+- `apps/weather-app/` and `apps/weatheredit-app/` — remote apps each exposing `./Routes`
 - Corresponding `-e2e` projects for Playwright tests
 
 The `--standalone` flag uses standalone Angular components (no NgModule). `--bundler=webpack` is required for Module Federation (rspack support is separate).
@@ -71,20 +71,20 @@ export default withModuleFederation(
     ...config,
     remotes: [
       ['weather-app', '/weather-app/remoteEntry.mjs'],
-      ['page2', '/page2/remoteEntry.mjs'],
+      ['weatheredit-app', '/weatheredit-app/remoteEntry.mjs'],
     ],
   },
   { dts: false }
 );
 ```
 
-The dev webpack config (`webpack.config.ts`) keeps `remotes: ['weather-app', 'page2']` for localhost dev server use.
+The dev webpack config (`webpack.config.ts`) keeps `remotes: ['weather-app', 'weatheredit-app']` for localhost dev server use.
 
 ---
 
 ## Step 6: Set baseHref for Remote Apps
 
-Added `"baseHref": "/weather-app/"` and `"baseHref": "/page2/"` to the production configuration in each remote's `project.json`. This ensures Angular sets `<base href="/weather-app/">` in the generated HTML so asset paths resolve correctly when served from a sub-path.
+Added `"baseHref": "/weather-app/"` and `"baseHref": "/weatheredit-app/"` to the production configuration in each remote's `project.json`. This ensures Angular sets `<base href="/weather-app/">` in the generated HTML so asset paths resolve correctly when served from a sub-path.
 
 ---
 
@@ -93,7 +93,7 @@ Added `"baseHref": "/weather-app/"` and `"baseHref": "/page2/"` to the productio
 Created `nginx/nginx.conf` with path-based routing:
 - `/` → shell app (`/usr/share/nginx/html/shell`)
 - `/weather-app/` → weather-app remote (`/usr/share/nginx/html/weather-app/`)
-- `/page2/` → page2 remote (`/usr/share/nginx/html/page2/`)
+- `/weatheredit-app/` → weatheredit-app remote (`/usr/share/nginx/html/weatheredit-app/`)
 
 Used `try_files $uri $uri/ /index.html` for the shell (SPA fallback) and `try_files $uri /weather-app/index.html` for remotes.
 
@@ -102,7 +102,7 @@ Used `try_files $uri $uri/ /index.html` for the shell (SPA fallback) and `try_fi
 ## Step 8: Create the Containerfile.nginx and docker-compose.yml
 
 **`Containerfile.nginx`** — multi-stage build:
-1. Stage 1 (`builder`): `node:20-alpine`, runs `npm ci` then `npx nx run-many --target=build --projects=shell,weather-app,page2 --configuration=production --parallel=3`
+1. Stage 1 (`builder`): `node:20-alpine`, runs `npm ci` then `npx nx run-many --target=build --projects=shell,weather-app,weatheredit-app --configuration=production --parallel=3`
 2. Stage 2 (`runner`): `nginx:alpine`, copies each app's build output to its nginx serving directory
 
 **`docker-compose.yml`** — kept for reference but not used at runtime (see Step 16). Maps host port 8080 to container port 80 and references the pre-built image by name.
@@ -115,7 +115,7 @@ Added four targets to `apps/shell/project.json`:
 
 | Target | Command |
 |--------|---------|
-| `build-all` | `npx nx run-many --target=build --projects=shell,weather-app,page2 --configuration=production --parallel=3` |
+| `build-all` | `npx nx run-many --target=build --projects=shell,weather-app,weatheredit-app --configuration=production --parallel=3` |
 | `podman-build` | `podman build -t claude-hello-world -f Containerfile.nginx .` (depends on `build-all`) |
 | `podman-up` | `podman run -d --name claude-hello-world -p 8080:80 localhost/claude-hello-world:latest` |
 | `podman-down` | `podman rm -f claude-hello-world` |
@@ -198,7 +198,7 @@ Try changing the 'lib' compiler option to include 'dom'.
 
 **Diagnosis:** `tsconfig.base.json` was generated with `"lib": ["es2022"]` only. The `dom` lib (which provides `console`, `window`, `document`, etc.) was missing.
 
-**Fix:** Added `"lib": ["es2022", "dom"]` to the `compilerOptions` of every `tsconfig.app.json` (shell, weather-app, page2).
+**Fix:** Added `"lib": ["es2022", "dom"]` to the `compilerOptions` of every `tsconfig.app.json` (shell, weather-app, weatheredit-app).
 
 ---
 
@@ -242,7 +242,7 @@ Cannot find module 'weather-app/Routes' or its corresponding type declarations.
 }
 ```
 
-Path aliases are resolved relative to `baseUrl`. With `"baseUrl": "."` (= `apps/shell/`), TypeScript looked for `apps/shell/apps/weather-app/src/...` which doesn't exist. The remote apps (weather-app, page2) built fine because they don't use those aliases themselves.
+Path aliases are resolved relative to `baseUrl`. With `"baseUrl": "."` (= `apps/shell/`), TypeScript looked for `apps/shell/apps/weather-app/src/...` which doesn't exist. The remote apps (weather-app, weatheredit-app) built fine because they don't use those aliases themselves.
 
 **Fix:** Set `"baseUrl": "../../"` in `apps/shell/tsconfig.app.json` so path resolution starts from the workspace root, where `apps/weather-app/src/...` is valid. Remote apps kept `"baseUrl": "."` .
 
@@ -269,7 +269,7 @@ ls dist/apps/shell/
 ```dockerfile
 COPY --from=builder /app/dist/apps/shell /usr/share/nginx/html/shell
 COPY --from=builder /app/dist/apps/weather-app /usr/share/nginx/html/weather-app
-COPY --from=builder /app/dist/apps/page2 /usr/share/nginx/html/page2
+COPY --from=builder /app/dist/apps/weatheredit-app /usr/share/nginx/html/weatheredit-app
 ```
 
 ---
@@ -359,8 +359,8 @@ jobs:
           node-version: 20
           cache: 'npm'
       - run: npm ci
-      - run: npx nx run-many --target=lint --projects=shell,weather-app,page2 --parallel=3
-      - run: npx nx run-many --target=build --projects=shell,weather-app,page2 --configuration=production --parallel=3
+      - run: npx nx run-many --target=lint --projects=shell,weather-app,weatheredit-app --parallel=3
+      - run: npx nx run-many --target=build --projects=shell,weather-app,weatheredit-app --configuration=production --parallel=3
 ```
 
 CI now passes in ~2 minutes.
@@ -369,11 +369,11 @@ CI now passes in ~2 minutes.
 
 ## Step 19: Debug — Shell Root Path Shows Blank White Screen
 
-After a successful `podman-build` and `podman-up`, navigating to `http://localhost:8080/` showed a blank white screen, while `/weather-app/` and `/page2/` rendered correctly.
+After a successful `podman-build` and `podman-up`, navigating to `http://localhost:8080/` showed a blank white screen, while `/weather-app/` and `/weatheredit-app/` rendered correctly.
 
-**Diagnosis:** The shell bootstraps Angular and Webpack Module Federation simultaneously tries to fetch the remote entry files (`/weather-app/remoteEntry.mjs` and `/page2/remoteEntry.mjs`). The `nginx:alpine` image's default `mime.types` file does not include a mapping for the `.mjs` extension, so nginx served those files with `Content-Type: application/octet-stream`. Browsers enforce strict MIME type checking for ES module scripts and refuse to execute them, causing the shell's Module Federation initialization to fail before Angular could render anything.
+**Diagnosis:** The shell bootstraps Angular and Webpack Module Federation simultaneously tries to fetch the remote entry files (`/weather-app/remoteEntry.mjs` and `/weatheredit-app/remoteEntry.mjs`). The `nginx:alpine` image's default `mime.types` file does not include a mapping for the `.mjs` extension, so nginx served those files with `Content-Type: application/octet-stream`. Browsers enforce strict MIME type checking for ES module scripts and refuse to execute them, causing the shell's Module Federation initialization to fail before Angular could render anything.
 
-The `/weather-app/` and `/page2/` paths appeared to work because nginx served each remote's standalone `index.html` directly — completely bypassing Module Federation.
+The `/weather-app/` and `/weatheredit-app/` paths appeared to work because nginx served each remote's standalone `index.html` directly — completely bypassing Module Federation.
 
 Browser console confirmed:
 ```
@@ -528,7 +528,7 @@ To see the table in dev mode, run both servers:
 NX_DAEMON=false npx nx serve weather-api
 
 # Terminal 2
-npx nx serve shell --devRemotes=weather-app,page2
+npx nx serve shell --devRemotes=weather-app,weatheredit-app
 ```
 
 ---
@@ -537,7 +537,7 @@ npx nx serve shell --devRemotes=weather-app,page2
 
 `npx nx podman-build weather-api` would run the container build against whatever was already on disk — there was no guarantee the .NET project had been compiled first. Added `"dependsOn": ["build"]` to the `podman-build` target in `apps/weather-api/project.json` so Nx always runs `dotnet build` before the container build.
 
-The shell's `podman-build` already had `"dependsOn": ["build-all"]`, which covers the production builds for shell, weather-app, and page2 before the nginx container image is assembled.
+The shell's `podman-build` already had `"dependsOn": ["build-all"]`, which covers the production builds for shell, weather-app, and weatheredit-app before the nginx container image is assembled.
 
 ---
 
@@ -692,17 +692,17 @@ Write endpoints return `405 Method Not Allowed` when the `Random` repository is 
 
 ---
 
-## Step 30: Weather Forecast CRUD Interface in page2
+## Step 30: Weather Forecast CRUD Interface in weatheredit-app
 
-Replaced the placeholder `NxWelcome` component in `apps/page2` with a full CRUD management interface for the weather-api.
+Replaced the placeholder `NxWelcome` component in `apps/weatheredit-app` with a full CRUD management interface for the weather-api.
 
 ### Files
 
 | File | Description |
 |------|-------------|
-| `apps/page2/src/app/remote-entry/entry.ts` | Standalone Angular component — full CRUD UI |
-| `apps/page2/src/app/remote-entry/entry.css` | External stylesheet (moved out of inline to avoid component CSS budget warning) |
-| `apps/page2/project.json` | Raised `anyComponentStyle` budget from 4 kB to 8 kB |
+| `apps/weatheredit-app/src/app/remote-entry/entry.ts` | Standalone Angular component — full CRUD UI |
+| `apps/weatheredit-app/src/app/remote-entry/entry.css` | External stylesheet (moved out of inline to avoid component CSS budget warning) |
+| `apps/weatheredit-app/project.json` | Raised `anyComponentStyle` budget from 4 kB to 8 kB |
 
 The unused `nx-welcome.ts` was deleted.
 
@@ -813,6 +813,6 @@ Change `"Repository"` in `apps/weather-api/appsettings.json`:
 
 | File | Base image | Purpose |
 |------|-----------|---------|
-| `Containerfile.nginx` | `node:20-alpine` → `nginx:alpine` | Angular MFE (shell + weather-app + page2) |
+| `Containerfile.nginx` | `node:20-alpine` → `nginx:alpine` | Angular MFE (shell + weather-app + weatheredit-app) |
 | `apps/weather-api/Containerfile` | `dotnet/sdk:9.0-alpine` → `dotnet/aspnet:9.0-alpine` | .NET Weather API |
 | `Containerfile.postgres` | `postgres:17-alpine` | PostgreSQL database |

@@ -10,7 +10,7 @@
       "path": "./apps/weather-app-e2e"
     },
     {
-      "path": "./apps/page2-e2e"
+      "path": "./apps/weatheredit-app-e2e"
     }
   ]
 }
