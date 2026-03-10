@@ -24,6 +24,14 @@ export default defineConfig({
     /* Collect trace when retrying the failed test. See https://playwright.dev/docs/trace-viewer */
     trace: 'on-first-retry',
   },
+  /* In CI: emit GitHub annotations + HTML report + JUnit XML for test-reporter */
+  reporter: process.env['CI']
+    ? [
+        ['github'],
+        ['html', { open: 'never' }],
+        ['junit', { outputFile: 'playwright-report/junit.xml' }],
+      ]
+    : undefined,
   /* Only start the local dev server when BASE_URL is not explicitly set */
   ...(process.env['BASE_URL']
     ? {}
@@ -68,7 +76,7 @@ export default defineConfig({
     },
     {
       name: 'Google Chrome',
-      use: { ...devices['Desktop Chrome'], channel: 'chrome'] },
+      use: { ...devices['Desktop Chrome'], channel: 'chrome' },
     } */
   ],
 });
