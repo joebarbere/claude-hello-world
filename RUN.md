@@ -297,3 +297,89 @@ npx nx reset
 ```
 
 Deletes the local `.nx/cache` directory. Run this if builds are returning unexpected cached results or after significant dependency changes.
+
+---
+
+## E2E Tests (Playwright against EKS pods)
+
+Three Playwright suites (`shell-e2e`, `weather-app-e2e`, `weatheredit-app-e2e`) test the apps as they run inside the Kubernetes pods. The pods must be up before running.
+
+### Prerequisites — build images and start pods
+
+```bash
+npx nx podman-build shell        # builds Angular MFEs + nginx image
+npx nx podman-build weather-api  # builds .NET API image
+npx nx kube-up shell             # starts all pods (nginx :8080, weather-api :5221, postgres :5432)
+```
+
+### Run all e2e suites against the local pods
+
+```bash
+npx nx run shell-e2e:e2e
+npx nx run weather-app-e2e:e2e
+npx nx run weatheredit-app-e2e:e2e
+```
+
+Each suite reads `BASE_URL` from the environment. When `BASE_URL` is not set, the configs default to the local pod URLs:
+
+| Suite | Default `BASE_URL` |
+|-------|--------------------|
+| `shell-e2e` | `http://localhost:8080` |
+| `weather-app-e2e` | `http://localhost:8080/weather-app/` |
+| `weatheredit-app-e2e` | `http://localhost:8080/weatheredit-app/` |
+
+### Run a single suite
+
+```bash
+npx nx run shell-e2e:e2e
+npx nx run weather-app-e2e:e2e
+npx nx run weatheredit-app-e2e:e2e
+```
+
+### Run against a specific (remote) host
+
+```bash
+BASE_URL=http://<eks-node>:8080                    npx nx run shell-e2e:e2e
+BASE_URL=http://<eks-node>:8080/weather-app/       npx nx run weather-app-e2e:e2e
+BASE_URL=http://<eks-node>:8080/weatheredit-app/   npx nx run weatheredit-app-e2e:e2e
+```
+
+When `BASE_URL` is set, no local dev server is started — Playwright connects directly to the target host.
+
+### View the HTML report
+
+After a run, open the generated HTML report:
+
+```bash
+npx playwright show-report apps/shell-e2e/playwright-report
+npx playwright show-report apps/weather-app-e2e/playwright-report
+npx playwright show-report apps/weatheredit-app-e2e/playwright-report
+```
+
+### Teardown
+
+```bash
+npx nx kube-down shell
+```
+
+---
+
+## CI — EKS E2E Workflow
+
+The `eks-e2e.yml` GitHub Actions workflow runs automatically on every merge to `main`. It:
+
+1. Builds all three container images (nginx, weather-api, postgres) inside the runner
+2. Starts the EKS pods with `podman play kube`
+3. Waits for the nginx and weather-api pods to pass health checks
+4. Runs all three Playwright suites against `http://localhost:8080`
+5. Stops the pods
+6. Publishes JUnit XML as a GitHub Check Run (`dorny/test-reporter`)
+7. Uploads HTML reports as 30-day artifacts
+8. Posts a per-suite pass/fail summary comment on the merged PR
+
+To trigger manually or inspect runs:
+
+```bash
+gh workflow run eks-e2e.yml --repo joebarbere/claude-hello-world
+gh run list --workflow=eks-e2e.yml --repo joebarbere/claude-hello-world
+```
