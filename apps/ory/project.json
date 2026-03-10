@@ -1,0 +1,19 @@
+{
+  "name": "ory",
+  "$schema": "../../node_modules/nx/schemas/project-schema.json",
+  "projectType": "application",
+  "tags": [],
+  "targets": {
+    "podman-build": {
+      "executor": "nx:run-commands",
+      "options": {
+        "commands": [
+          "podman build -t ory-kratos -f Containerfile .",
+          "podman build -t ory-kratos-init -f Containerfile.init ."
+        ],
+        "parallel": false,
+        "cwd": "{projectRoot}"
+      }
+    }
+  }
+}

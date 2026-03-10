@@ -1,0 +1,8 @@
+FROM alpine:3.21
+
+RUN apk add --no-cache wget
+
+COPY init-users.sh /init-users.sh
+RUN chmod +x /init-users.sh
+
+ENTRYPOINT ["/init-users.sh"]

@@ -1,0 +1,10 @@
+FROM oryd/kratos:v1.3.0-distroless
+
+COPY kratos.yml /etc/config/kratos/kratos.yml
+COPY identity.schema.json /etc/config/kratos/identity.schema.json
+
+VOLUME /var/lib/kratos
+
+EXPOSE 4433 4434
+
+CMD ["serve", "--config", "/etc/config/kratos/kratos.yml", "--dev", "--watch-courier"]
