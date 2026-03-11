@@ -225,7 +225,7 @@ npx nx podman-build ory
 npx nx kube-up shell
 ```
 
-Runs `podman play kube k8s/pod.yaml`, which creates and starts all pods defined in the manifest. The `ory-kratos` pod runs the init container first to seed default users, then starts the Kratos server.
+Runs `podman play kube k8s/pod.yaml`, which creates and starts all pods defined in the manifest. The `ory-kratos` pod starts Kratos and the `ory-kratos-init` sidecar simultaneously; the sidecar waits for Kratos to become ready, then seeds the default users and exits.
 
 | URL | Serves |
 |-----|--------|
