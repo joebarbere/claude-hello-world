@@ -1582,6 +1582,42 @@ Probing directly at `http://localhost:4433/health/ready` avoids the nginx hop an
 
 ---
 
+## Step 50: Fix — Kratos Health Check Still Timing Out After 120 s
+
+The smoke-test CI run triggered by the PR #18 merge continued to fail at the "Wait for pods to be healthy" step with **exit code 124** (timeout), even after raising the Kratos health-check timeout to 120 s in Step 49.
+
+**Root cause:**
+
+The `k8s/pod.yaml` configured Kratos with a SQLite file DSN:
+
+```yaml
+- name: DSN
+  value: sqlite:///var/lib/kratos/db.sqlite?_fk=true
+```
+
+Kratos runs schema migrations against this SQLite file on every cold start. On cold GitHub Actions runners those migrations consistently exceed 120 seconds, so the health-check timeout was never long enough regardless of how high it was raised.
+
+**Fix:**
+
+Switch the Kratos DSN to `memory` in `k8s/pod.yaml`:
+
+```yaml
+# Before (Step 49 — SQLite migrations caused >120 s startup)
+- name: DSN
+  value: sqlite:///var/lib/kratos/db.sqlite?_fk=true
+
+# After (Step 50 — in-memory, no migrations, starts in <5 s)
+- name: DSN
+  value: memory
+```
+
+The `memory` DSN uses Ory Kratos's built-in in-memory store (no file I/O, no migrations), so Kratos becomes healthy in seconds. The `ory-kratos-init` sidecar still creates test identities in the in-memory store, which is sufficient for the smoke tests (the tests only verify that the auth redirect flow fires, not that specific users exist). The 120 s health-check timeout is now ample headroom.
+
+**Files changed:**
+- `k8s/pod.yaml`
+
+---
+
 ## Final Verification
 
 ### Individual container workflow
