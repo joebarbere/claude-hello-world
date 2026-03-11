@@ -1700,6 +1700,96 @@ wait $P3; RC3=$?; [ $RC3 -ne 0 ] && echo "ERROR: ory-kratos timed out (exit $RC3
 
 ---
 
+## Step 53: Fix — Kratos Config Version Mismatch and Init-Container Network Routing
+
+Despite raising the health-check timeout to 180 s in Step 52, the smoke-test CI run continued to fail with **exit code 124** on the "Wait for pods to be healthy" step. The per-service diagnostics added in Step 52 confirmed Ory Kratos was the bottleneck, but the logs showed it was not starting at all rather than starting slowly.
+
+**Root cause analysis:**
+
+Two bugs were found that together prevented Kratos from becoming healthy:
+
+### Bug 1 — Kratos config version mismatch
+
+`apps/ory/kratos.yml` declared `version: v1.3.1` while the container image is `oryd/kratos:v1.3.0-distroless`:
+
+```yaml
+# apps/ory/kratos.yml (before)
+version: v1.3.1   # ← newer than the v1.3.0 binary
+
+# apps/ory/Containerfile
+FROM oryd/kratos:v1.3.0-distroless
+```
+
+Kratos validates the config schema version against the binary at startup. When the config declares a version that is newer than the running binary, Kratos rejects the config and exits immediately — port 4433 never opens, so the health check loop polls until timeout.
+
+### Bug 2 — Init container reaching Kratos via host network round-trip
+
+`k8s/pod.yaml` configured the `ory-kratos-init` sidecar with:
+
+```yaml
+env:
+  - name: KRATOS_ADMIN_URL
+    value: http://host.containers.internal:4434   # ← wrong
+```
+
+All containers in a Kubernetes/Podman pod share the same network namespace, meaning `localhost` inside `ory-kratos-init` is the same loopback as in the `ory-kratos` container. Routing via `host.containers.internal` sends packets out through the pod's virtual NIC, through `slirp4netns`, to the host's loopback, and then back in via the `hostPort` mapping — an unnecessary NAT round-trip that is unreliable on rootless Podman runners. When Bug 1 caused Kratos to not start, Bug 2 prevented the init container from detecting that failure quickly, wasting all 60 s of its retry budget before exiting 1.
+
+**Fix:**
+
+1. **`apps/ory/kratos.yml`** — align config schema version to the binary:
+
+```yaml
+# Before
+version: v1.3.1
+
+# After
+version: v1.3.0
+```
+
+2. **`k8s/pod.yaml`** — use `localhost` for intra-pod communication:
+
+```yaml
+# Before
+- name: KRATOS_ADMIN_URL
+  value: http://host.containers.internal:4434
+
+# After
+- name: KRATOS_ADMIN_URL
+  value: http://localhost:4434
+```
+
+3. **`.github/workflows/eks-e2e.yml`** — add diagnostics and increase timeout to 300 s:
+
+```yaml
+# New step — runs immediately after kube-up
+- name: Show pod status after kube-up
+  run: |
+    echo "=== podman pod ps ==="
+    podman pod ps
+    echo "=== podman ps -a ==="
+    podman ps -a
+
+# New step — dumps logs only when health-check fails
+- name: Dump pod logs on health-check failure
+  if: failure()
+  run: |
+    podman ps -a || true
+    podman logs claude-hello-world-nginx 2>&1 || true
+    podman logs weather-api-weather-api 2>&1 || true
+    podman logs ory-kratos-ory-kratos 2>&1 || true
+    podman logs ory-kratos-ory-kratos-init 2>&1 || true
+
+# Health-check timeout raised from 180 s → 300 s
+timeout 300 bash -c 'until curl -sf http://localhost:4433/health/ready ...' &
+```
+
+**Files changed:**
+- `apps/ory/kratos.yml` — config schema version corrected from `v1.3.1` to `v1.3.0`
+- `k8s/pod.yaml` — `KRATOS_ADMIN_URL` changed from `host.containers.internal:4434` to `localhost:4434`
+- `.github/workflows/eks-e2e.yml` — added "Show pod status after kube-up" step; added "Dump pod logs on health-check failure" step (`if: failure()`); health-check timeout raised from 180 s to 300 s
+
+---
+
 ## Final Verification
 
 ### Individual container workflow
