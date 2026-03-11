@@ -79,6 +79,10 @@ jobs:
       - name: Build postgres container image
         run: npx nx podman-build postgres
 
+      # ory:podman-build builds the ory-kratos and ory-kratos-init images.
+      - name: Build ory-kratos container images
+        run: npx nx podman-build ory
+
       # ── Start EKS pods ───────────────────────────────────────────────────────
       # kube-up runs: podman play kube k8s/pod.yaml
       # Pods defined: claude-hello-world (nginx :8080), weather-api (:5221),
