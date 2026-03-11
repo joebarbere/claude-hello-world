@@ -1,0 +1,14 @@
+# Node.js dependencies (each Containerfile installs its own via npm ci)
+node_modules
+
+# Git metadata
+.git
+
+# Angular + nx build outputs (Containerfile.nginx runs its own nx build)
+dist
+.nx/cache
+.nx/workspace-data
+
+# .NET build artefacts (weather-api Containerfile runs its own dotnet publish)
+apps/*/obj
+apps/*/bin

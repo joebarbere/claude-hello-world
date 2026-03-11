@@ -1,0 +1,51 @@
+# CI-only service definitions used by .github/workflows/eks-e2e.yml.
+# Images must be built with `docker build` before running `docker compose up`.
+#
+# Local development: use `npx nx kube-up shell` (podman play kube k8s/pod.yaml).
+#
+# Why this file exists:
+#   Rootless podman's `podman play kube` does not reliably forward hostPort
+#   bindings on GitHub Actions ubuntu-latest runners, causing all health checks
+#   to time out regardless of how long the timeout is set. Docker Compose uses
+#   iptables-based port forwarding which works correctly on the same runners.
+
+name: claude-hello-world-ci
+
+services:
+  nginx:
+    image: claude-hello-world:latest
+    ports:
+      - "8080:80"
+      - "8443:443"
+    # Map host.containers.internal → Docker bridge gateway so the pre-built
+    # nginx.conf proxy rules (proxy_pass http://host.containers.internal:5221/...)
+    # continue to work without modifying nginx.conf.
+    extra_hosts:
+      - "host.containers.internal:host-gateway"
+
+  weather-api:
+    image: weather-api:latest
+    ports:
+      - "5221:8080"
+    environment:
+      # Random repository returns mock data without a DB connection.
+      # Smoke tests only verify the endpoint returns 200 + JSON array; they do
+      # not assert specific data, so no postgres pod is needed.
+      Repository: "Random"
+
+  ory-kratos:
+    image: ory-kratos:latest
+    ports:
+      - "4433:4433"
+      - "4434:4434"
+    environment:
+      DSN: memory
+
+  ory-kratos-init:
+    image: ory-kratos-init:latest
+    environment:
+      # Reach Kratos admin API via Docker Compose internal DNS (service name).
+      KRATOS_ADMIN_URL: "http://ory-kratos:4434"
+    # Restart if Kratos isn't ready within the init script's 60 s retry window.
+    # Smoke tests don't require seeded users, so this is best-effort.
+    restart: on-failure

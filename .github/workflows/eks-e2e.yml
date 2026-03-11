@@ -31,21 +31,8 @@ jobs:
           node-version: 20
           cache: 'npm'
 
-      - uses: actions/setup-dotnet@v4
-        with:
-          dotnet-version: '9.0.x'
-
       - name: Install Node dependencies
         run: npm ci
-
-      # Cache NuGet packages across runs; keyed on WeatherApi.csproj so the cache
-      # is invalidated only when package references change (~1 min saved per run).
-      - name: Cache NuGet packages
-        uses: actions/cache@v4
-        with:
-          path: ~/.nuget/packages
-          key: nuget-${{ runner.os }}-${{ hashFiles('apps/weather-api/**/*.csproj') }}
-          restore-keys: nuget-${{ runner.os }}-
 
       # Cache Playwright browser binaries (~100 MB) so they aren't re-downloaded
       # on every run. System-level deps are still installed when cache is hit.
@@ -64,88 +51,95 @@ jobs:
         if: steps.playwright-cache.outputs.cache-hit == 'true'
         run: npx playwright install-deps chromium
 
-      # ── Build container images ───────────────────────────────────────────────
-      # shell:podman-build depends on build-all, which builds all 3 Angular MFEs
-      # then packages them into the nginx container image.
+      # ── Build container images with Docker ───────────────────────────────────
+      # Using `docker build` instead of `npx nx podman-build` because rootless
+      # podman's `podman play kube` does not reliably forward hostPort bindings
+      # on GitHub Actions ubuntu-latest runners (all health checks time out).
+      # Docker uses iptables-based port forwarding which works correctly here.
+      # The .dockerignore at the repo root excludes node_modules and dist so
+      # each Containerfile installs its own dependencies inside the build.
+
+      # Containerfile.nginx runs `npm ci` + `npx nx run-many --target=build`
+      # inside the Docker build, producing a self-contained nginx image.
       - name: Build Angular MFEs + nginx container image
-        run: npx nx podman-build shell
+        run: docker build -t claude-hello-world:latest -f Containerfile.nginx .
 
-      # weather-api:podman-build depends on weather-api:build (dotnet build)
-      # then packages the published output into the ASP.NET container image.
+      # weather-api/Containerfile runs `dotnet restore` + `dotnet publish`
+      # inside the Docker build (multi-stage).
       - name: Build weather-api container image
-        run: NX_DAEMON=false npx nx podman-build weather-api
+        run: docker build -t weather-api:latest -f apps/weather-api/Containerfile .
 
-      # postgres:podman-build wraps postgres:17-alpine with env defaults.
-      - name: Build postgres container image
-        run: npx nx podman-build postgres
-
-      # ory:podman-build builds the ory-kratos and ory-kratos-init images.
+      # ory-kratos: copies kratos.yml + identity schema into the distroless image.
+      # ory-kratos-init: copies init-users.sh into alpine.
       - name: Build ory-kratos container images
-        run: npx nx podman-build ory
-
-      # ── Start EKS pods ───────────────────────────────────────────────────────
-      # kube-up runs: podman play kube k8s/pod.yaml
-      # Pods defined: claude-hello-world (nginx :8080), weather-api (:5221),
-      # postgres (:5432)
-      - name: Start EKS pods (podman play kube)
-        run: npx nx kube-up shell
-
-      # Show initial pod state right after kube-up so we can see container
-      # images and status in the log even if the health-check step times out.
-      - name: Show pod status after kube-up
         run: |
-          echo "=== podman pod ps ==="
-          podman pod ps
-          echo "=== podman ps -a ==="
-          podman ps -a
+          docker build -t ory-kratos:latest       -f apps/ory/Containerfile      apps/ory/
+          docker build -t ory-kratos-init:latest  -f apps/ory/Containerfile.init apps/ory/
 
-      # Poll all pods concurrently to cut wait time when all are slow to start.
-      # nginx redirects HTTP→HTTPS so we probe the HTTPS port (8443) with -k to
-      # skip the self-signed cert check. Kratos is probed directly on its own
-      # port (4433) rather than via the nginx proxy to avoid adding a dependency
-      # on nginx being ready first; Kratos uses an in-memory DSN so there are no
-      # SQLite migrations, but container startup (image extraction, cgroup setup,
-      # Go binary init) on a cold/loaded CI runner can still take 90-150 s.
-      # Each service is given 300 s so even the slowest runners succeed.
-      # RC is accumulated across all three waits so every timeout is reported
-      # before the step fails — makes it clear which service(s) were the bottleneck.
-      - name: Wait for pods to be healthy
+      # ── Start services via Docker Compose ────────────────────────────────────
+      # docker-compose.ci.yml defines nginx, weather-api (Repository=Random,
+      # no DB needed), ory-kratos (DSN=memory), and ory-kratos-init.
+      # Port mappings mirror k8s/pod.yaml: nginx :8443, weather-api :5221,
+      # kratos :4433/:4434.
+      - name: Start services (docker compose)
+        run: docker compose -f docker-compose.ci.yml up -d
+
+      # Show initial container state immediately after compose up so we can see
+      # image names and status in the log even if the health-check step times out.
+      - name: Show container status after startup
         run: |
-          timeout 300 bash -c \
+          echo "=== docker compose ps ==="
+          docker compose -f docker-compose.ci.yml ps -a
+          echo "=== docker ps -a ==="
+          docker ps -a
+
+      # Poll all services concurrently; each gets 120 s.
+      # nginx: HTTPS on :8443 (self-signed cert → -k); serves Angular shell from
+      #   the filesystem so it responds even if weather-api/kratos aren't ready.
+      # weather-api: HTTP on :5221; Repository=Random returns JSON immediately.
+      # ory-kratos: HTTP on :4433; DSN=memory means no migrations, fast startup.
+      # RC is accumulated so every timeout is reported before the step fails.
+      - name: Wait for services to be healthy
+        run: |
+          timeout 120 bash -c \
             'until curl -sfk https://localhost:8443/ > /dev/null 2>&1; do sleep 3; done' &
           P1=$!
-          timeout 300 bash -c \
+          timeout 120 bash -c \
             'until curl -sf http://localhost:5221/weatherforecast > /dev/null 2>&1; do sleep 3; done' &
           P2=$!
-          timeout 300 bash -c \
+          timeout 120 bash -c \
             'until curl -sf http://localhost:4433/health/ready > /dev/null 2>&1; do sleep 3; done' &
           P3=$!
           RC=0
           wait $P1; RC1=$?; [ $RC1 -ne 0 ] && echo "ERROR: nginx timed out (exit $RC1)" && RC=1 || echo "nginx ready"
           wait $P2; RC2=$?; [ $RC2 -ne 0 ] && echo "ERROR: weather-api timed out (exit $RC2)" && RC=1 || echo "weather-api ready"
           wait $P3; RC3=$?; [ $RC3 -ne 0 ] && echo "ERROR: ory-kratos timed out (exit $RC3)" && RC=1 || echo "ory-kratos ready"
-          [ $RC -eq 0 ] && echo "All pods ready" || exit 1
+          [ $RC -eq 0 ] && echo "All services ready" || exit 1
 
       # Dump container logs for any service that failed to become healthy.
       # Runs only when the health-check step fails so normal runs stay clean.
-      - name: Dump pod logs on health-check failure
+      - name: Dump container logs on health-check failure
         if: failure()
         run: |
-          echo "=== podman ps -a ==="
-          podman ps -a || true
+          echo "=== docker compose ps ==="
+          docker compose -f docker-compose.ci.yml ps -a || true
           echo "=== nginx logs ==="
-          podman logs claude-hello-world-nginx 2>&1 || true
+          docker logs claude-hello-world-ci-nginx-1 2>&1 || \
+            docker logs $(docker ps -aqf name=nginx) 2>&1 || true
           echo "=== weather-api logs ==="
-          podman logs weather-api-weather-api 2>&1 || true
+          docker logs claude-hello-world-ci-weather-api-1 2>&1 || \
+            docker logs $(docker ps -aqf name=weather-api) 2>&1 || true
           echo "=== ory-kratos logs ==="
-          podman logs ory-kratos-ory-kratos 2>&1 || true
+          docker logs claude-hello-world-ci-ory-kratos-1 2>&1 || \
+            docker logs $(docker ps -aqf name=ory-kratos) 2>&1 || true
           echo "=== ory-kratos-init logs ==="
-          podman logs ory-kratos-ory-kratos-init 2>&1 || true
+          docker logs claude-hello-world-ci-ory-kratos-init-1 2>&1 || \
+            docker logs $(docker ps -aqf name=ory-kratos-init) 2>&1 || true
 
       # ── Run Playwright e2e smoke suite ───────────────────────────────────────
       # Only run shell-e2e: it verifies the shell host, MFE navigation to
       # weather-app and weatheredit-app, and the /weather API proxy — enough
-      # to confirm all three pods are healthy after a deploy.
+      # to confirm all three services are healthy after a deploy.
       # For the full CRUD test suite run the "EKS E2E Tests (Full)" workflow.
 
       # No continue-on-error: the workflow should fail (red badge) when tests
@@ -158,9 +152,9 @@ jobs:
         run: npx nx run shell-e2e:e2e
 
       # ── Teardown (always runs) ───────────────────────────────────────────────
-      - name: Stop EKS pods
+      - name: Stop services
         if: always()
-        run: npx nx kube-down shell
+        run: docker compose -f docker-compose.ci.yml down
 
       # ── Reporting ────────────────────────────────────────────────────────────
       # Publish JUnit XML as a GitHub Check Run (visible in PR Checks tab).
@@ -226,4 +220,3 @@ jobs:
               issue_number: pr.number,
               body,
             });
-

@@ -1790,6 +1790,48 @@ timeout 300 bash -c 'until curl -sf http://localhost:4433/health/ready ...' &
 
 ---
 
+## Step 54: Fix — Switch CI from `podman play kube` to Docker Compose
+
+Despite all prior fixes (Kratos config version, DSN=memory, KRATOS_ADMIN_URL=localhost, 300 s timeouts), the "Wait for pods to be healthy" step continued to time out with **exit code 124** — all three services (nginx, weather-api, Kratos) failing simultaneously.
+
+**Root cause analysis:**
+
+The fundamental issue is rootless Podman's `podman play kube` on GitHub Actions `ubuntu-latest` runners. In rootless Podman, `hostPort` bindings in a pod spec are forwarded via `slirp4netns` (or `pasta`) user-mode networking. On the GitHub Actions runner environment, this port-forwarding layer does not expose bound ports on the host's loopback interface reliably, so `curl localhost:8443`, `curl localhost:5221`, and `curl localhost:4433` all fail even when the containers are actually running. This is why:
+
+- All three services time out simultaneously (not a slow-startup issue)
+- Increasing the timeout never helps (the ports are never reachable, not just slow)
+- The containers appear started (kube-up exits 0) but the health checks never pass
+
+Docker, on the other hand, uses kernel-level iptables port-forwarding (`-p hostPort:containerPort`) which binds directly to the host's network interfaces, including loopback. This is reliable on GitHub Actions runners and is the standard pattern for CI container testing.
+
+**Fix:**
+
+1. **`.dockerignore`** (new) — excludes `node_modules`, `dist`, `.nx/cache`, and `.NET` build artefacts from the Docker build context so each Containerfile installs its own dependencies inside the build.
+
+2. **`docker-compose.ci.yml`** (new) — defines the four services using Docker Compose:
+   - `nginx` (`claude-hello-world:latest`) on ports 8080/8443, with `extra_hosts: host.containers.internal:host-gateway` so the pre-built `nginx.conf` proxy rules continue to work.
+   - `weather-api` (`weather-api:latest`) on port 5221 with `Repository=Random` — no postgres dependency, returns mock JSON instantly.
+   - `ory-kratos` (`ory-kratos:latest`) on ports 4433/4434 with `DSN=memory`.
+   - `ory-kratos-init` (`ory-kratos-init:latest`) with `KRATOS_ADMIN_URL=http://ory-kratos:4434` (Docker Compose internal DNS).
+
+3. **`.github/workflows/eks-e2e.yml`** — replaced `npx nx podman-build` + `podman play kube` with:
+   - `docker build` for nginx, weather-api, ory-kratos, and ory-kratos-init images.
+   - `docker compose -f docker-compose.ci.yml up -d` to start services.
+   - `docker compose -f docker-compose.ci.yml down` for teardown.
+   - Health-check timeouts reduced from 300 s → 120 s per service (Docker port-forwarding is reliable; 120 s is still generous for image startup on cold runners).
+   - Diagnostic steps updated to use `docker compose ps` and `docker logs`.
+
+**Why `Repository=Random` for CI:**
+
+The smoke tests call `GET /weather` (nginx → weather-api proxy) and assert the response is a JSON array — they do not assert specific values. `Repository=Random` returns random mock data without connecting to postgres, eliminating the DB startup dependency entirely. This makes the CI setup simpler and faster.
+
+**Files changed:**
+- `.dockerignore` — new file, excludes large directories from Docker build context
+- `docker-compose.ci.yml` — new file, CI-specific service definitions
+- `.github/workflows/eks-e2e.yml` — switched from podman/kube to docker/compose
+
+---
+
 ## Final Verification
 
 ### Individual container workflow
