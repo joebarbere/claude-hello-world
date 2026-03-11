@@ -72,7 +72,7 @@ spec:
       image: localhost/ory-kratos-init:latest
       env:
         - name: KRATOS_ADMIN_URL
-          value: http://host.containers.internal:4434
+          value: http://localhost:4434
     - name: ory-kratos
       image: localhost/ory-kratos:latest
       ports:
