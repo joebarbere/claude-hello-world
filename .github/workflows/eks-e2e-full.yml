@@ -85,13 +85,18 @@ jobs:
         run: npx nx kube-up shell
 
       # Poll both pods concurrently to cut wait time when both are slow to start.
+      # nginx redirects HTTP→HTTPS so we probe the HTTPS port (8443) with -k to
+      # skip the self-signed cert check. Capture each PID so we can propagate
+      # failures: if either timeout expires the step (and the workflow) fails.
       - name: Wait for pods to be healthy
         run: |
           timeout 90 bash -c \
-            'until curl -sf http://localhost:8080/ > /dev/null 2>&1; do sleep 3; done' &
+            'until curl -sfk https://localhost:8443/ > /dev/null 2>&1; do sleep 3; done' &
+          P1=$!
           timeout 90 bash -c \
             'until curl -sf http://localhost:5221/weatherforecast > /dev/null 2>&1; do sleep 3; done' &
-          wait
+          P2=$!
+          wait $P1 && wait $P2
           echo "All pods ready"
 
       # ── Run all Playwright e2e suites ────────────────────────────────────────
@@ -103,21 +108,21 @@ jobs:
       - name: E2E – shell (host)
         id: shell-e2e
         env:
-          BASE_URL: http://localhost:8080
+          BASE_URL: https://localhost:8443
         run: npx nx run shell-e2e:e2e
         continue-on-error: true
 
       - name: E2E – weather-app
         id: weather-app-e2e
         env:
-          BASE_URL: http://localhost:8080/weather-app/
+          BASE_URL: https://localhost:8443
         run: npx nx run weather-app-e2e:e2e
         continue-on-error: true
 
       - name: E2E – weatheredit-app
         id: weatheredit-app-e2e
         env:
-          BASE_URL: http://localhost:8080/weatheredit-app/
+          BASE_URL: https://localhost:8443
         run: npx nx run weatheredit-app-e2e:e2e
         continue-on-error: true
 
