@@ -339,3 +339,97 @@ npx nx reset
 ```
 
 Deletes the local `.nx/cache` directory. Run this if builds are returning unexpected cached results or after significant dependency changes.
+
+---
+
+## E2E Tests (Playwright against EKS pods)
+
+Three Playwright suites (`shell-e2e`, `weather-app-e2e`, `weatheredit-app-e2e`) test the apps as they run inside the Kubernetes pods. The pods must be up before running.
+
+### Prerequisites — build images and start pods
+
+```bash
+npx nx podman-build shell        # builds Angular MFEs + nginx image
+npx nx podman-build weather-api  # builds .NET API image
+npx nx podman-build ory          # builds ory-kratos and ory-kratos-init images
+# postgres is built automatically via dependsOn
+npx nx kube-up shell             # starts all pods (nginx :8080, weather-api :5221, postgres :5432, kratos :4433/:4434)
+```
+
+> **Auth note:** `weatheredit-app-e2e` navigates to `/weatheredit-app/` which triggers the Ory auth guard. The guard redirects to Kratos if no valid session cookie is present. The e2e suite expects Kratos to be running (included in the pod manifest) and tests cover the redirect behaviour.
+
+### Run all e2e suites against the local pods
+
+```bash
+npx nx run shell-e2e:e2e
+npx nx run weather-app-e2e:e2e
+npx nx run weatheredit-app-e2e:e2e
+```
+
+Each suite reads `BASE_URL` from the environment. When `BASE_URL` is not set, the configs default to the local pod URLs:
+
+| Suite | Default `BASE_URL` |
+|-------|--------------------|
+| `shell-e2e` | `http://localhost:8080` |
+| `weather-app-e2e` | `http://localhost:8080/weather-app/` |
+| `weatheredit-app-e2e` | `http://localhost:8080/weatheredit-app/` |
+
+### Run against a specific (remote) host
+
+```bash
+BASE_URL=http://<eks-node>:8080                    npx nx run shell-e2e:e2e
+BASE_URL=http://<eks-node>:8080/weather-app/       npx nx run weather-app-e2e:e2e
+BASE_URL=http://<eks-node>:8080/weatheredit-app/   npx nx run weatheredit-app-e2e:e2e
+```
+
+When `BASE_URL` is set, no local dev server is started — Playwright connects directly to the target host.
+
+### View the HTML report
+
+```bash
+npx playwright show-report apps/shell-e2e/playwright-report
+npx playwright show-report apps/weather-app-e2e/playwright-report
+npx playwright show-report apps/weatheredit-app-e2e/playwright-report
+```
+
+### Teardown
+
+```bash
+npx nx kube-down shell
+```
+
+---
+
+## CI — EKS E2E Workflows
+
+Two workflows cover EKS E2E testing at different levels of coverage.
+
+### Smoke workflow (automatic)
+
+`eks-e2e.yml` runs on every push to `main` (i.e., every merged PR). It runs only the `shell-e2e` suite, which is enough to confirm all pods are healthy:
+
+1. Builds all container images (nginx, weather-api, postgres, ory) inside the runner
+2. Starts all pods with `podman play kube` — including the Ory Kratos init container that seeds default users
+3. Waits for the nginx and weather-api pods to pass health checks (parallel)
+4. Runs `shell-e2e` — verifies the shell host, MFE navigation to `/weather-app` and `/weatheredit-app`, and the `/weather` API proxy
+5. Stops the pods
+6. Publishes JUnit XML as a GitHub Check Run (`dorny/test-reporter`)
+7. Uploads the `shell-e2e` HTML report as a 30-day artifact
+8. Posts a pass/fail comment on the merged PR
+
+```bash
+gh run list --workflow=eks-e2e.yml --repo joebarbere/claude-hello-world
+```
+
+### Full workflow (manual)
+
+`eks-e2e-full.yml` runs on demand via `workflow_dispatch`. It runs all three Playwright suites for full CRUD coverage:
+
+1. Same build and pod-startup steps as the smoke workflow
+2. Runs `shell-e2e`, `weather-app-e2e`, and `weatheredit-app-e2e` in sequence
+3. Same teardown and reporting (Check Run + artifact upload for all three suites)
+
+```bash
+gh workflow run eks-e2e-full.yml --repo joebarbere/claude-hello-world
+gh run list --workflow=eks-e2e-full.yml --repo joebarbere/claude-hello-world
+```
