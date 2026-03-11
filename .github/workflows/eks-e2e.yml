@@ -102,7 +102,10 @@ jobs:
           timeout 90 bash -c \
             'until curl -sf http://localhost:5221/weatherforecast > /dev/null 2>&1; do sleep 3; done' &
           P2=$!
-          wait $P1 && wait $P2
+          timeout 90 bash -c \
+            'until curl -sfk https://localhost:8443/.ory/kratos/public/health/ready > /dev/null 2>&1; do sleep 3; done' &
+          P3=$!
+          wait $P1 && wait $P2 && wait $P3
           echo "All pods ready"
 
       # ── Run Playwright e2e smoke suite ───────────────────────────────────────

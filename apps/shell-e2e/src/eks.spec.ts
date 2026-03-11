@@ -48,8 +48,8 @@ test.describe('Shell host – MFE navigation', () => {
     page,
   }) => {
     await page.goto('/weatheredit-app');
-    // Auth guard redirects unauthenticated users to the Kratos login flow
-    await expect(page).toHaveURL(/self-service\/login/, { timeout: 15000 });
+    // Auth guard redirects to Kratos browser flow, which redirects to /auth/login?flow=<id>
+    await expect(page).toHaveURL(/\/auth\/login/, { timeout: 15000 });
     // Angular login component renders the Kratos form
     await expect(page.locator('input[name="identifier"]')).toBeVisible({
       timeout: 10000,
@@ -69,8 +69,8 @@ test.describe('Shell host – MFE navigation', () => {
     page,
   }) => {
     await page.goto('/weatheredit-app');
-    // Auth guard triggers Kratos browser flow → redirects to Kratos login URL
-    await expect(page).toHaveURL(/self-service\/login/, { timeout: 15000 });
+    // Auth guard triggers Kratos browser flow → redirects to /auth/login?flow=<id>
+    await expect(page).toHaveURL(/\/auth\/login/, { timeout: 15000 });
     await expect(page.locator('input[name="password"]')).toBeVisible({
       timeout: 10000,
     });
