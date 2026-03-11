@@ -2,6 +2,72 @@
 
 [![EKS E2E Tests](https://github.com/joebarbere/claude-hello-world/actions/workflows/eks-e2e.yml/badge.svg)](https://github.com/joebarbere/claude-hello-world/actions/workflows/eks-e2e.yml)
 
+> **This project is for learning [Claude Code](https://claude.ai/code) only. It is not intended for production use.**
+
+---
+
+## Security Disclaimer
+
+**DO NOT deploy this project to any internet-facing or shared environment.** It contains numerous intentional shortcuts that are insecure by design. The following issues exist in the codebase as shipped:
+
+### Hardcoded secrets in source control
+
+- **Kratos cookie and cipher secrets** (`apps/ory/kratos.yml`) are placeholder strings committed to the repository:
+  ```yaml
+  secrets:
+    cookie:
+      - CHANGE-ME-COOKIE-SECRET-32-CHARS!!
+    cipher:
+      - CHANGE-ME-CIPHER-SECRET-32-CHARS!
+  ```
+  Anyone with read access to this repo can forge or decrypt Kratos session cookies.
+
+- **PostgreSQL credentials** are hardcoded in `k8s/pod.yaml` (`appuser` / `apppassword`) and exposed as plaintext environment variables in the pod spec. They are also hardcoded in the `ConnectionStrings__DefaultConnection` passed to the weather-api container.
+
+- **Default application user passwords** are hardcoded in `apps/ory/init-users.sh` and seeded on every fresh deployment:
+  | Email | Password |
+  |-------|----------|
+  | `admin@example.com` | `Admin1234!` |
+  | `weatheradmin@example.com` | `WeatherAdmin1234!` |
+
+### TLS private key committed to the repository
+
+- `ssl/localhost.key` — a private RSA key — is checked into source control. Any party with access to this repository can perform TLS interception or impersonation against any deployment using this certificate.
+
+### Unauthenticated admin API exposed
+
+- The **Ory Kratos admin API** (port `4434`) is bound to the host with no authentication, no network policy, and no firewall rule (`hostPort: 4434` in `k8s/pod.yaml`). Anyone who can reach this port can create, modify, or delete identities without credentials.
+
+### No Kubernetes Secrets — credentials in pod spec env vars
+
+- All secrets (DB password, connection strings) are passed as plaintext `env` values directly in `k8s/pod.yaml` rather than Kubernetes `Secret` objects. They appear in `kubectl describe pod` output and are visible to any user with read access to the cluster or the repo.
+
+### Self-signed TLS certificate
+
+- The self-signed certificate in `ssl/localhost.crt` is not issued by any trusted CA. Browsers will reject it unless users manually install and trust it. No certificate rotation or expiry monitoring is in place.
+
+### SQLite as the Kratos identity store
+
+- Kratos is configured with `dsn: sqlite:///var/lib/kratos/db.sqlite?_fk=true`. SQLite is a local file with no replication, no backups, no concurrent-write safety for distributed deployments, and no access control beyond OS file permissions. All identity data is lost when the container is removed.
+
+### No rate limiting or brute-force protection on the login endpoint
+
+- nginx does not apply `limit_req` or any other throttle to `/.ory/kratos/public/`. The Kratos login flow has no lockout policy configured, making credential stuffing and brute-force attacks trivial.
+
+### Kratos CORS allows all configured origins unconditionally
+
+- The CORS `allowed_origins` list in `kratos.yml` includes development origins (`http://localhost:4200`) alongside production-style origins. Cross-origin requests from those origins are accepted for all methods including `POST`, `PUT`, `DELETE`, and `PATCH`.
+
+### Client-side-only route guard for the Angular auth flow
+
+- The Angular `weatherEditAuthGuard` is a client-side control. It can be bypassed by any user who modifies local state or disables JavaScript. The weather-api does enforce server-side session validation for write operations, but the Angular frontend itself is not a security boundary.
+
+### No container image scanning
+
+- Container images are built from base images (`node:20-alpine`, `nginx:alpine`, `dotnet/sdk:9.0-alpine`, `postgres:17-alpine`, `oryd/kratos:v1.3.0-distroless`) with no CVE scanning, no image signing, and no dependency pinning beyond the tag.
+
+---
+
 An Nx monorepo demonstrating Angular Module Federation micro-frontends with a .NET 9 Weather API backend and PostgreSQL, all containerized with Podman and orchestrated via `podman play kube`. Authentication is handled by [Ory Kratos](https://www.ory.sh/kratos/).
 
 ## Architecture

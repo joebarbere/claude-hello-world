@@ -10,6 +10,7 @@ serve:
       allowed_origins:
         - http://localhost:4200
         - http://localhost:8080
+        - https://localhost:8443
       allowed_methods:
         - POST
         - GET
@@ -27,12 +28,14 @@ serve:
     base_url: http://localhost:4434/
 
 selfservice:
-  default_browser_return_url: http://localhost:4200/
+  default_browser_return_url: https://localhost:8443/
   allowed_return_urls:
     - http://localhost:4200
     - http://localhost:4200/weatheredit-app
     - http://localhost:8080
     - http://localhost:8080/weatheredit-app
+    - https://localhost:8443
+    - https://localhost:8443/weatheredit-app
 
   methods:
     password:
@@ -40,15 +43,15 @@ selfservice:
 
   flows:
     login:
-      ui_url: http://localhost:4200/auth/login
+      ui_url: https://localhost:8443/auth/login
       lifespan: 10m
     logout:
       after:
-        default_browser_return_url: http://localhost:4200/
+        default_browser_return_url: https://localhost:8443/
     error:
-      ui_url: http://localhost:4200/auth/error
+      ui_url: https://localhost:8443/auth/error
     settings:
-      ui_url: http://localhost:4200/auth/settings
+      ui_url: https://localhost:8443/auth/settings
       privileged_session_max_age: 15m
 
 log:
