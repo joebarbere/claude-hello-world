@@ -95,22 +95,27 @@ jobs:
       # skip the self-signed cert check. Kratos is probed directly on its own
       # port (4433) rather than via the nginx proxy to avoid adding a dependency
       # on nginx being ready first; Kratos uses an in-memory DSN so there are no
-      # SQLite migrations, but container startup on a loaded CI runner can still
-      # take 60-90 s. Capture each PID so we can propagate failures: if any
-      # timeout expires the step (and the workflow) fails.
+      # SQLite migrations, but container startup (image extraction, cgroup setup,
+      # Go binary init) on a cold/loaded CI runner can still take 90-150 s.
+      # Each service is given 180 s so even the slowest runners succeed.
+      # RC is accumulated across all three waits so every timeout is reported
+      # before the step fails — makes it clear which service(s) were the bottleneck.
       - name: Wait for pods to be healthy
         run: |
-          timeout 90 bash -c \
+          timeout 180 bash -c \
             'until curl -sfk https://localhost:8443/ > /dev/null 2>&1; do sleep 3; done' &
           P1=$!
-          timeout 90 bash -c \
+          timeout 180 bash -c \
             'until curl -sf http://localhost:5221/weatherforecast > /dev/null 2>&1; do sleep 3; done' &
           P2=$!
-          timeout 90 bash -c \
+          timeout 180 bash -c \
             'until curl -sf http://localhost:4433/health/ready > /dev/null 2>&1; do sleep 3; done' &
           P3=$!
-          wait $P1 && wait $P2 && wait $P3
-          echo "All pods ready"
+          RC=0
+          wait $P1; RC1=$?; [ $RC1 -ne 0 ] && echo "ERROR: nginx timed out (exit $RC1)" && RC=1 || echo "nginx ready"
+          wait $P2; RC2=$?; [ $RC2 -ne 0 ] && echo "ERROR: weather-api timed out (exit $RC2)" && RC=1 || echo "weather-api ready"
+          wait $P3; RC3=$?; [ $RC3 -ne 0 ] && echo "ERROR: ory-kratos timed out (exit $RC3)" && RC=1 || echo "ory-kratos ready"
+          [ $RC -eq 0 ] && echo "All pods ready" || exit 1
 
       # ── Run Playwright e2e smoke suite ───────────────────────────────────────
       # Only run shell-e2e: it verifies the shell host, MFE navigation to
