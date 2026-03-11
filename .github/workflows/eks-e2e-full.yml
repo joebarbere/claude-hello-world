@@ -153,11 +153,16 @@ jobs:
           retention-days: 30
 
       # Fail the workflow if any e2e suite failed (after teardown + reporting).
+      # always() is required here: without it, GitHub Actions implicitly adds
+      # success() to custom if: conditions, so this step would be skipped when
+      # a prior suite failed — causing a green badge despite test failures.
       - name: Fail workflow if any suite failed
         if: |
-          steps.shell-e2e.outcome == 'failure' ||
-          steps.weather-app-e2e.outcome == 'failure' ||
-          steps.weatheredit-app-e2e.outcome == 'failure'
+          always() && (
+            steps.shell-e2e.outcome == 'failure' ||
+            steps.weather-app-e2e.outcome == 'failure' ||
+            steps.weatheredit-app-e2e.outcome == 'failure'
+          )
         run: |
           echo "One or more e2e suites failed. See the Check Run and uploaded reports."
           exit 1

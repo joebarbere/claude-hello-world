@@ -111,12 +111,14 @@ jobs:
       # to confirm all three pods are healthy after a deploy.
       # For the full CRUD test suite run the "EKS E2E Tests (Full)" workflow.
 
+      # No continue-on-error: the workflow should fail (red badge) when tests
+      # fail. All teardown and reporting steps below use "if: always()" so they
+      # run regardless of whether this step exits 0 or not.
       - name: E2E – shell (host) smoke tests
         id: shell-e2e
         env:
           BASE_URL: https://localhost:8443
         run: npx nx run shell-e2e:e2e
-        continue-on-error: true
 
       # ── Teardown (always runs) ───────────────────────────────────────────────
       - name: Stop EKS pods
@@ -188,9 +190,3 @@ jobs:
               body,
             });
 
-      # Fail the workflow if the smoke suite failed (after teardown + reporting).
-      - name: Fail workflow if smoke suite failed
-        if: steps.shell-e2e.outcome == 'failure'
-        run: |
-          echo "Shell e2e smoke suite failed. See the Check Run and uploaded reports."
-          exit 1

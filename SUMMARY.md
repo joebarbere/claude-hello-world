@@ -1322,6 +1322,42 @@ The `-k` flag on curl skips self-signed certificate validation, matching what Pl
 
 ---
 
+## Step 45: Fix — Workflow Badge Showing Green Despite Test Failures
+
+The GitHub Actions badge in README.md displayed green even after all 9 e2e tests failed. The badge reflects the **workflow run conclusion**, not the `dorny/test-reporter` check run. The workflow was concluding as "success" despite failures because of a fragile pattern: `continue-on-error: true` on the e2e step combined with a separate "Fail workflow" step.
+
+**Root cause:** GitHub Actions documents that `steps.X.outcome` is `'failure'` before `continue-on-error` is applied. However, a custom `if:` expression without an explicit `always()` still has an **implicit `success()` check** — the step is skipped if the job is already in a "failure" state. With `continue-on-error: true` masking the failure from the job state, the "Fail workflow" step's custom `if:` condition could be bypassed in certain GitHub Actions runtime contexts, letting the workflow conclude as green.
+
+**Fix — `eks-e2e.yml` (smoke workflow, single suite):**
+
+Removed `continue-on-error: true` from the e2e step and deleted the "Fail workflow if smoke suite failed" step entirely. All teardown and reporting steps already use `if: always()`, so they run regardless of whether the e2e step exits 0 or not. The workflow now fails naturally — the canonical GitHub Actions pattern for "run cleanup on failure, but still fail the job."
+
+**Fix — `eks-e2e-full.yml` (full workflow, three suites):**
+
+The full workflow must run all three suites even if one fails, so `continue-on-error: true` was retained on each suite. The "Fail workflow" step's `if:` was fixed by prepending `always() &&` to the compound condition:
+
+```yaml
+# Before (broken — could be skipped when job is in failure state):
+if: |
+  steps.shell-e2e.outcome == 'failure' ||
+  steps.weather-app-e2e.outcome == 'failure' ||
+  steps.weatheredit-app-e2e.outcome == 'failure'
+
+# After (correct — always() ensures the step runs regardless of job state):
+if: |
+  always() && (
+    steps.shell-e2e.outcome == 'failure' ||
+    steps.weather-app-e2e.outcome == 'failure' ||
+    steps.weatheredit-app-e2e.outcome == 'failure'
+  )
+```
+
+**Files changed:**
+- `.github/workflows/eks-e2e.yml` — removed `continue-on-error: true` and "Fail workflow" step
+- `.github/workflows/eks-e2e-full.yml` — added `always() &&` to the "Fail workflow" condition
+
+---
+
 ## Final Verification
 
 ### Individual container workflow
