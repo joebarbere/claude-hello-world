@@ -1291,6 +1291,73 @@ README.md was updated to replace the raw `openssl req` command in the "Regenerat
 
 ---
 
+## Step 44: Fix — CI e2e Workflows Using HTTP After SSL Was Added
+
+All 9 Playwright e2e tests failed in CI with `net::ERR_CONNECTION_REFUSED` after the SSL termination change (Step 40). The root cause was a mismatch between the nginx redirect and the `BASE_URL` values hardcoded in the two e2e CI workflows.
+
+**Root cause chain:**
+
+1. `nginx.conf` redirects HTTP → HTTPS: `listen 80; return 301 https://$host$request_uri;`
+2. `$host` resolves to `localhost` (no port), so nginx issues `301 → https://localhost/` (default port 443)
+3. Port 443 is **not** bound on the host — only port 8443 is (via the pod's `hostPort` mapping)
+4. Playwright follows the redirect to `https://localhost/` → TCP connection refused → all tests fail
+
+The health-check probe had a secondary bug: `curl -sf http://localhost:8080/` would succeed immediately on the 301 response (since `-f` only fails on 4xx/5xx), giving a false "pod ready" signal before HTTPS was actually verified. And bare `wait` swallowed the timeout exit code, so a slow-starting pod would silently pass the health step.
+
+**Fix applied to `.github/workflows/eks-e2e.yml` and `.github/workflows/eks-e2e-full.yml`:**
+
+| What | Before | After |
+|------|--------|-------|
+| nginx health probe | `curl -sf http://localhost:8080/` | `curl -sfk https://localhost:8443/` |
+| `BASE_URL` (shell-e2e) | `http://localhost:8080` | `https://localhost:8443` |
+| `BASE_URL` (weather-app-e2e) | `http://localhost:8080/weather-app/` | `https://localhost:8443` |
+| `BASE_URL` (weatheredit-app-e2e) | `http://localhost:8080/weatheredit-app/` | `https://localhost:8443` |
+| Health-check failure propagation | `wait` (swallows exit codes) | `wait $P1 && wait $P2` |
+
+The `-k` flag on curl skips self-signed certificate validation, matching what Playwright's `ignoreHTTPSErrors: true` does in the test runner.
+
+**Files changed:**
+- `.github/workflows/eks-e2e.yml`
+- `.github/workflows/eks-e2e-full.yml`
+
+---
+
+## Step 45: Fix — Workflow Badge Showing Green Despite Test Failures
+
+The GitHub Actions badge in README.md displayed green even after all 9 e2e tests failed. The badge reflects the **workflow run conclusion**, not the `dorny/test-reporter` check run. The workflow was concluding as "success" despite failures because of a fragile pattern: `continue-on-error: true` on the e2e step combined with a separate "Fail workflow" step.
+
+**Root cause:** GitHub Actions documents that `steps.X.outcome` is `'failure'` before `continue-on-error` is applied. However, a custom `if:` expression without an explicit `always()` still has an **implicit `success()` check** — the step is skipped if the job is already in a "failure" state. With `continue-on-error: true` masking the failure from the job state, the "Fail workflow" step's custom `if:` condition could be bypassed in certain GitHub Actions runtime contexts, letting the workflow conclude as green.
+
+**Fix — `eks-e2e.yml` (smoke workflow, single suite):**
+
+Removed `continue-on-error: true` from the e2e step and deleted the "Fail workflow if smoke suite failed" step entirely. All teardown and reporting steps already use `if: always()`, so they run regardless of whether the e2e step exits 0 or not. The workflow now fails naturally — the canonical GitHub Actions pattern for "run cleanup on failure, but still fail the job."
+
+**Fix — `eks-e2e-full.yml` (full workflow, three suites):**
+
+The full workflow must run all three suites even if one fails, so `continue-on-error: true` was retained on each suite. The "Fail workflow" step's `if:` was fixed by prepending `always() &&` to the compound condition:
+
+```yaml
+# Before (broken — could be skipped when job is in failure state):
+if: |
+  steps.shell-e2e.outcome == 'failure' ||
+  steps.weather-app-e2e.outcome == 'failure' ||
+  steps.weatheredit-app-e2e.outcome == 'failure'
+
+# After (correct — always() ensures the step runs regardless of job state):
+if: |
+  always() && (
+    steps.shell-e2e.outcome == 'failure' ||
+    steps.weather-app-e2e.outcome == 'failure' ||
+    steps.weatheredit-app-e2e.outcome == 'failure'
+  )
+```
+
+**Files changed:**
+- `.github/workflows/eks-e2e.yml` — removed `continue-on-error: true` and "Fail workflow" step
+- `.github/workflows/eks-e2e-full.yml` — added `always() &&` to the "Fail workflow" condition
+
+---
+
 ## Final Verification
 
 ### Individual container workflow
@@ -1322,13 +1389,13 @@ npx nx podman-build ory
 # Start all pods
 npx nx kube-up shell
 
-# Verify
-curl http://localhost:8080                    # Angular shell
-curl http://localhost:8080/weather-app/       # weather-app remote (public)
-curl http://localhost:8080/weatheredit-app/   # weatheredit-app (redirects to login)
-curl http://localhost:8080/weather            # nginx → weather-api proxy (GET, public)
-curl http://localhost:5221/weatherforecast    # weather-api direct
-curl http://localhost:4433/health/ready       # Kratos public health check
+# Verify (nginx redirects HTTP→HTTPS; use -k for the self-signed cert)
+curl -Lk https://localhost:8443                    # Angular shell
+curl -Lk https://localhost:8443/weather-app/       # weather-app remote (public)
+curl -Lk https://localhost:8443/weatheredit-app/   # weatheredit-app (redirects to login)
+curl -k  https://localhost:8443/weather            # nginx → weather-api proxy (GET, public)
+curl     http://localhost:5221/weatherforecast     # weather-api direct (HTTP, no SSL)
+curl     http://localhost:4433/health/ready        # Kratos public health check
 psql -h localhost -p 5432 -U appuser -d appdb # PostgreSQL
 
 # Stop all pods
