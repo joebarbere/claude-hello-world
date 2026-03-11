@@ -95,8 +95,9 @@ jobs:
       # skip the self-signed cert check. Kratos is probed directly on its own
       # port (4433) rather than via the nginx proxy to avoid adding a dependency
       # on nginx being ready first; Kratos uses an in-memory DSN so there are no
-      # SQLite migrations and startup is near-instant. Capture each PID so we can
-      # propagate failures: if any timeout expires the step (and the workflow) fails.
+      # SQLite migrations, but container startup on a loaded CI runner can still
+      # take 60-90 s. Capture each PID so we can propagate failures: if any
+      # timeout expires the step (and the workflow) fails.
       - name: Wait for pods to be healthy
         run: |
           timeout 90 bash -c \
@@ -105,7 +106,7 @@ jobs:
           timeout 90 bash -c \
             'until curl -sf http://localhost:5221/weatherforecast > /dev/null 2>&1; do sleep 3; done' &
           P2=$!
-          timeout 30 bash -c \
+          timeout 90 bash -c \
             'until curl -sf http://localhost:4433/health/ready > /dev/null 2>&1; do sleep 3; done' &
           P3=$!
           wait $P1 && wait $P2 && wait $P3
