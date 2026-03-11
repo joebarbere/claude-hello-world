@@ -73,6 +73,15 @@ The certificate and private key are pre-generated and stored in `ssl/`:
 |------|-------------|
 | `ssl/localhost.crt` | Self-signed X.509 certificate (CN=localhost, valid 10 years) |
 | `ssl/localhost.key` | RSA 2048 private key |
+| `ssl/generate-cert-linux.sh` | Regenerate the cert on Linux |
+| `ssl/generate-cert-macos.sh` | Regenerate the cert on macOS |
+| `ssl/generate-cert-windows.ps1` | Regenerate the cert on Windows |
+| `ssl/install-cert-linux.sh` | Trust the cert on Linux |
+| `ssl/install-cert-macos.sh` | Trust the cert on macOS |
+| `ssl/install-cert-windows.ps1` | Trust the cert on Windows |
+| `ssl/uninstall-cert-linux.sh` | Remove the trusted cert on Linux |
+| `ssl/uninstall-cert-macos.sh` | Remove the trusted cert on macOS |
+| `ssl/uninstall-cert-windows.ps1` | Remove the trusted cert on Windows |
 
 ### Trust the certificate locally
 
@@ -112,14 +121,31 @@ sudo ./ssl/uninstall-cert-linux.sh
 
 ### Regenerate the certificate
 
-```sh
-openssl req -x509 -nodes -newkey rsa:2048 -days 3650 \
-  -keyout ssl/localhost.key -out ssl/localhost.crt \
-  -subj "/CN=localhost/O=claude-hello-world/C=US" \
-  -addext "subjectAltName=DNS:localhost,IP:127.0.0.1"
-```
+Use the script for your OS — each generates `ssl/localhost.crt` and `ssl/localhost.key` in-place.
 
-After regenerating, rebuild the container image (`npx nx podman-build shell`) and re-run the install script on each machine that needs to trust the new certificate.
+**Linux:**
+```sh
+./ssl/generate-cert-linux.sh
+```
+Requires `openssl` (`sudo apt install openssl` / `sudo dnf install openssl`).
+
+**macOS:**
+```sh
+./ssl/generate-cert-macos.sh
+```
+Uses the `openssl` that ships with macOS; Homebrew `openssl` also works.
+
+**Windows (PowerShell):**
+```powershell
+.\ssl\generate-cert-windows.ps1
+```
+Requires OpenSSL for Windows (`winget install ShiningLight.OpenSSL`, `choco install openssl`, or Git for Windows which bundles `openssl.exe`).
+
+After regenerating, rebuild the container image and re-trust the new cert on each machine:
+```sh
+npx nx podman-build shell
+# then run the appropriate install-cert script for your OS
+```
 
 ## Development
 
