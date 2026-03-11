@@ -980,3 +980,27 @@ Reports all three suites to a Check Run and uploads all `apps/*/playwright-repor
 
 **Files changed:**
 - `apps/shell-e2e/playwright.config.ts` — removed `firefox` and `webkit` project entries
+
+---
+
+## Step 37: CI Performance — Playwright Cache, NuGet Cache, Parallel Health Checks
+
+Applied three independent optimizations to both `eks-e2e.yml` and `eks-e2e-full.yml` to reduce wall-clock time on every run.
+
+### Playwright browser cache
+
+Added `actions/cache@v4` for `~/.cache/ms-playwright` keyed on `runner.os` + `package-lock.json`. Chromium binaries are ~100 MB and were re-downloaded on every run (~1 min). On a cache hit the install step is skipped; only system-level apt dependencies are installed via `npx playwright install-deps chromium` (fast, no download).
+
+### NuGet package cache
+
+Added `actions/cache@v4` for `~/.nuget/packages` keyed on `runner.os` + `apps/weather-api/**/*.csproj`. NuGet packages were re-fetched from nuget.org on every `dotnet build` / `dotnet publish`. Cache is invalidated only when `.csproj` package references change (~1 min saved per run).
+
+### Parallel pod health checks
+
+The nginx `:8080` and weather-api `:5221` health check polls ran sequentially (up to 90 s each back-to-back). Both pods start at the same time, so polling them concurrently halves the worst-case wait. Combined into a single step using shell background jobs + `wait`.
+
+**Estimated savings per run: ~2–3 min** (on top of the ~1–2 min already saved by the webkit fix in Step 36).
+
+**Files changed:**
+- `.github/workflows/eks-e2e.yml` — NuGet cache, Playwright cache, parallel health checks
+- `.github/workflows/eks-e2e-full.yml` — same changes

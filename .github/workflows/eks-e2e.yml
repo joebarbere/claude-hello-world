@@ -38,9 +38,31 @@ jobs:
       - name: Install Node dependencies
         run: npm ci
 
-      # Install only Chromium to keep CI fast; Firefox/WebKit can be added later.
+      # Cache NuGet packages across runs; keyed on WeatherApi.csproj so the cache
+      # is invalidated only when package references change (~1 min saved per run).
+      - name: Cache NuGet packages
+        uses: actions/cache@v4
+        with:
+          path: ~/.nuget/packages
+          key: nuget-${{ runner.os }}-${{ hashFiles('apps/weather-api/**/*.csproj') }}
+          restore-keys: nuget-${{ runner.os }}-
+
+      # Cache Playwright browser binaries (~100 MB) so they aren't re-downloaded
+      # on every run. System-level deps are still installed when cache is hit.
+      - name: Cache Playwright browsers
+        id: playwright-cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-chromium-${{ runner.os }}-${{ hashFiles('package-lock.json') }}
+
       - name: Install Playwright browsers
+        if: steps.playwright-cache.outputs.cache-hit != 'true'
         run: npx playwright install --with-deps chromium
+
+      - name: Install Playwright browser system dependencies
+        if: steps.playwright-cache.outputs.cache-hit == 'true'
+        run: npx playwright install-deps chromium
 
       # ── Build container images ───────────────────────────────────────────────
       # shell:podman-build depends on build-all, which builds all 3 Angular MFEs
@@ -64,19 +86,15 @@ jobs:
       - name: Start EKS pods (podman play kube)
         run: npx nx kube-up shell
 
-      - name: Wait for nginx pod to be healthy
+      # Poll both pods concurrently to cut wait time when both are slow to start.
+      - name: Wait for pods to be healthy
         run: |
-          echo "Waiting for nginx on :8080..."
           timeout 90 bash -c \
-            'until curl -sf http://localhost:8080/ > /dev/null 2>&1; do sleep 3; done'
-          echo "nginx is ready"
-
-      - name: Wait for weather-api pod to be healthy
-        run: |
-          echo "Waiting for weather-api on :5221..."
+            'until curl -sf http://localhost:8080/ > /dev/null 2>&1; do sleep 3; done' &
           timeout 90 bash -c \
-            'until curl -sf http://localhost:5221/weatherforecast > /dev/null 2>&1; do sleep 3; done'
-          echo "weather-api is ready"
+            'until curl -sf http://localhost:5221/weatherforecast > /dev/null 2>&1; do sleep 3; done' &
+          wait
+          echo "All pods ready"
 
       # ── Run Playwright e2e smoke suite ───────────────────────────────────────
       # Only run shell-e2e: it verifies the shell host, MFE navigation to
