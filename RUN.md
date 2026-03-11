@@ -358,6 +358,7 @@ npx nx kube-up shell             # starts all pods (nginx :8080, weather-api :52
 
 > **Auth note:** `weatheredit-app-e2e` navigates to `/weatheredit-app/` which triggers the Ory auth guard. The guard redirects to Kratos if no valid session cookie is present. The e2e suite expects Kratos to be running (included in the pod manifest) and tests cover the redirect behaviour.
 
+
 ### Run all e2e suites against the local pods
 
 ```bash
@@ -385,6 +386,8 @@ BASE_URL=http://<eks-node>:8080/weatheredit-app/   npx nx run weatheredit-app-e2
 When `BASE_URL` is set, no local dev server is started — Playwright connects directly to the target host.
 
 ### View the HTML report
+
+After a run, open the generated HTML report:
 
 ```bash
 npx playwright show-report apps/shell-e2e/playwright-report
@@ -415,7 +418,7 @@ Two workflows cover EKS E2E testing at different levels of coverage.
 5. Stops the pods
 6. Publishes JUnit XML as a GitHub Check Run (`dorny/test-reporter`)
 7. Uploads the `shell-e2e` HTML report as a 30-day artifact
-8. Posts a pass/fail comment on the merged PR
+8. Posts a pass/fail comment on the merged PR with a link to the full workflow
 
 ```bash
 gh run list --workflow=eks-e2e.yml --repo joebarbere/claude-hello-world

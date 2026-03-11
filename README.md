@@ -1,5 +1,7 @@
 # claude-hello-world
 
+[![EKS E2E Tests](https://github.com/joebarbere/claude-hello-world/actions/workflows/eks-e2e.yml/badge.svg)](https://github.com/joebarbere/claude-hello-world/actions/workflows/eks-e2e.yml)
+
 An Nx monorepo demonstrating Angular Module Federation micro-frontends with a .NET 9 Weather API backend and PostgreSQL, all containerized with Podman and orchestrated via `podman play kube`. Authentication is handled by [Ory Kratos](https://www.ory.sh/kratos/).
 
 ## Architecture
@@ -136,3 +138,51 @@ Change `"Repository"` in `apps/weather-api/appsettings.json`:
 | `"Random"` (default) | Read-only, no DB needed |
 | `"InMemory"` | Full CRUD, in-process |
 | `"EfCore"` | Full CRUD, PostgreSQL |
+
+## E2E Tests (Playwright)
+
+Three Playwright suites test the apps running inside the EKS pods (nginx on `:8080`). Each suite targets its app via `BASE_URL`:
+
+| Suite | Default `BASE_URL` | Tests |
+|-------|--------------------|-------|
+| `shell-e2e` | `http://localhost:8080` | Home page, MFE navigation, `/weather` proxy |
+| `weather-app-e2e` | `http://localhost:8080/weather-app/` | Forecast table headers, data rows, temperatures |
+| `weatheredit-app-e2e` | `http://localhost:8080/weatheredit-app/` | Full CRUD — create, edit, delete, confirm/cancel |
+
+### Run against local EKS pods
+
+```sh
+# 1. Start the pods
+npx nx podman-build shell
+npx nx podman-build weather-api
+npx nx kube-up shell
+
+# 2. Run each suite (BASE_URL defaults to the pod URLs above)
+npx nx run shell-e2e:e2e
+npx nx run weather-app-e2e:e2e
+npx nx run weatheredit-app-e2e:e2e
+
+# 3. Tear down
+npx nx kube-down shell
+```
+
+### Run against a remote EKS cluster
+
+```sh
+BASE_URL=http://<eks-node>:8080                    npx nx run shell-e2e:e2e
+BASE_URL=http://<eks-node>:8080/weather-app/       npx nx run weather-app-e2e:e2e
+BASE_URL=http://<eks-node>:8080/weatheredit-app/   npx nx run weatheredit-app-e2e:e2e
+```
+
+## CI
+
+| Workflow | Trigger | What it does |
+|----------|---------|--------------|
+| **CI** (`.github/workflows/ci.yml`) | push / PR | Lint + production build for all Angular apps |
+| **EKS E2E Tests (Smoke)** (`.github/workflows/eks-e2e.yml`) | push to `main` | Builds all container images, starts EKS pods, runs `shell-e2e` only (verifies shell host, MFE navigation, and `/weather` API proxy), posts a result comment on the merged PR |
+| **EKS E2E Tests (Full)** (`.github/workflows/eks-e2e-full.yml`) | manual (`workflow_dispatch`) | Same pod setup, but runs all three Playwright suites including full CRUD coverage for `weather-app-e2e` and `weatheredit-app-e2e` |
+
+In CI, each Playwright config emits:
+- **GitHub annotations** — inline pass/fail markers on the diff
+- **HTML report** — uploaded as a 30-day artifact
+- **JUnit XML** — consumed by `dorny/test-reporter` to create a Check Run visible in the PR Checks tab
