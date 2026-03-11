@@ -8,11 +8,11 @@ An Nx monorepo demonstrating Angular Module Federation micro-frontends with a .N
 
 ```
 Browser
-  └── Shell (Angular MFE host, :4200 / :8080)
+  └── Shell (Angular MFE host, :4200 / :8443 HTTPS / :8080 HTTP→redirect)
         ├── weather-app (remote, :4201) — weather forecast table (public)
         └── weatheredit-app (remote, :4202) — weather forecast CRUD (admin/weather_admin only)
 
-nginx (container, :8080)
+nginx (container, :8080 → redirects to HTTPS, :8443 SSL termination)
   ├── /                        → shell app
   ├── /weather-app/            → weather-app remote
   ├── /weatheredit-app/        → weatheredit-app remote
@@ -56,10 +56,70 @@ Access to the **weatheredit-app** and all **write operations** on the weather-ap
 | Node.js | 20+ |
 | .NET SDK | 9.0 |
 | Podman | any recent |
+| OpenSSL | any recent (for cert regeneration only) |
 
 ```sh
 npm install
 ```
+
+## SSL / HTTPS
+
+nginx serves all traffic over HTTPS using a self-signed certificate for `localhost`.
+HTTP on port 8080 automatically redirects to HTTPS on port 8443.
+
+The certificate and private key are pre-generated and stored in `ssl/`:
+
+| File | Description |
+|------|-------------|
+| `ssl/localhost.crt` | Self-signed X.509 certificate (CN=localhost, valid 10 years) |
+| `ssl/localhost.key` | RSA 2048 private key |
+
+### Trust the certificate locally
+
+Run the appropriate script for your OS to add the certificate to your system's trusted CA store. Browsers and other tools will then accept `https://localhost:8443` without warnings.
+
+**Linux (Debian/Ubuntu or RHEL/Fedora):**
+```sh
+sudo ./ssl/install-cert-linux.sh
+```
+
+**macOS:**
+```sh
+./ssl/install-cert-macos.sh
+```
+
+**Windows (PowerShell as Administrator):**
+```powershell
+.\ssl\install-cert-windows.ps1
+```
+
+### Remove the trusted certificate
+
+**Linux:**
+```sh
+sudo ./ssl/uninstall-cert-linux.sh
+```
+
+**macOS:**
+```sh
+./ssl/uninstall-cert-macos.sh
+```
+
+**Windows (PowerShell as Administrator):**
+```powershell
+.\ssl\uninstall-cert-windows.ps1
+```
+
+### Regenerate the certificate
+
+```sh
+openssl req -x509 -nodes -newkey rsa:2048 -days 3650 \
+  -keyout ssl/localhost.key -out ssl/localhost.crt \
+  -subj "/CN=localhost/O=claude-hello-world/C=US" \
+  -addext "subjectAltName=DNS:localhost,IP:127.0.0.1"
+```
+
+After regenerating, rebuild the container image (`npx nx podman-build shell`) and re-run the install script on each machine that needs to trust the new certificate.
 
 ## Development
 
@@ -104,9 +164,10 @@ npx nx kube-down shell
 
 | URL | Service |
 |-----|---------|
-| http://localhost:8080 | Shell |
-| http://localhost:8080/weather-app/ | Weather table (public) |
-| http://localhost:8080/weatheredit-app/ | Weather CRUD (login required) |
+| https://localhost:8443 | Shell (HTTPS) |
+| https://localhost:8443/weather-app/ | Weather table (public, HTTPS) |
+| https://localhost:8443/weatheredit-app/ | Weather CRUD (login required, HTTPS) |
+| http://localhost:8080 | Redirects to HTTPS |
 | http://localhost:5221/weatherforecast | Weather API (GET public, writes require auth) |
 | localhost:4433 | Ory Kratos public API |
 | localhost:4434 | Ory Kratos admin API |
@@ -145,9 +206,9 @@ Three Playwright suites test the apps running inside the EKS pods (nginx on `:80
 
 | Suite | Default `BASE_URL` | Tests |
 |-------|--------------------|-------|
-| `shell-e2e` | `http://localhost:8080` | Home page, MFE navigation, `/weather` proxy |
-| `weather-app-e2e` | `http://localhost:8080/weather-app/` | Forecast table headers, data rows, temperatures |
-| `weatheredit-app-e2e` | `http://localhost:8080/weatheredit-app/` | Full CRUD — create, edit, delete, confirm/cancel |
+| `shell-e2e` | `https://localhost:8443` | Home page, MFE navigation, `/weather` proxy |
+| `weather-app-e2e` | `https://localhost:8443/weather-app/` | Forecast table headers, data rows, temperatures |
+| `weatheredit-app-e2e` | `https://localhost:8443/weatheredit-app/` | Full CRUD — create, edit, delete, confirm/cancel |
 
 ### Run against local EKS pods
 
@@ -169,9 +230,9 @@ npx nx kube-down shell
 ### Run against a remote EKS cluster
 
 ```sh
-BASE_URL=http://<eks-node>:8080                    npx nx run shell-e2e:e2e
-BASE_URL=http://<eks-node>:8080/weather-app/       npx nx run weather-app-e2e:e2e
-BASE_URL=http://<eks-node>:8080/weatheredit-app/   npx nx run weatheredit-app-e2e:e2e
+BASE_URL=https://<eks-node>:8443                    npx nx run shell-e2e:e2e
+BASE_URL=https://<eks-node>:8443/weather-app/       npx nx run weather-app-e2e:e2e
+BASE_URL=https://<eks-node>:8443/weatheredit-app/   npx nx run weatheredit-app-e2e:e2e
 ```
 
 ## CI

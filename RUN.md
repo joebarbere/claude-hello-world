@@ -144,15 +144,22 @@ podman images | grep claude-hello-world
 npx nx podman-up shell
 ```
 
-Runs `podman run -d` to start the `claude-hello-world` container in detached mode, mapping port 8080 on the host to port 80 in the container. The image must have been built first with `podman-build`.
+Runs `podman run -d` to start the `claude-hello-world` container in detached mode, mapping:
+- port 8080 on the host to port 80 (HTTP, redirects to HTTPS)
+- port 8443 on the host to port 443 (HTTPS with SSL termination)
+
+The image must have been built first with `podman-build`.
 
 | URL | Serves |
 |-----|--------|
-| http://localhost:8080 | Shell (host app) |
-| http://localhost:8080/weather-app/ | weather-app remote |
-| http://localhost:8080/weatheredit-app/ | weatheredit-app remote (login required) |
-| http://localhost:8080/weather-app/remoteEntry.mjs | weather-app Module Federation entry point |
-| http://localhost:8080/weatheredit-app/remoteEntry.mjs | weatheredit-app Module Federation entry point |
+| https://localhost:8443 | Shell (host app, HTTPS) |
+| https://localhost:8443/weather-app/ | weather-app remote |
+| https://localhost:8443/weatheredit-app/ | weatheredit-app remote (login required) |
+| https://localhost:8443/weather-app/remoteEntry.mjs | weather-app Module Federation entry point |
+| https://localhost:8443/weatheredit-app/remoteEntry.mjs | weatheredit-app Module Federation entry point |
+| http://localhost:8080 | Redirects to https://localhost:8443 |
+
+> **Browser trust:** The first time you open `https://localhost:8443` your browser will warn about the self-signed certificate. To suppress this, run the install script for your OS (see `ssl/` directory and the SSL section of `README.md`).
 
 ### Stop the container
 
@@ -222,10 +229,11 @@ Runs `podman play kube k8s/pod.yaml`, which creates and starts all pods defined 
 
 | URL | Serves |
 |-----|--------|
-| http://localhost:8080 | Shell (host app) |
-| http://localhost:8080/weather-app/ | weather-app remote (public) |
-| http://localhost:8080/weatheredit-app/ | weatheredit-app remote (login required) |
-| http://localhost:8080/.ory/kratos/public/ | Ory Kratos public API (proxied) |
+| https://localhost:8443 | Shell (host app, HTTPS) |
+| https://localhost:8443/weather-app/ | weather-app remote (public) |
+| https://localhost:8443/weatheredit-app/ | weatheredit-app remote (login required) |
+| https://localhost:8443/.ory/kratos/public/ | Ory Kratos public API (proxied) |
+| http://localhost:8080 | Redirects to HTTPS |
 | http://localhost:5221/weatherforecast | Weather API (GET public, writes require auth) |
 | http://localhost:5221/openapi/v1.json | Weather API OpenAPI spec |
 | http://localhost:4433 | Ory Kratos public API (direct) |
@@ -371,16 +379,16 @@ Each suite reads `BASE_URL` from the environment. When `BASE_URL` is not set, th
 
 | Suite | Default `BASE_URL` |
 |-------|--------------------|
-| `shell-e2e` | `http://localhost:8080` |
-| `weather-app-e2e` | `http://localhost:8080/weather-app/` |
-| `weatheredit-app-e2e` | `http://localhost:8080/weatheredit-app/` |
+| `shell-e2e` | `https://localhost:8443` |
+| `weather-app-e2e` | `https://localhost:8443/weather-app/` |
+| `weatheredit-app-e2e` | `https://localhost:8443/weatheredit-app/` |
 
 ### Run against a specific (remote) host
 
 ```bash
-BASE_URL=http://<eks-node>:8080                    npx nx run shell-e2e:e2e
-BASE_URL=http://<eks-node>:8080/weather-app/       npx nx run weather-app-e2e:e2e
-BASE_URL=http://<eks-node>:8080/weatheredit-app/   npx nx run weatheredit-app-e2e:e2e
+BASE_URL=https://<eks-node>:8443                    npx nx run shell-e2e:e2e
+BASE_URL=https://<eks-node>:8443/weather-app/       npx nx run weather-app-e2e:e2e
+BASE_URL=https://<eks-node>:8443/weatheredit-app/   npx nx run weatheredit-app-e2e:e2e
 ```
 
 When `BASE_URL` is set, no local dev server is started — Playwright connects directly to the target host.
