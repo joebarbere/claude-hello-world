@@ -1368,3 +1368,164 @@ With these locations, a request to `/weather-app` matches neither `= /weather` n
 
 **Files changed:**
 - `nginx/nginx.conf` — split `location /weather` into `location = /weather` and `location ^~ /weather/`
+
+---
+
+## Step 40: Add SSL Termination in nginx with a Self-Signed Certificate
+
+Added HTTPS support to the nginx container using a self-signed certificate for `localhost`. HTTP on port 80 now issues a permanent redirect to HTTPS on port 443.
+
+### Certificate
+
+Generated a 2048-bit RSA self-signed certificate valid for 10 years, committed to the repository so the container image can be built without any runtime key-generation step:
+
+```sh
+openssl req -x509 -nodes -newkey rsa:2048 -days 3650 \
+  -keyout ssl/localhost.key -out ssl/localhost.crt \
+  -subj "/CN=localhost/O=claude-hello-world/C=US" \
+  -addext "subjectAltName=DNS:localhost,IP:127.0.0.1"
+```
+
+The Subject Alternative Name extension (`DNS:localhost` and `IP:127.0.0.1`) is required — browsers have ignored the Common Name for TLS verification since Chrome 58 / Firefox 48.
+
+### nginx.conf changes
+
+Replaced the single `listen 80` server block with two blocks:
+
+```nginx
+# Redirect all HTTP to HTTPS
+server {
+  listen 80;
+  return 301 https://$host$request_uri;
+}
+
+# HTTPS server with SSL termination
+server {
+  listen 443 ssl;
+  ssl_certificate     /etc/nginx/ssl/localhost.crt;
+  ssl_certificate_key /etc/nginx/ssl/localhost.key;
+  ssl_protocols       TLSv1.2 TLSv1.3;
+  ssl_ciphers         HIGH:!aNULL:!MD5;
+  # ... existing location blocks unchanged ...
+}
+```
+
+### Containerfile.nginx changes
+
+Added steps in the runner stage to create `/etc/nginx/ssl/`, copy in the certificate and key, restrict key permissions, and expose port 443 alongside port 80:
+
+```dockerfile
+RUN mkdir -p /etc/nginx/ssl
+COPY ssl/localhost.crt /etc/nginx/ssl/localhost.crt
+COPY ssl/localhost.key /etc/nginx/ssl/localhost.key
+RUN chmod 600 /etc/nginx/ssl/localhost.key
+EXPOSE 80
+EXPOSE 443
+```
+
+### k8s/pod.yaml changes
+
+Added a second port mapping to the nginx pod so HTTPS is reachable on the host:
+
+```yaml
+ports:
+  - containerPort: 80
+    hostPort: 8080   # HTTP → redirects to HTTPS
+  - containerPort: 443
+    hostPort: 8443   # HTTPS
+```
+
+Port 8443 is used instead of 443 to avoid requiring root privileges on the host.
+
+### Certificate trust scripts
+
+Six scripts were added to `ssl/` to install and remove the certificate from the system trust store on each supported OS. This allows browsers and other tools to accept `https://localhost:8443` without a security warning.
+
+| Script | Action | Platform |
+|--------|--------|---------|
+| `install-cert-linux.sh` | Adds cert to system CA store | Debian/Ubuntu (`update-ca-certificates`) and RHEL/Fedora (`update-ca-trust`) |
+| `install-cert-macos.sh` | Adds cert to System Keychain as trusted root | macOS (`security add-trusted-cert`) |
+| `install-cert-windows.ps1` | Adds cert to `LocalMachine\Root` store | Windows (requires Administrator) |
+| `uninstall-cert-linux.sh` | Removes cert from system CA store | Debian/Ubuntu and RHEL/Fedora |
+| `uninstall-cert-macos.sh` | Removes cert from System Keychain by SHA-256 hash | macOS |
+| `uninstall-cert-windows.ps1` | Removes cert from `LocalMachine\Root` by thumbprint | Windows (requires Administrator) |
+
+**Files changed:**
+- `nginx/nginx.conf` — HTTP redirect server block + HTTPS server block with SSL directives
+- `Containerfile.nginx` — copy SSL files into image, `chmod 600` key, `EXPOSE 443`
+- `k8s/pod.yaml` — added `containerPort: 443` / `hostPort: 8443`
+- `ssl/localhost.crt` — pre-generated self-signed certificate (new)
+- `ssl/localhost.key` — RSA 2048 private key (new)
+- `ssl/install-cert-linux.sh` (new)
+- `ssl/install-cert-macos.sh` (new)
+- `ssl/install-cert-windows.ps1` (new)
+- `ssl/uninstall-cert-linux.sh` (new)
+- `ssl/uninstall-cert-macos.sh` (new)
+- `ssl/uninstall-cert-windows.ps1` (new)
+- `README.md` — updated architecture diagram, added SSL/HTTPS section, updated all URLs to `https://localhost:8443`
+- `RUN.md` — updated container URL tables and E2E BASE_URL examples
+
+---
+
+## Step 41: Update Playwright E2E Configs for HTTPS
+
+All three Playwright configurations required two changes to work against the now-HTTPS nginx container.
+
+### Default baseURL
+
+Each config hard-codes a fallback URL used when `BASE_URL` is not set in the environment (i.e., running locally against the pods). Updated from HTTP port 8080 to HTTPS port 8443:
+
+| Config | Old | New |
+|--------|-----|-----|
+| `shell-e2e` | `http://localhost:8080` | `https://localhost:8443` |
+| `weather-app-e2e` | `http://localhost:8080/weather-app/` | `https://localhost:8443/weather-app/` |
+| `weatheredit-app-e2e` | `http://localhost:8080/weatheredit-app/` | `https://localhost:8443/weatheredit-app/` |
+
+### ignoreHTTPSErrors
+
+Added `ignoreHTTPSErrors: true` to the shared `use` block in each config. Without this, Playwright's Chromium/Firefox/WebKit instances reject the self-signed certificate and refuse to navigate, producing a `net::ERR_CERT_AUTHORITY_INVALID` error before any test code runs. This flag is equivalent to accepting the browser security warning during manual testing.
+
+```typescript
+use: {
+  baseURL,
+  ignoreHTTPSErrors: true,   // accept the self-signed localhost cert
+  trace: 'on-first-retry',
+},
+```
+
+The `webServer` URLs (`http://localhost:4200/4201/4202`) are unchanged — those point to the Angular webpack dev servers used when running tests against the local dev setup (no SSL involved).
+
+**Files changed:**
+- `apps/shell-e2e/playwright.config.ts`
+- `apps/weather-app-e2e/playwright.config.ts`
+- `apps/weatheredit-app-e2e/playwright.config.ts`
+
+---
+
+## Step 42: Add Per-OS Certificate Generation Scripts
+
+Added three scripts to `ssl/` so developers can regenerate `ssl/localhost.crt` and `ssl/localhost.key` in-place without needing to remember the `openssl req` flags. Each script validates that `openssl` is available, runs the generation command with the correct subject and SAN, and prints next steps.
+
+| Script | Platform | OpenSSL source |
+|--------|---------|----------------|
+| `ssl/generate-cert-linux.sh` | Linux | System package (`apt install openssl` / `dnf install openssl`) |
+| `ssl/generate-cert-macos.sh` | macOS | Bundled LibreSSL or Homebrew `openssl` |
+| `ssl/generate-cert-windows.ps1` | Windows | `winget install ShiningLight.OpenSSL`, `choco install openssl`, or Git for Windows (`openssl.exe` in `Git\usr\bin`) |
+
+The Windows script also probes the Git for Windows install path as a fallback when `openssl` is not on `PATH`.
+
+All three scripts output the same certificate parameters:
+- Subject: `CN=localhost, O=claude-hello-world, C=US`
+- SAN: `DNS:localhost, IP:127.0.0.1`
+- Key: RSA 2048
+- Validity: 3650 days (10 years)
+
+After regeneration, the container image must be rebuilt (`npx nx podman-build shell`) and the appropriate `install-cert-*` script must be re-run on every machine that needs to trust the new certificate.
+
+README.md was updated to replace the raw `openssl req` command in the "Regenerate the certificate" section with per-OS script references, and the `ssl/` file table was expanded to list all nine scripts (generate, install, uninstall) alongside the cert files.
+
+**Files changed:**
+- `ssl/generate-cert-linux.sh` (new)
+- `ssl/generate-cert-macos.sh` (new)
+- `ssl/generate-cert-windows.ps1` (new)
+- `README.md` — updated "Regenerate the certificate" section and expanded `ssl/` file table
