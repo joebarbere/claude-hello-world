@@ -23,7 +23,7 @@ import { test, expect } from '@playwright/test';
  * Credentials match the default users seeded by the ory-kratos-init container.
  */
 async function loginIfRequired(page: import('@playwright/test').Page) {
-  if (page.url().includes('/auth/login')) {
+  if (page.url().includes('/auth/login') || page.url().includes('self-service/login')) {
     await page.fill('input[name="identifier"]', 'admin@example.com');
     await page.fill('input[name="password"]', 'Admin1234!');
     await page.locator('button[type="submit"]').click();
