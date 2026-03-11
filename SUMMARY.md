@@ -1004,3 +1004,35 @@ The nginx `:8080` and weather-api `:5221` health check polls ran sequentially (u
 **Files changed:**
 - `.github/workflows/eks-e2e.yml` — NuGet cache, Playwright cache, parallel health checks
 - `.github/workflows/eks-e2e-full.yml` — same changes
+
+---
+
+## Step 38: Fix — nginx `location /weather` Matching MFE Routes
+
+**Problem:** The nginx prefix location `location /weather` matched any URI that begins with `/weather`, including `/weather-app` and `/weatheredit-app`. When Playwright (or a browser) navigated directly to `/weather-app`, nginx treated the request as an API proxy call instead of an Angular route:
+
+- `GET /weather-app` → matched `location /weather` → proxied to `http://host.containers.internal:5221/weatherforecast-app` (404 from the weather-api)
+- The shell's `index.html` was never returned, so Angular and module federation never initialised
+- All four MFE navigation smoke tests (`navigates to weather-app`, `navigates to weatheredit-app`, `weather-app route loads`, `weatheredit-app shows New Forecast button`) timed out and failed
+
+**Fix:** Replaced the single `location /weather` prefix block with two more-specific locations:
+
+```nginx
+# Exact match — handles GET /weather (list) and POST /weather (create)
+location = /weather {
+  proxy_pass http://host.containers.internal:5221/weatherforecast;
+  ...
+}
+
+# Sub-path match — handles GET/PUT/DELETE /weather/{id}
+# ^~ prevents regex fallthrough; /weather/ as a prefix does NOT match /weather-app/ or /weatheredit-app/
+location ^~ /weather/ {
+  proxy_pass http://host.containers.internal:5221/weatherforecast/;
+  ...
+}
+```
+
+With these locations, a request to `/weather-app` matches neither `= /weather` nor `^~ /weather/` (the latter requires a literal `/` immediately after `weather`). It falls through to `location /` which serves the shell's `index.html` via `try_files`, letting Angular's router handle the client-side navigation to the MFE remote.
+
+**Files changed:**
+- `nginx/nginx.conf` — split `location /weather` into `location = /weather` and `location ^~ /weather/`
