@@ -967,3 +967,16 @@ Reports all three suites to a Check Run and uploads all `apps/*/playwright-repor
 - `.github/workflows/eks-e2e-full.yml` — new manual workflow running all three suites
 - `README.md` — CI table updated with both workflows
 - `RUN.md` — "CI — EKS E2E Workflow" section expanded to document both workflows
+
+---
+
+## Step 36: Fix — shell-e2e Playwright Config Running Uninstalled Browsers
+
+**Problem:** `shell-e2e/playwright.config.ts` was generated with all three browser projects (`chromium`, `firefox`, `webkit`), unlike `weather-app-e2e` and `weather-app-e2e` which had already been pared down to `chromium` only. CI installs only chromium (`npx playwright install --with-deps chromium`). Webkit is not available on `ubuntu-latest` as a system browser, so all webkit test cases failed immediately with "browser not found", causing `shell-e2e` to report failures on every CI run.
+
+**Fix:** Removed the `firefox` and `webkit` project entries from `apps/shell-e2e/playwright.config.ts`, leaving only `chromium` — consistent with the other two e2e configs.
+
+**Timing impact:** With webkit removed, shell-e2e no longer incurs per-test failure overhead for 9 webkit cases. The smoke workflow now runs only chromium tests, reducing the shell-e2e phase from ~3–4 min to ~1–2 min.
+
+**Files changed:**
+- `apps/shell-e2e/playwright.config.ts` — removed `firefox` and `webkit` project entries
