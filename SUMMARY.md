@@ -929,3 +929,41 @@ This tells Nx to skip all cloud communication — caching, authorization, and di
 **Files changed:**
 - `.github/workflows/ci.yml` — added `env: NX_NO_CLOUD: true` at the workflow level
 - `.github/workflows/eks-e2e.yml` — added `env: NX_NO_CLOUD: true` at the workflow level
+
+---
+
+## Step 35: Optimize E2E CI — Smoke Workflow + Manual Full Suite
+
+**Problem:** `eks-e2e.yml` ran all three Playwright suites on every push to `main`. The full suite — including CRUD create/edit/delete tests in `weatheredit-app-e2e` — was slow and the workflow failed intermittently, blocking merges.
+
+**Fix:** Split the workflow into two:
+
+### `eks-e2e.yml` (renamed: EKS E2E Tests (Smoke))
+
+Runs on push to `main`. Now executes only `shell-e2e`, which covers:
+- Shell host loads (200 status, heading, hero banner)
+- MFE navigation to `/weather-app` and `/weatheredit-app` routes
+- `/weather` API proxy returns JSON
+
+This is enough to confirm all three pods are healthy after a deploy without running the slower CRUD suites.
+
+Reporting scoped to `shell-e2e` only:
+- `dorny/test-reporter` path changed to `apps/shell-e2e/playwright-report/junit.xml`
+- Artifact upload path changed to `apps/shell-e2e/playwright-report/`
+- PR comment updated to show only the shell result and link to the full workflow
+
+### `eks-e2e-full.yml` (new: EKS E2E Tests (Full))
+
+Triggered via `workflow_dispatch` (Actions → Run workflow). Identical build and pod-startup steps, then runs all three suites:
+
+1. `shell-e2e` at `BASE_URL=http://localhost:8080`
+2. `weather-app-e2e` at `BASE_URL=http://localhost:8080/weather-app/`
+3. `weatheredit-app-e2e` at `BASE_URL=http://localhost:8080/weatheredit-app/`
+
+Reports all three suites to a Check Run and uploads all `apps/*/playwright-report/` directories as artifacts.
+
+**Files changed:**
+- `.github/workflows/eks-e2e.yml` — scoped to `shell-e2e` only; updated name, reporting paths, and PR comment
+- `.github/workflows/eks-e2e-full.yml` — new manual workflow running all three suites
+- `README.md` — CI table updated with both workflows
+- `RUN.md` — "CI — EKS E2E Workflow" section expanded to document both workflows
