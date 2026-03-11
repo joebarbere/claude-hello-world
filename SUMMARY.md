@@ -1358,6 +1358,101 @@ if: |
 
 ---
 
+## Step 46: Fix — E2E Smoke Tests Failing After SSL Termination
+
+Two shell-e2e smoke tests failed in CI:
+
+- **"navigates to weatheredit-app and is redirected to the Ory login page"**
+- **"weatheredit-app route shows the Ory login form when unauthenticated"**
+
+Both expected the URL to match `/auth/login` after navigating to `/weatheredit-app` unauthenticated. Instead the browser was stuck at:
+
+```
+https://localhost:8443/.ory/kratos/public/self-service/login/browser?return_to=%2Fweatheredit-app
+```
+
+**Root cause — stale HTTP URLs in `apps/ory/kratos.yml`:**
+
+When SSL termination was added in Step 41 (PR #11), the app moved from `http://localhost:8080` to `https://localhost:8443`. The Kratos configuration was never updated. Specifically:
+
+- `selfservice.flows.login.ui_url` still pointed to `http://localhost:4200/auth/login` (the Angular dev server, not running in EKS).
+- `selfservice.allowed_return_urls` had no HTTPS entries.
+- `serve.public.cors.allowed_origins` had no HTTPS entry.
+
+**The broken redirect chain:**
+
+1. Unauthenticated user visits `https://localhost:8443/weatheredit-app`
+2. Angular auth guard calls `AuthService.initiateLogin('/weatheredit-app')`
+3. Browser is redirected to `https://localhost:8443/.ory/kratos/public/self-service/login/browser?return_to=%2Fweatheredit-app`
+4. Kratos creates a login flow — then tries to redirect to `login.ui_url + ?flow=<id>`
+5. With the stale config, that URL was `http://localhost:4200/auth/login?flow=<id>` — unreachable in EKS
+6. Browser stays on the Kratos browser endpoint forever → test times out
+
+**Fix — `apps/ory/kratos.yml`:**
+
+Updated all self-service flow URLs and the CORS/return-URL lists to use `https://localhost:8443`:
+
+```yaml
+# Before
+selfservice:
+  default_browser_return_url: http://localhost:4200/
+  allowed_return_urls:
+    - http://localhost:4200
+    - http://localhost:4200/weatheredit-app
+    - http://localhost:8080
+    - http://localhost:8080/weatheredit-app
+  flows:
+    login:
+      ui_url: http://localhost:4200/auth/login
+    logout:
+      after:
+        default_browser_return_url: http://localhost:4200/
+    error:
+      ui_url: http://localhost:4200/auth/error
+    settings:
+      ui_url: http://localhost:4200/auth/settings
+
+# After
+selfservice:
+  default_browser_return_url: https://localhost:8443/
+  allowed_return_urls:
+    - http://localhost:4200
+    - http://localhost:4200/weatheredit-app
+    - http://localhost:8080
+    - http://localhost:8080/weatheredit-app
+    - https://localhost:8443
+    - https://localhost:8443/weatheredit-app
+  flows:
+    login:
+      ui_url: https://localhost:8443/auth/login
+    logout:
+      after:
+        default_browser_return_url: https://localhost:8443/
+    error:
+      ui_url: https://localhost:8443/auth/error
+    settings:
+      ui_url: https://localhost:8443/auth/settings
+```
+
+Also added `https://localhost:8443` to `serve.public.cors.allowed_origins`.
+
+**Corrected redirect chain after fix:**
+
+1. Unauthenticated user visits `https://localhost:8443/weatheredit-app`
+2. Auth guard → `initiateLogin('/weatheredit-app')` → browser goes to Kratos browser endpoint
+3. Kratos creates flow, redirects to `https://localhost:8443/auth/login?flow=<id>` ✓
+4. URL matches `/\/auth\/login/` → smoke test passes
+5. Angular `LoginComponent` fetches the flow from Kratos and renders the identifier/password form
+
+**Debugging method:**
+
+Check the actual URL the browser lands on after visiting a protected route. If the URL stays at `/.ory/kratos/public/self-service/login/browser?...` (the Kratos initiation endpoint), Kratos is failing to redirect the user back to the Angular login UI — meaning `login.ui_url` is unreachable. Compare `login.ui_url` in `kratos.yml` against the actual origin the app is served from.
+
+**File changed:**
+- `apps/ory/kratos.yml`
+
+---
+
 ## Final Verification
 
 ### Individual container workflow
