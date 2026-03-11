@@ -67,13 +67,12 @@ metadata:
   labels:
     app: ory-kratos
 spec:
-  initContainers:
+  containers:
     - name: ory-kratos-init
       image: localhost/ory-kratos-init:latest
       env:
         - name: KRATOS_ADMIN_URL
           value: http://host.containers.internal:4434
-  containers:
     - name: ory-kratos
       image: localhost/ory-kratos:latest
       ports:
