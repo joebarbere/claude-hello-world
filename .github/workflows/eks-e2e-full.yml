@@ -1,9 +1,7 @@
-name: EKS E2E Tests (Smoke)
+name: EKS E2E Tests (Full)
 
 on:
-  push:
-    branches:
-      - main
+  workflow_dispatch:
 
 # Permissions needed:
 #   pull-requests: write  → post comment on the merged PR
@@ -19,7 +17,7 @@ env:
 
 jobs:
   e2e:
-    name: Playwright E2E – EKS Pods (Smoke)
+    name: Playwright E2E – EKS Pods (Full)
     runs-on: ubuntu-latest
 
     steps:
@@ -78,17 +76,31 @@ jobs:
             'until curl -sf http://localhost:5221/weatherforecast > /dev/null 2>&1; do sleep 3; done'
           echo "weather-api is ready"
 
-      # ── Run Playwright e2e smoke suite ───────────────────────────────────────
-      # Only run shell-e2e: it verifies the shell host, MFE navigation to
-      # weather-app and weatheredit-app, and the /weather API proxy — enough
-      # to confirm all three pods are healthy after a deploy.
-      # For the full CRUD test suite run the "EKS E2E Tests (Full)" workflow.
+      # ── Run all Playwright e2e suites ────────────────────────────────────────
+      # Each suite sets BASE_URL so Playwright targets the running pod directly
+      # (no local dev server is started). continue-on-error lets subsequent
+      # suites run even if an earlier one fails; the workflow is failed at the
+      # end via the "Fail if any suite failed" step.
 
-      - name: E2E – shell (host) smoke tests
+      - name: E2E – shell (host)
         id: shell-e2e
         env:
           BASE_URL: http://localhost:8080
         run: npx nx run shell-e2e:e2e
+        continue-on-error: true
+
+      - name: E2E – weather-app
+        id: weather-app-e2e
+        env:
+          BASE_URL: http://localhost:8080/weather-app/
+        run: npx nx run weather-app-e2e:e2e
+        continue-on-error: true
+
+      - name: E2E – weatheredit-app
+        id: weatheredit-app-e2e
+        env:
+          BASE_URL: http://localhost:8080/weatheredit-app/
+        run: npx nx run weatheredit-app-e2e:e2e
         continue-on-error: true
 
       # ── Teardown (always runs) ───────────────────────────────────────────────
@@ -103,8 +115,8 @@ jobs:
         if: always()
         uses: dorny/test-reporter@v1
         with:
-          name: Playwright EKS E2E (Smoke)
-          path: apps/shell-e2e/playwright-report/junit.xml
+          name: Playwright EKS E2E (Full)
+          path: apps/*/playwright-report/junit.xml
           reporter: java-junit
           fail-on-error: 'false'
 
@@ -114,56 +126,15 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: playwright-reports
-          path: apps/shell-e2e/playwright-report/
+          path: apps/*/playwright-report/
           retention-days: 30
 
-      # Post a summary comment on the PR that was just merged into main.
-      - name: Comment results on merged PR
-        if: always()
-        uses: actions/github-script@v7
-        with:
-          script: |
-            // Find the PR merged into main for this commit.
-            const { data: prs } = await github.rest.repos.listPullRequestsAssociatedWithCommit({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              commit_sha: context.sha,
-            });
-            const pr = prs.find(p => p.state === 'closed' && p.merged_at);
-            if (!pr) {
-              console.log('No merged PR found for commit ' + context.sha + '; skipping comment.');
-              return;
-            }
-
-            const icon = (o) =>
-              o === 'success' ? '✅ Passed' :
-              o === 'failure' ? '❌ Failed'  : '⚠️ Skipped';
-
-            const runUrl =
-              `https://github.com/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`;
-
-            const body = [
-              '## 🎭 EKS E2E Smoke Test Results',
-              '',
-              '| App | Status |',
-              '|-----|--------|',
-              `| Shell (host)    | ${icon('${{ steps.shell-e2e.outcome }}')} |`,
-              '',
-              `_For full CRUD coverage, run the [EKS E2E Tests (Full)](https://github.com/${context.repo.owner}/${context.repo.repo}/actions/workflows/eks-e2e-full.yml) workflow manually._`,
-              '',
-              `[View Playwright HTML reports & artifacts ↗](${runUrl})`,
-            ].join('\n');
-
-            await github.rest.issues.createComment({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              issue_number: pr.number,
-              body,
-            });
-
-      # Fail the workflow if the smoke suite failed (after teardown + reporting).
-      - name: Fail workflow if smoke suite failed
-        if: steps.shell-e2e.outcome == 'failure'
+      # Fail the workflow if any e2e suite failed (after teardown + reporting).
+      - name: Fail workflow if any suite failed
+        if: |
+          steps.shell-e2e.outcome == 'failure' ||
+          steps.weather-app-e2e.outcome == 'failure' ||
+          steps.weatheredit-app-e2e.outcome == 'failure'
         run: |
-          echo "Shell e2e smoke suite failed. See the Check Run and uploaded reports."
+          echo "One or more e2e suites failed. See the Check Run and uploaded reports."
           exit 1
