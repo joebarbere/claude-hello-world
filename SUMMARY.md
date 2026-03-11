@@ -1076,79 +1076,6 @@ With these locations, a request to `/weather-app` matches neither `= /weather` n
 
 ---
 
-## Final Verification
-
-### Individual container workflow
-
-```bash
-# Build all images
-npx nx podman-build shell          # builds nginx MFE image (claude-hello-world)
-npx nx podman-build weather-api    # builds .NET API image
-npx nx podman-build postgres       # builds PostgreSQL image
-npx nx podman-build ory            # builds ory-kratos and ory-kratos-init images
-
-# Run individually
-npx nx podman-up shell             # → http://localhost:8080 (Angular MFE)
-npx nx podman-up weather-api       # → http://localhost:5221/weatherforecast
-
-# Stop
-npx nx podman-down shell
-npx nx podman-down weather-api
-```
-
-### Kubernetes workflow (all containers together)
-
-```bash
-# Build images (postgres image built automatically via dependsOn)
-npx nx podman-build shell
-npx nx podman-build weather-api
-npx nx podman-build ory
-
-# Start all pods
-npx nx kube-up shell
-
-# Verify
-curl http://localhost:8080                    # Angular shell
-curl http://localhost:8080/weather-app/       # weather-app remote (public)
-curl http://localhost:8080/weatheredit-app/   # weatheredit-app (redirects to login)
-curl http://localhost:8080/weather            # nginx → weather-api proxy (GET, public)
-curl http://localhost:5221/weatherforecast    # weather-api direct
-curl http://localhost:4433/health/ready       # Kratos public health check
-psql -h localhost -p 5432 -U appuser -d appdb # PostgreSQL
-
-# Stop all pods
-npx nx kube-down shell
-```
-
-### Authentication
-
-| User | Email | Password | Role | Access |
-|------|-------|----------|------|--------|
-| Admin | `admin@example.com` | `Admin1234!` | `admin` | weatheredit-app + all API writes |
-| Weather Admin | `weatheradmin@example.com` | `WeatherAdmin1234!` | `weather_admin` | weatheredit-app + all API writes |
-
-### Weather API repository selection
-
-Change `"Repository"` in `apps/weather-api/appsettings.json`:
-
-| Value | Behavior |
-|-------|----------|
-| `"Random"` (default) | Read-only, random data, no DB |
-| `"InMemory"` | Full CRUD, in-process storage, no DB |
-| `"EfCore"` | Full CRUD, persisted to PostgreSQL |
-
-### Containerfiles
-
-| File | Base image | Purpose |
-|------|-----------|---------|
-| `Containerfile.nginx` | `node:20-alpine` → `nginx:alpine` | Angular MFE (shell + weather-app + weatheredit-app) |
-| `apps/weather-api/Containerfile` | `dotnet/sdk:9.0-alpine` → `dotnet/aspnet:9.0-alpine` | .NET Weather API |
-| `apps/postgres/Containerfile` | `postgres:17-alpine` | PostgreSQL database |
-| `apps/ory/Containerfile` | `oryd/kratos:v1.3.0-distroless` | Ory Kratos identity server |
-| `apps/ory/Containerfile.init` | `alpine:3.21` | One-shot user seeding container |
-
----
-
 ## Step 39: Playwright E2E Test Suites for EKS Pods
 
 Added dedicated Playwright e2e specs that target the apps as they run inside the EKS pods (via the nginx container on `:8080`), rather than the local dev servers. Auth-aware: `weatheredit-app-e2e` logs in via Ory Kratos before running CRUD tests; `shell-e2e` verifies the auth redirect to `/auth/login` when navigating to `/weatheredit-app` without a session.
@@ -1350,3 +1277,87 @@ README.md was updated to replace the raw `openssl req` command in the "Regenerat
 - `ssl/generate-cert-macos.sh` (new)
 - `ssl/generate-cert-windows.ps1` (new)
 - `README.md` — updated "Regenerate the certificate" section and expanded `ssl/` file table
+
+---
+
+## Step 43: Fix ory-kratos-init Startup Deadlock
+
+`ory-kratos-init` was defined as an `initContainer` in `k8s/pod.yaml`. Kubernetes runs initContainers before any main containers start, so `ory-kratos-init` would poll the Kratos admin API (`:4434`) while Kratos itself was blocked waiting for the initContainer to finish — a deadlock. The init script timed out after 60 s (30 × 2 s) on every run, making the "Start EKS pods" CI step slow.
+
+**Fix:** Moved `ory-kratos-init` from `initContainers` to `containers` (sidecar pattern). Both `ory-kratos` and `ory-kratos-init` now start simultaneously. The existing `wait_for_kratos` polling loop in `apps/ory/init-users.sh` already handles the startup race correctly.
+
+**Files changed:**
+- `k8s/pod.yaml` — moved `ory-kratos-init` from `initContainers` to `containers`
+
+---
+
+## Final Verification
+
+### Individual container workflow
+
+```bash
+# Build all images
+npx nx podman-build shell          # builds nginx MFE image (claude-hello-world)
+npx nx podman-build weather-api    # builds .NET API image
+npx nx podman-build postgres       # builds PostgreSQL image
+npx nx podman-build ory            # builds ory-kratos and ory-kratos-init images
+
+# Run individually
+npx nx podman-up shell             # → http://localhost:8080 (Angular MFE)
+npx nx podman-up weather-api       # → http://localhost:5221/weatherforecast
+
+# Stop
+npx nx podman-down shell
+npx nx podman-down weather-api
+```
+
+### Kubernetes workflow (all containers together)
+
+```bash
+# Build images (postgres image built automatically via dependsOn)
+npx nx podman-build shell
+npx nx podman-build weather-api
+npx nx podman-build ory
+
+# Start all pods
+npx nx kube-up shell
+
+# Verify
+curl http://localhost:8080                    # Angular shell
+curl http://localhost:8080/weather-app/       # weather-app remote (public)
+curl http://localhost:8080/weatheredit-app/   # weatheredit-app (redirects to login)
+curl http://localhost:8080/weather            # nginx → weather-api proxy (GET, public)
+curl http://localhost:5221/weatherforecast    # weather-api direct
+curl http://localhost:4433/health/ready       # Kratos public health check
+psql -h localhost -p 5432 -U appuser -d appdb # PostgreSQL
+
+# Stop all pods
+npx nx kube-down shell
+```
+
+### Authentication
+
+| User | Email | Password | Role | Access |
+|------|-------|----------|------|--------|
+| Admin | `admin@example.com` | `Admin1234!` | `admin` | weatheredit-app + all API writes |
+| Weather Admin | `weatheradmin@example.com` | `WeatherAdmin1234!` | `weather_admin` | weatheredit-app + all API writes |
+
+### Weather API repository selection
+
+Change `"Repository"` in `apps/weather-api/appsettings.json`:
+
+| Value | Behavior |
+|-------|----------|
+| `"Random"` (default) | Read-only, random data, no DB |
+| `"InMemory"` | Full CRUD, in-process storage, no DB |
+| `"EfCore"` | Full CRUD, persisted to PostgreSQL |
+
+### Containerfiles
+
+| File | Base image | Purpose |
+|------|-----------|---------|
+| `Containerfile.nginx` | `node:20-alpine` → `nginx:alpine` | Angular MFE (shell + weather-app + weatheredit-app) |
+| `apps/weather-api/Containerfile` | `dotnet/sdk:9.0-alpine` → `dotnet/aspnet:9.0-alpine` | .NET Weather API |
+| `apps/postgres/Containerfile` | `postgres:17-alpine` | PostgreSQL database |
+| `apps/ory/Containerfile` | `oryd/kratos:v1.3.0-distroless` | Ory Kratos identity server |
+| `apps/ory/Containerfile.init` | `alpine:3.21` | One-shot user seeding sidecar |
