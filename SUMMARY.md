@@ -1621,6 +1621,41 @@ The `memory` DSN uses Ory Kratos's built-in in-memory store (no file I/O, no mig
 
 ---
 
+## Step 51: Fix — Kratos Health-Check Timeout Too Tight After PR #19
+
+The smoke-test CI run continued to fail at the "Wait for pods to be healthy" step with **exit code 124** after PR #19 reduced the Kratos health-check timeout from 120 s to 30 s.
+
+**Root cause:**
+
+PR #19 reasoned that switching the DSN to `memory` made Kratos startup "near-instant" and tightened the CI poll timeout accordingly:
+
+```yaml
+# Before (Step 49/50 — 120 s)
+timeout 120 bash -c \
+  'until curl -sf http://localhost:4433/health/ready ...'
+
+# After PR #19 — 30 s
+timeout 30 bash -c \
+  'until curl -sf http://localhost:4433/health/ready ...'
+```
+
+In practice, even without SQLite migrations, container startup on a loaded GitHub Actions runner (image pull, cgroup setup, Go binary init) consistently takes 60–90 s. The 30 s `timeout` command expired and returned exit code 124 before Kratos was ready, failing the step and preventing the E2E tests from running.
+
+**Fix:**
+
+Restore the Kratos poll timeout to 90 s, matching the nginx and weather-api checks:
+
+```yaml
+# .github/workflows/eks-e2e.yml — "Wait for pods to be healthy"
+timeout 90 bash -c \
+  'until curl -sf http://localhost:4433/health/ready > /dev/null 2>&1; do sleep 3; done' &
+```
+
+**Files changed:**
+- `.github/workflows/eks-e2e.yml` — Kratos health-check timeout raised from 30 s to 90 s; comment updated to clarify that in-memory startup is still slow on loaded runners
+
+---
+
 ## Final Verification
 
 ### Individual container workflow
