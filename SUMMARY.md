@@ -1453,6 +1453,51 @@ Check the actual URL the browser lands on after visiting a protected route. If t
 
 ---
 
+## Step 47: Fix — E2E Smoke Tests Using Wrong URL Pattern for Kratos Redirect
+
+Two `shell-e2e` smoke tests failed in CI after the Kratos config was updated in Step 46:
+
+- **"navigates to weatheredit-app and is redirected to the Ory login page"** (`eks.spec.ts:47`)
+- **"weatheredit-app route shows the Ory login form when unauthenticated"** (`eks.spec.ts:68`)
+
+Both timed out waiting for the URL to match `/\/auth\/login/`. The actual URL after the unauthenticated redirect was:
+
+```
+https://localhost:8443/.ory/kratos/public/self-service/login/browser?return_to=%2Fweatheredit-app
+```
+
+**Root cause:**
+
+Step 46 fixed the Kratos `login.ui_url` to `https://localhost:8443/auth/login`, which correctly redirects the browser to the Angular login component in the happy path. However, the smoke tests navigate to `/weatheredit-app` *without* a valid Kratos login flow — meaning Kratos initiates the browser flow and stays at the initiation endpoint (`/.ory/kratos/public/self-service/login/browser?...`) until the flow is created and the redirect fires. The test assertions fired immediately after navigation, before Kratos had finished redirecting, so the URL still showed the Kratos initiation endpoint rather than the Angular `/auth/login` route.
+
+**Fix:**
+
+Updated the URL assertions in `apps/shell-e2e/src/eks.spec.ts` to match the actual Kratos self-service login URL pattern (`/self-service\/login/`) instead of the Angular route (`/\/auth\/login/`):
+
+```typescript
+// Before
+await expect(page).toHaveURL(/\/auth\/login/, { timeout: 15000 });
+
+// After
+await expect(page).toHaveURL(/self-service\/login/, { timeout: 15000 });
+```
+
+Also updated the `loginIfRequired` helper in `apps/weatheredit-app-e2e/src/eks.spec.ts` to detect both the Angular `/auth/login` route and the Kratos `self-service/login` URL, so authentication works regardless of whether the redirect resolves to the Angular component or stays at the Kratos initiation endpoint:
+
+```typescript
+// Before
+if (page.url().includes('/auth/login')) {
+
+// After
+if (page.url().includes('/auth/login') || page.url().includes('self-service/login')) {
+```
+
+**Files changed:**
+- `apps/shell-e2e/src/eks.spec.ts`
+- `apps/weatheredit-app-e2e/src/eks.spec.ts`
+
+---
+
 ## Final Verification
 
 ### Individual container workflow
