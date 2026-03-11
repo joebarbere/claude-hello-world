@@ -1498,6 +1498,52 @@ if (page.url().includes('/auth/login') || page.url().includes('self-service/logi
 
 ---
 
+## Step 48: Fix — E2E Smoke Tests Failing Due to Premature toHaveURL Match and Missing Kratos Health Check
+
+Two `shell-e2e` smoke tests continued to fail in CI after Step 47:
+
+- **"navigates to weatheredit-app and is redirected to the Ory login page"** — `input[name="identifier"]` not visible
+- **"weatheredit-app route shows the Ory login form when unauthenticated"** — `input[name="password"]` not visible
+
+**Root cause:**
+
+Step 47's fix was incorrect. The redirect chain when navigating to `/weatheredit-app` unauthenticated is:
+
+1. Angular auth guard → `window.location.href = '/.ory/kratos/public/self-service/login/browser?...'`
+2. Kratos processes request → 302 redirect → `https://localhost:8443/auth/login?flow=<id>`
+3. Angular `LoginComponent` loads, fetches flow from Kratos API, renders the form
+
+Changing `toHaveURL` to `/self-service\/login/` caused Playwright to pass the assertion **at step 1** — the transient Kratos browser-flow initiation endpoint — before Kratos had even processed the request and issued the redirect. The subsequent `toBeVisible` window (10 s) then started while the redirect was still in flight, often timing out before the Angular form loaded.
+
+Additionally, the "Wait for pods to be healthy" CI step never checked whether the Kratos pod was ready — only nginx and the weather-api were probed. If Kratos was still initialising when the tests ran, the flow API calls would fail (502), the Angular `LoginComponent` would not render the form, and the inputs would not appear.
+
+**Fixes:**
+
+1. Reverted both `toHaveURL` assertions in `apps/shell-e2e/src/eks.spec.ts` back to `/\/auth\/login/`. The 15-second timeout on this assertion naturally waits for the **full** redirect chain (Kratos processes → redirects → Angular renders the login component). The form inputs are then found quickly once the component is loaded.
+
+```typescript
+// Before (Step 47 — incorrect)
+await expect(page).toHaveURL(/self-service\/login/, { timeout: 15000 });
+
+// After (Step 48 — correct)
+await expect(page).toHaveURL(/\/auth\/login/, { timeout: 15000 });
+```
+
+2. Added a Kratos readiness probe to the "Wait for pods to be healthy" step in `.github/workflows/eks-e2e.yml`, polling `/.ory/kratos/public/health/ready` through the nginx proxy alongside the existing nginx and weather-api checks:
+
+```bash
+timeout 90 bash -c \
+  'until curl -sfk https://localhost:8443/.ory/kratos/public/health/ready > /dev/null 2>&1; do sleep 3; done' &
+P3=$!
+wait $P1 && wait $P2 && wait $P3
+```
+
+**Files changed:**
+- `apps/shell-e2e/src/eks.spec.ts`
+- `.github/workflows/eks-e2e.yml`
+
+---
+
 ## Final Verification
 
 ### Individual container workflow
