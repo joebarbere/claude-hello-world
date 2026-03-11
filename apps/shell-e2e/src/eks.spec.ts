@@ -44,13 +44,15 @@ test.describe('Shell host – MFE navigation', () => {
     });
   });
 
-  test('navigates to weatheredit-app and displays forecasts heading', async ({
+  test('navigates to weatheredit-app and is redirected to the Ory login page', async ({
     page,
   }) => {
     await page.goto('/weatheredit-app');
-    // MFE remote entry renders <h1>Weather Forecasts</h1>
-    await expect(page.locator('h1')).toContainText('Weather Forecasts', {
-      timeout: 15000,
+    // Auth guard redirects unauthenticated users to /auth/login
+    await expect(page).toHaveURL(/\/auth\/login/, { timeout: 15000 });
+    // Angular login component renders the Kratos form
+    await expect(page.locator('input[name="identifier"]')).toBeVisible({
+      timeout: 10000,
     });
   });
 
@@ -63,13 +65,15 @@ test.describe('Shell host – MFE navigation', () => {
     await expect(loading.or(table)).toBeVisible({ timeout: 15000 });
   });
 
-  test('weatheredit-app route shows the New Forecast button', async ({
+  test('weatheredit-app route shows the Ory login form when unauthenticated', async ({
     page,
   }) => {
     await page.goto('/weatheredit-app');
-    await expect(
-      page.locator('button', { hasText: 'New Forecast' })
-    ).toBeVisible({ timeout: 15000 });
+    // Auth guard triggers Kratos browser flow → Angular renders login form
+    await expect(page).toHaveURL(/\/auth\/login/, { timeout: 15000 });
+    await expect(page.locator('input[name="password"]')).toBeVisible({
+      timeout: 10000,
+    });
   });
 });
 

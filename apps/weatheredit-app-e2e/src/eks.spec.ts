@@ -7,9 +7,30 @@ import { test, expect } from '@playwright/test';
  * create, read, update and delete weather forecasts via the weather-api pod.
  * It is served by the nginx pod under /weatheredit-app/.
  *
+ * Access requires authentication via Ory Kratos. Each test navigates to /
+ * (BASE_URL = http://localhost:8080/weatheredit-app/), which triggers the
+ * Angular auth guard. If the session cookie is not present the guard redirects
+ * to Kratos and then to /auth/login. The login() helper fills in credentials
+ * for the seeded admin user and submits the form, after which Kratos sets the
+ * session cookie and redirects back.
+ *
  * Run against the EKS pod:
  *   BASE_URL=http://<eks-node>:8080/weatheredit-app/ npx nx run weatheredit-app-e2e:e2e
  */
+
+/**
+ * Log in via the Ory Kratos browser flow if redirected to /auth/login.
+ * Credentials match the default users seeded by the ory-kratos-init container.
+ */
+async function loginIfRequired(page: import('@playwright/test').Page) {
+  if (page.url().includes('/auth/login')) {
+    await page.fill('input[name="identifier"]', 'admin@example.com');
+    await page.fill('input[name="password"]', 'Admin1234!');
+    await page.locator('button[type="submit"]').click();
+    // Kratos sets the session cookie and redirects back to weatheredit-app
+    await page.waitForURL('**/weatheredit-app/**', { timeout: 15000 });
+  }
+}
 
 /** Helper: open the "New Forecast" form */
 async function openNewForecastForm(page: import('@playwright/test').Page) {
@@ -30,10 +51,23 @@ async function submitForecastForm(
   await page.locator('button[type="submit"]').click();
 }
 
+/**
+ * Authenticate before every test. Each Playwright test gets a fresh browser
+ * context (no cookies), so we navigate to the base URL and log in if the auth
+ * guard redirected us to /auth/login. Once logged in, Kratos sets the session
+ * cookie for the rest of that test's context.
+ */
+test.beforeEach(async ({ page }) => {
+  await page.goto('/');
+  await loginIfRequired(page);
+});
+
 test.describe('weatheredit-app – page load', () => {
   test('serves the page with a 200 status', async ({ page }) => {
-    const response = await page.goto('/');
-    expect(response?.status()).toBe(200);
+    // beforeEach has already navigated and logged in; verify we are on the app
+    expect(page.url()).toMatch(/\/weatheredit-app/);
+    // Confirm the page loaded successfully by checking the heading is present
+    await expect(page.locator('h1')).toContainText('Weather Forecasts');
   });
 
   test('displays the "Weather Forecasts" heading', async ({ page }) => {

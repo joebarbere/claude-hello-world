@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using Scalar.AspNetCore;
 using WeatherApi.Data;
+using WeatherApi.Middleware;
 using WeatherApi.Models;
 using WeatherApi.Repositories;
 
@@ -41,6 +42,7 @@ if (repositoryType == "EfCore")
 }
 
 app.UseHttpsRedirection();
+app.UseMiddleware<KratosAuthMiddleware>();
 
 var forecasts = app.MapGroup("/weatherforecast");
 

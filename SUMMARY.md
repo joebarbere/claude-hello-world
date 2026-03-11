@@ -759,6 +759,323 @@ ASP.NET Core's configuration system treats `__` as a hierarchy separator in envi
 
 ---
 
+## Step 32: Integrate Ory Kratos Authentication
+
+Added role-based authentication using [Ory Kratos](https://www.ory.sh/kratos/) (open-source identity infrastructure). Access to the `weatheredit-app` and all write operations on the weather-api are restricted to users with the `admin` or `weather_admin` role.
+
+### `apps/ory/` — new Nx project
+
+**`apps/ory/project.json`** — registers `ory` as an Nx application with a single `podman-build` target that runs two sequential container builds.
+
+**`apps/ory/identity.schema.json`** — JSON Schema defining the identity shape. Two traits:
+- `email` — the login identifier (marked with `ory.sh/kratos.credentials.password.identifier: true`)
+- `role` — an enum restricted to `admin` or `weather_admin`
+
+**`apps/ory/kratos.yml`** — Kratos server configuration:
+- `dsn: sqlite:///var/lib/kratos/db.sqlite` — SQLite keeps the stack dependency-free; no separate DB pod needed for auth
+- Self-service `login` flow configured to redirect to `http://localhost:4200/auth/login` (the Angular shell's login page)
+- `allowed_return_urls` includes both the dev origin (`localhost:4200`) and the containerized origin (`localhost:8080`)
+- Password method enabled; recovery/verification flows omitted to avoid a mail server dependency
+- Cookie and cipher secrets are placeholders — replace before any non-local deployment
+
+**`apps/ory/Containerfile`** — extends `oryd/kratos:v1.3.0-distroless` (the official minimal image with no shell or package manager). Copies `kratos.yml` and `identity.schema.json` into `/etc/config/kratos/`. Uses the `--dev` flag to enable permissive CORS and disable TLS.
+
+**`apps/ory/Containerfile.init`** — `alpine:3.21` with only `wget` installed. Copies `init-users.sh` and sets it as the entrypoint.
+
+**`apps/ory/init-users.sh`** — shell script run by the init container:
+1. Polls `GET /health/ready` on the Kratos Admin API (up to 30 attempts, 2-second intervals)
+2. For each user, checks if the identity already exists (`GET /admin/identities?credentials_identifier=<email>`) and skips if found
+3. Creates the identity via `POST /admin/identities` with the password embedded in the `credentials.password.config` block — this bypasses self-service flows and email verification, making it suitable for seeding programmatic defaults
+
+| User | Email | Password | Role |
+|------|-------|----------|------|
+| Admin | `admin@example.com` | `Admin1234!` | `admin` |
+| Weather Admin | `weatheradmin@example.com` | `WeatherAdmin1234!` | `weather_admin` |
+
+### `apps/weather-api/Middleware/KratosAuthMiddleware.cs` — new
+
+ASP.NET Core middleware that enforces role-based access on write operations:
+
+1. **Pass-through for reads:** `GET` and `HEAD` requests are forwarded to the next middleware unconditionally — the weather forecast list remains public.
+2. **Session extraction:** All request cookies are concatenated into a `Cookie` header and forwarded to `GET {OryKratosPublicUrl}/sessions/whoami` via an `HttpClient` call. This endpoint validates the session and returns the full identity.
+3. **Role check:** The `identity.traits.role` field is extracted from the JSON response. Only `admin` and `weather_admin` are in the `AllowedRoles` set; anything else (including missing roles) returns `403 Forbidden`.
+4. **Error handling:** Connection failures return `503 Service Unavailable`; invalid/expired sessions return `401 Unauthorized`.
+
+`OryKratosPublicUrl` defaults to `http://localhost:4433` and is overridden per environment via `appsettings.json` or the pod's `env:` block.
+
+Registered in `Program.cs` after `UseHttpsRedirection()`:
+
+```csharp
+app.UseMiddleware<KratosAuthMiddleware>();
+```
+
+### Angular auth — shell app
+
+Three new files added to `apps/shell/src/app/auth/`:
+
+**`auth.service.ts`** — injectable service that:
+- Calls `GET /.ory/kratos/public/sessions/whoami` with `withCredentials: true` (so the session cookie is included); returns `null` on any error
+- `canAccessWeatherEdit(session)` — returns `true` if the session is active and the role is `admin` or `weather_admin`
+- `initiateLogin(returnTo)` — redirects `window.location.href` to `/.ory/kratos/public/self-service/login/browser?return_to=<url>`, triggering a full browser-based Kratos login flow
+- `logout()` — fetches the Kratos logout URL and redirects the browser to it (invalidates the session server-side)
+- `getLoginFlow(flowId)` — fetches flow details from `/.ory/kratos/public/self-service/login/flows?id=<flowId>`
+
+**`auth.guard.ts`** — `CanActivateFn` that:
+1. Calls `authService.getSession()` (observable)
+2. If no session → calls `authService.initiateLogin(state.url)` and returns `false` (browser navigates away to Kratos)
+3. If session present but wrong role → returns `router.createUrlTree(['/auth/unauthorized'])`
+4. Otherwise → returns `true`
+
+**`auth/login/login.component.ts`** — standalone component that implements the Kratos browser login UI:
+- On `ngOnInit`, reads `?flow=` from the query string
+- If absent, calls `authService.initiateLogin(returnTo)` — Kratos will redirect back to `/auth/login?flow=<id>`
+- If present, fetches the flow object and stores it in `this.flow`
+- Template renders a `<form>` with `[attr.action]="flow.ui.action"` and `[attr.method]="flow.ui.method"` — the form submits **natively** (no Angular `ngSubmit`), so Kratos handles the POST, sets the session cookie, and redirects to `return_to`
+- Hidden nodes (including the CSRF token) are rendered as `<input type="hidden">` elements
+- Field-level messages from Kratos (e.g. "wrong credentials") are displayed below each input
+- Flow expiry is handled: a failed `getLoginFlow` call re-initiates a fresh login flow
+
+**`auth/unauthorized/unauthorized.component.ts`** — shown when a logged-in user's role is not permitted. Offers "Go to Home" and "Sign out" actions.
+
+### Shell routing — `app.routes.ts`
+
+The `weatheredit-app` route now has `canActivate: [weatherEditAuthGuard]`. Two new routes are added:
+
+```ts
+{ path: 'auth/login',        component: LoginComponent },
+{ path: 'auth/unauthorized', component: UnauthorizedComponent },
+```
+
+### nginx — Kratos proxy
+
+Added to `nginx/nginx.conf`:
+
+```nginx
+location /.ory/kratos/public/ {
+  proxy_pass http://host.containers.internal:4433/;
+  proxy_set_header Host $host;
+  proxy_set_header X-Real-IP $remote_addr;
+  proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+  proxy_set_header X-Forwarded-Proto $scheme;
+  proxy_set_header X-Forwarded-Host $host;
+}
+```
+
+This allows the Angular app (served by nginx on port 8080) to reach Kratos without CORS issues — all requests go to the same origin and nginx forwards them to `host.containers.internal:4433`. The Kratos `X-Forwarded-*` headers are used to correctly construct redirect URLs back to the Angular app.
+
+The existing `/weather` proxy location also gained `proxy_set_header Cookie $http_cookie;` to ensure session cookies are forwarded to the weather-api for validation.
+
+### Kubernetes — `k8s/pod.yaml`
+
+Added the `ory-kratos` pod with an `initContainers` block:
+
+```yaml
+initContainers:
+  - name: ory-kratos-init
+    image: localhost/ory-kratos-init:latest
+    env:
+      - name: KRATOS_ADMIN_URL
+        value: http://host.containers.internal:4434
+containers:
+  - name: ory-kratos
+    image: localhost/ory-kratos:latest
+    ports:
+      - containerPort: 4433  # public API
+        hostPort: 4433
+      - containerPort: 4434  # admin API
+        hostPort: 4434
+```
+
+The `initContainer` runs to completion before Kubernetes starts the main `ory-kratos` container. The init container waits for Kratos to be healthy before seeding users, but since both share the same pod, the Kratos server starts concurrently — the health poll loop in `init-users.sh` handles the race.
+
+The `weather-api` pod gained an `OryKratosPublicUrl` env var:
+
+```yaml
+- name: OryKratosPublicUrl
+  value: http://host.containers.internal:4433
+```
+
+---
+
+## Step 33: GitHub Actions EKS E2E Workflow and README Badge
+
+### `.github/workflows/eks-e2e.yml`
+
+New workflow that runs on every push to `main` (i.e., every merged PR). It simulates the EKS pod environment inside the GitHub Actions runner using Podman:
+
+**Build phase:**
+1. Install Node 20, .NET 9 SDK, Playwright (chromium only)
+2. `npx nx podman-build shell` — triggers `build-all` (Angular production builds) then builds the nginx container image
+3. `NX_DAEMON=false npx nx podman-build weather-api` — runs `dotnet build` then builds the ASP.NET container image
+4. `npx nx podman-build postgres` — builds the postgres container image
+5. `npx nx podman-build ory` — builds the `ory-kratos` and `ory-kratos-init` images
+
+**Pod lifecycle:**
+6. `npx nx kube-up shell` — `podman play kube k8s/pod.yaml` starts all pods (nginx, weather-api, postgres, ory-kratos + init)
+7. Health checks: `curl` polls nginx `:8080` and weather-api `:5221/weatherforecast` until ready (90 s timeout each)
+
+**E2E suites** — each with `continue-on-error: true` so all run regardless of individual failures:
+8. `shell-e2e` at `BASE_URL=http://localhost:8080` — includes navigation to `/weatheredit-app/` which exercises the Ory auth redirect
+9. `weather-app-e2e` at `BASE_URL=http://localhost:8080/weather-app/`
+10. `weatheredit-app-e2e` at `BASE_URL=http://localhost:8080/weatheredit-app/`
+
+**Teardown & reporting** (`if: always()`):
+11. `npx nx kube-down shell` — stops and removes all pods
+12. `dorny/test-reporter@v1` — publishes JUnit XML as a **GitHub Check Run** (visible in the PR Checks tab); requires `checks: write` permission
+13. `actions/upload-artifact@v4` — uploads all three `playwright-report/` directories as a 30-day artifact
+14. `actions/github-script` — calls `listPullRequestsAssociatedWithCommit` to find the merged PR, then posts a Markdown table comment with per-suite ✅/❌ status and a link to the run
+15. Fail step — exits 1 if any suite outcome is `failure`, so the workflow shows red on the commit
+
+**Permissions required:**
+- `contents: read` — checkout
+- `pull-requests: write` — PR comment
+- `checks: write` — Check Run via `dorny/test-reporter`
+
+### README badge
+
+Added an EKS E2E Tests status badge directly under the `h1` title:
+
+```markdown
+[![EKS E2E Tests](https://github.com/joebarbere/claude-hello-world/actions/workflows/eks-e2e.yml/badge.svg)](https://github.com/joebarbere/claude-hello-world/actions/workflows/eks-e2e.yml)
+```
+
+The badge reflects the latest workflow run on `main` (green = all suites passed, red = any suite failed).
+
+---
+
+## Step 34: Fix CI — Disable Nx Cloud Authorization
+
+**Problem:** Both GitHub Actions workflows (`ci.yml`, `eks-e2e.yml`) were failing immediately with:
+
+```
+NX  Nx Cloud: Workspace is unable to be authorized. Exiting run.
+This workspace is more than three days old and is not connected.
+```
+
+The `nx.json` contains an `nxCloudId` for an unclaimed workspace. Every `nx` command exits 1 before doing any work.
+
+**Fix:** Added `NX_NO_CLOUD: true` as a workflow-level environment variable to both workflows:
+
+```yaml
+env:
+  NX_NO_CLOUD: true
+```
+
+This tells Nx to skip all cloud communication — caching, authorization, and distributed task execution — and run tasks locally inside the runner. No `nx.json` changes were needed; the env var takes precedence at runtime.
+
+**Files changed:**
+- `.github/workflows/ci.yml` — added `env: NX_NO_CLOUD: true` at the workflow level
+- `.github/workflows/eks-e2e.yml` — added `env: NX_NO_CLOUD: true` at the workflow level
+
+---
+
+## Step 35: Optimize E2E CI — Smoke Workflow + Manual Full Suite
+
+**Problem:** `eks-e2e.yml` ran all three Playwright suites on every push to `main`. The full suite — including CRUD create/edit/delete tests in `weatheredit-app-e2e` — was slow and the workflow failed intermittently, blocking merges.
+
+**Fix:** Split the workflow into two:
+
+### `eks-e2e.yml` (renamed: EKS E2E Tests (Smoke))
+
+Runs on push to `main`. Now executes only `shell-e2e`, which covers:
+- Shell host loads (200 status, heading, hero banner)
+- MFE navigation to `/weather-app` and `/weatheredit-app` routes
+- `/weather` API proxy returns JSON
+
+This is enough to confirm all three pods are healthy after a deploy without running the slower CRUD suites.
+
+Reporting scoped to `shell-e2e` only:
+- `dorny/test-reporter` path changed to `apps/shell-e2e/playwright-report/junit.xml`
+- Artifact upload path changed to `apps/shell-e2e/playwright-report/`
+- PR comment updated to show only the shell result and link to the full workflow
+
+### `eks-e2e-full.yml` (new: EKS E2E Tests (Full))
+
+Triggered via `workflow_dispatch` (Actions → Run workflow). Identical build and pod-startup steps, then runs all three suites:
+
+1. `shell-e2e` at `BASE_URL=http://localhost:8080`
+2. `weather-app-e2e` at `BASE_URL=http://localhost:8080/weather-app/`
+3. `weatheredit-app-e2e` at `BASE_URL=http://localhost:8080/weatheredit-app/`
+
+Reports all three suites to a Check Run and uploads all `apps/*/playwright-report/` directories as artifacts.
+
+**Files changed:**
+- `.github/workflows/eks-e2e.yml` — scoped to `shell-e2e` only; updated name, reporting paths, PR comment, and added `npx nx podman-build ory` build step
+- `.github/workflows/eks-e2e-full.yml` — new manual workflow running all three suites; includes Ory build step
+- `README.md` — CI table updated with both workflows
+- `RUN.md` — "CI — EKS E2E Workflow" section expanded to document both workflows
+
+---
+
+## Step 36: Fix — shell-e2e Playwright Config Running Uninstalled Browsers
+
+**Problem:** `shell-e2e/playwright.config.ts` was generated with all three browser projects (`chromium`, `firefox`, `webkit`), unlike `weather-app-e2e` and `weatheredit-app-e2e` which had already been pared down to `chromium` only. CI installs only chromium (`npx playwright install --with-deps chromium`). Webkit is not available on `ubuntu-latest` as a system browser, so all webkit test cases failed immediately with "browser not found", causing `shell-e2e` to report failures on every CI run.
+
+**Fix:** Removed the `firefox` and `webkit` project entries from `apps/shell-e2e/playwright.config.ts`, leaving only `chromium` — consistent with the other two e2e configs.
+
+**Timing impact:** With webkit removed, shell-e2e no longer incurs per-test failure overhead for 9 webkit cases. The smoke workflow now runs only chromium tests, reducing the shell-e2e phase from ~3–4 min to ~1–2 min.
+
+**Files changed:**
+- `apps/shell-e2e/playwright.config.ts` — removed `firefox` and `webkit` project entries
+
+---
+
+## Step 37: CI Performance — Playwright Cache, NuGet Cache, Parallel Health Checks
+
+Applied three independent optimizations to both `eks-e2e.yml` and `eks-e2e-full.yml` to reduce wall-clock time on every run.
+
+### Playwright browser cache
+
+Added `actions/cache@v4` for `~/.cache/ms-playwright` keyed on `runner.os` + `package-lock.json`. Chromium binaries are ~100 MB and were re-downloaded on every run (~1 min). On a cache hit the install step is skipped; only system-level apt dependencies are installed via `npx playwright install-deps chromium` (fast, no download).
+
+### NuGet package cache
+
+Added `actions/cache@v4` for `~/.nuget/packages` keyed on `runner.os` + `apps/weather-api/**/*.csproj`. NuGet packages were re-fetched from nuget.org on every `dotnet build` / `dotnet publish`. Cache is invalidated only when `.csproj` package references change (~1 min saved per run).
+
+### Parallel pod health checks
+
+The nginx `:8080` and weather-api `:5221` health check polls ran sequentially (up to 90 s each back-to-back). Both pods start at the same time, so polling them concurrently halves the worst-case wait. Combined into a single step using shell background jobs + `wait`.
+
+**Estimated savings per run: ~2–3 min** (on top of the ~1–2 min already saved by the webkit fix in Step 36).
+
+**Files changed:**
+- `.github/workflows/eks-e2e.yml` — NuGet cache, Playwright cache, parallel health checks
+- `.github/workflows/eks-e2e-full.yml` — same changes
+
+---
+
+## Step 38: Fix — nginx `location /weather` Matching MFE Routes
+
+**Problem:** The nginx prefix location `location /weather` matched any URI that begins with `/weather`, including `/weather-app` and `/weatheredit-app`. When Playwright (or a browser) navigated directly to `/weather-app`, nginx treated the request as an API proxy call instead of an Angular route:
+
+- `GET /weather-app` → matched `location /weather` → proxied to `http://host.containers.internal:5221/weatherforecast-app` (404 from the weather-api)
+- The shell's `index.html` was never returned, so Angular and module federation never initialised
+- All four MFE navigation smoke tests (`navigates to weather-app`, `navigates to weatheredit-app`, `weather-app route loads`, `weatheredit-app shows New Forecast button`) timed out and failed
+
+**Fix:** Replaced the single `location /weather` prefix block with two more-specific locations:
+
+```nginx
+# Exact match — handles GET /weather (list) and POST /weather (create)
+location = /weather {
+  proxy_pass http://host.containers.internal:5221/weatherforecast;
+  ...
+}
+
+# Sub-path match — handles GET/PUT/DELETE /weather/{id}
+# ^~ prevents regex fallthrough; /weather/ as a prefix does NOT match /weather-app/ or /weatheredit-app/
+location ^~ /weather/ {
+  proxy_pass http://host.containers.internal:5221/weatherforecast/;
+  ...
+}
+```
+
+With these locations, a request to `/weather-app` matches neither `= /weather` nor `^~ /weather/` (the latter requires a literal `/` immediately after `weather`). It falls through to `location /` which serves the shell's `index.html` via `try_files`, letting Angular's router handle the client-side navigation to the MFE remote.
+
+**Files changed:**
+- `nginx/nginx.conf` — split `location /weather` into `location = /weather` and `location ^~ /weather/`
+
+---
+
 ## Final Verification
 
 ### Individual container workflow
@@ -768,6 +1085,7 @@ ASP.NET Core's configuration system treats `__` as a hierarchy separator in envi
 npx nx podman-build shell          # builds nginx MFE image (claude-hello-world)
 npx nx podman-build weather-api    # builds .NET API image
 npx nx podman-build postgres       # builds PostgreSQL image
+npx nx podman-build ory            # builds ory-kratos and ory-kratos-init images
 
 # Run individually
 npx nx podman-up shell             # → http://localhost:8080 (Angular MFE)
@@ -778,26 +1096,36 @@ npx nx podman-down shell
 npx nx podman-down weather-api
 ```
 
-### Kubernetes workflow (all three containers together)
+### Kubernetes workflow (all containers together)
 
 ```bash
-# Build images (postgres image built automatically by dependsOn)
+# Build images (postgres image built automatically via dependsOn)
 npx nx podman-build shell
 npx nx podman-build weather-api
+npx nx podman-build ory
 
 # Start all pods
 npx nx kube-up shell
 
 # Verify
-curl http://localhost:8080              # Angular shell
-curl http://localhost:8080/weather-app/       # weather-app remote (weather table)
-curl http://localhost:8080/weather      # nginx → weather-api proxy
-curl http://localhost:5221/weatherforecast  # weather-api direct
-psql -h localhost -p 5432 -U appuser -d appdb  # PostgreSQL
+curl http://localhost:8080                    # Angular shell
+curl http://localhost:8080/weather-app/       # weather-app remote (public)
+curl http://localhost:8080/weatheredit-app/   # weatheredit-app (redirects to login)
+curl http://localhost:8080/weather            # nginx → weather-api proxy (GET, public)
+curl http://localhost:5221/weatherforecast    # weather-api direct
+curl http://localhost:4433/health/ready       # Kratos public health check
+psql -h localhost -p 5432 -U appuser -d appdb # PostgreSQL
 
 # Stop all pods
 npx nx kube-down shell
 ```
+
+### Authentication
+
+| User | Email | Password | Role | Access |
+|------|-------|----------|------|--------|
+| Admin | `admin@example.com` | `Admin1234!` | `admin` | weatheredit-app + all API writes |
+| Weather Admin | `weatheradmin@example.com` | `WeatherAdmin1234!` | `weather_admin` | weatheredit-app + all API writes |
 
 ### Weather API repository selection
 
@@ -816,20 +1144,22 @@ Change `"Repository"` in `apps/weather-api/appsettings.json`:
 | `Containerfile.nginx` | `node:20-alpine` → `nginx:alpine` | Angular MFE (shell + weather-app + weatheredit-app) |
 | `apps/weather-api/Containerfile` | `dotnet/sdk:9.0-alpine` → `dotnet/aspnet:9.0-alpine` | .NET Weather API |
 | `apps/postgres/Containerfile` | `postgres:17-alpine` | PostgreSQL database |
+| `apps/ory/Containerfile` | `oryd/kratos:v1.3.0-distroless` | Ory Kratos identity server |
+| `apps/ory/Containerfile.init` | `alpine:3.21` | One-shot user seeding container |
 
 ---
 
-## Step 32: Playwright E2E Test Suites for EKS Pods
+## Step 39: Playwright E2E Test Suites for EKS Pods
 
-Added dedicated Playwright e2e specs that target the apps as they run inside the EKS pods (via the nginx container on `:8080`), rather than the local dev servers.
+Added dedicated Playwright e2e specs that target the apps as they run inside the EKS pods (via the nginx container on `:8080`), rather than the local dev servers. Auth-aware: `weatheredit-app-e2e` logs in via Ory Kratos before running CRUD tests; `shell-e2e` verifies the auth redirect to `/auth/login` when navigating to `/weatheredit-app` without a session.
 
 ### Playwright config changes (all three e2e projects)
 
 | Change | Detail |
 |--------|--------|
-| Default `BASE_URL` | Changed to the nginx pod paths: `http://localhost:8080`, `/weather-app/`, `/weatheredit-app/` |
-| `webServer` conditional | `webServer` block only starts when `BASE_URL` is **not** set, so dev-server startup is skipped automatically when pointing at a live pod |
-| CI reporters | When `CI=true`, emits `['github', 'html', 'junit']` — GitHub annotations, an HTML report, and JUnit XML consumed by `dorny/test-reporter` |
+| Default `BASE_URL` | `http://localhost:8080`, `/weather-app/`, `/weatheredit-app/` |
+| `webServer` conditional | Block only starts when `BASE_URL` is **not** set |
+| CI reporters | When `CI=true`, emits `['github', 'html', 'junit']` |
 
 ### New test files
 
@@ -838,7 +1168,7 @@ Added dedicated Playwright e2e specs that target the apps as they run inside the
 | Suite | Tests |
 |-------|-------|
 | Home page | Loads with "Welcome shell" heading; hero banner visible; HTTP 200 |
-| MFE navigation | `/weather-app` renders "Weather Forecast" h2; `/weatheredit-app` renders "Weather Forecasts" h1; loading state or table visible |
+| MFE navigation | `/weather-app` renders "Weather Forecast" h2; `/weatheredit-app` redirects to `/auth/login` (Ory auth guard); login form fields visible |
 | API proxy | `GET /weather` returns HTTP 200 with a JSON array |
 
 **`apps/weather-app-e2e/src/eks.spec.ts`**
@@ -850,9 +1180,11 @@ Added dedicated Playwright e2e specs that target the apps as they run inside the
 
 **`apps/weatheredit-app-e2e/src/eks.spec.ts`**
 
+All tests include a `beforeEach` that navigates to `/` and logs in via the Ory Kratos browser flow (`admin@example.com` / `Admin1234!`) if redirected to `/auth/login`.
+
 | Suite | Tests |
 |-------|-------|
-| Page load | HTTP 200; "Weather Forecasts" h1; loading state or card visible; "New Forecast" button |
+| Page load | Lands on weatheredit-app after login; heading visible |
 | Forecast table | Table or empty-state visible; column headers validated when data exists |
 | Create | Form opens; cancel works; submit creates row in table |
 | Edit | Opens prefilled form; update changes the row |

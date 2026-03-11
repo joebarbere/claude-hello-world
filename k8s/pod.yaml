@@ -30,6 +30,8 @@ spec:
       env:
         - name: ConnectionStrings__DefaultConnection
           value: Host=host.containers.internal;Port=5432;Database=appdb;Username=appuser;Password=apppassword
+        - name: OryKratosPublicUrl
+          value: http://host.containers.internal:4433
 
 ---
 
@@ -53,3 +55,32 @@ spec:
           value: appuser
         - name: POSTGRES_PASSWORD
           value: apppassword
+
+---
+
+apiVersion: v1
+kind: Pod
+metadata:
+  name: ory-kratos
+  labels:
+    app: ory-kratos
+spec:
+  initContainers:
+    - name: ory-kratos-init
+      image: localhost/ory-kratos-init:latest
+      env:
+        - name: KRATOS_ADMIN_URL
+          value: http://host.containers.internal:4434
+  containers:
+    - name: ory-kratos
+      image: localhost/ory-kratos:latest
+      ports:
+        - containerPort: 4433
+          hostPort: 4433
+        - containerPort: 4434
+          hostPort: 4434
+      env:
+        - name: DSN
+          value: sqlite:///var/lib/kratos/db.sqlite?_fk=true
+        - name: OryKratosPublicUrl
+          value: http://host.containers.internal:4433
