@@ -1656,6 +1656,50 @@ timeout 90 bash -c \
 
 ---
 
+## Step 52: Fix — Health-Check Still Timing Out at 90 s; Raise to 180 s and Add Per-Service Diagnostics
+
+The smoke-test CI run continued to fail at the "Wait for pods to be healthy" step with **exit code 124** after PR #20 restored the timeout to 90 s.
+
+**Root cause:**
+
+Container startup on a loaded GitHub Actions runner — image extraction, cgroup setup, Go binary initialisation — consistently takes 90–150 s even with the in-memory Kratos DSN. The 90 s timeout matched the *average* case but not the *worst* case observed on busy CI workers.
+
+Additionally, the original `wait $P1 && wait $P2 && wait $P3` pattern short-circuits on the first failure, so it was impossible to tell from the logs *which* service had timed out.
+
+**Fix:**
+
+1. **Raise all three poll timeouts from 90 s → 180 s** — gives even the slowest runners a 3-minute window, well above the observed 90–150 s worst case.
+2. **Accumulate per-service exit codes** so every timeout is reported before the step fails:
+
+```yaml
+# Before (Steps 49–51 — single-timeout, silent about which service failed)
+timeout 90 bash -c 'until curl -sfk https://localhost:8443/ ...' &
+P1=$!
+timeout 90 bash -c 'until curl -sf http://localhost:5221/weatherforecast ...' &
+P2=$!
+timeout 90 bash -c 'until curl -sf http://localhost:4433/health/ready ...' &
+P3=$!
+wait $P1 && wait $P2 && wait $P3
+
+# After (Step 52 — 180 s, per-service diagnosis)
+timeout 180 bash -c 'until curl -sfk https://localhost:8443/ ...' &
+P1=$!
+timeout 180 bash -c 'until curl -sf http://localhost:5221/weatherforecast ...' &
+P2=$!
+timeout 180 bash -c 'until curl -sf http://localhost:4433/health/ready ...' &
+P3=$!
+RC=0
+wait $P1; RC1=$?; [ $RC1 -ne 0 ] && echo "ERROR: nginx timed out (exit $RC1)" && RC=1 || echo "nginx ready"
+wait $P2; RC2=$?; [ $RC2 -ne 0 ] && echo "ERROR: weather-api timed out (exit $RC2)" && RC=1 || echo "weather-api ready"
+wait $P3; RC3=$?; [ $RC3 -ne 0 ] && echo "ERROR: ory-kratos timed out (exit $RC3)" && RC=1 || echo "ory-kratos ready"
+[ $RC -eq 0 ] && echo "All pods ready" || exit 1
+```
+
+**Files changed:**
+- `.github/workflows/eks-e2e.yml` — all three health-check timeouts raised from 90 s to 180 s; per-service RC accumulation added for diagnostics
+
+---
+
 ## Final Verification
 
 ### Individual container workflow
