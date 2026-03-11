@@ -90,10 +90,13 @@ jobs:
       - name: Start EKS pods (podman play kube)
         run: npx nx kube-up shell
 
-      # Poll both pods concurrently to cut wait time when both are slow to start.
+      # Poll all pods concurrently to cut wait time when all are slow to start.
       # nginx redirects HTTP→HTTPS so we probe the HTTPS port (8443) with -k to
-      # skip the self-signed cert check. Capture each PID so we can propagate
-      # failures: if either timeout expires the step (and the workflow) fails.
+      # skip the self-signed cert check. Kratos is probed directly on its own
+      # port (4433) rather than via the nginx proxy to avoid adding a dependency
+      # on nginx being ready first; SQLite migrations mean Kratos can take up to
+      # ~2 minutes to initialise on cold CI runners. Capture each PID so we can
+      # propagate failures: if any timeout expires the step (and the workflow) fails.
       - name: Wait for pods to be healthy
         run: |
           timeout 90 bash -c \
@@ -102,8 +105,8 @@ jobs:
           timeout 90 bash -c \
             'until curl -sf http://localhost:5221/weatherforecast > /dev/null 2>&1; do sleep 3; done' &
           P2=$!
-          timeout 90 bash -c \
-            'until curl -sfk https://localhost:8443/.ory/kratos/public/health/ready > /dev/null 2>&1; do sleep 3; done' &
+          timeout 120 bash -c \
+            'until curl -sf http://localhost:4433/health/ready > /dev/null 2>&1; do sleep 3; done' &
           P3=$!
           wait $P1 && wait $P2 && wait $P3
           echo "All pods ready"

@@ -1544,6 +1544,44 @@ wait $P1 && wait $P2 && wait $P3
 
 ---
 
+## Step 49: Fix — Kratos Health Check Timing Out in E2E Smoke CI
+
+The "Wait for pods to be healthy" step added in Step 48 timed out with **exit code 124**, causing the smoke-test workflow to fail before any Playwright tests ran.
+
+**Root cause:**
+
+The health probe added in Step 48 routed through the nginx proxy:
+
+```bash
+curl -sfk https://localhost:8443/.ory/kratos/public/health/ready
+```
+
+This created two compounding problems:
+
+1. **Nginx dependency** — the probe depended on nginx being ready before it could even reach Kratos. Both were probed in parallel, so a race condition existed.
+2. **90-second timeout too tight** — Kratos uses SQLite and runs schema migrations on first start. On cold GitHub Actions runners this can take well over 90 seconds, but the timeout matched the other two checks which complete in seconds.
+
+**Fix:**
+
+Probe Kratos directly on its own port (4433, already exposed as `hostPort` in `k8s/pod.yaml`) and raise the timeout to 120 s:
+
+```bash
+# Before (Step 48 — timed out)
+timeout 90 bash -c \
+  'until curl -sfk https://localhost:8443/.ory/kratos/public/health/ready > /dev/null 2>&1; do sleep 3; done' &
+
+# After (Step 49 — direct probe, longer timeout)
+timeout 120 bash -c \
+  'until curl -sf http://localhost:4433/health/ready > /dev/null 2>&1; do sleep 3; done' &
+```
+
+Probing directly at `http://localhost:4433/health/ready` avoids the nginx hop and accurately measures whether Kratos itself is ready, independent of any proxy configuration.
+
+**Files changed:**
+- `.github/workflows/eks-e2e.yml`
+
+---
+
 ## Final Verification
 
 ### Individual container workflow
