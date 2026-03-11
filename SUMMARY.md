@@ -1611,10 +1611,13 @@ Switch the Kratos DSN to `memory` in `k8s/pod.yaml`:
   value: memory
 ```
 
-The `memory` DSN uses Ory Kratos's built-in in-memory store (no file I/O, no migrations), so Kratos becomes healthy in seconds. The `ory-kratos-init` sidecar still creates test identities in the in-memory store, which is sufficient for the smoke tests (the tests only verify that the auth redirect flow fires, not that specific users exist). The 120 s health-check timeout is now ample headroom.
+The `memory` DSN uses Ory Kratos's built-in in-memory store (no file I/O, no migrations), so Kratos becomes healthy in seconds. The `ory-kratos-init` sidecar still creates test identities in the in-memory store, which is sufficient for the smoke tests (the tests only verify that the auth redirect flow fires, not that specific users exist). The Kratos health-check timeout in the CI workflow was also reduced from 120 s to 30 s now that startup is near-instant.
 
 **Files changed:**
-- `k8s/pod.yaml`
+- `k8s/pod.yaml` — DSN env var switched to `memory`
+- `apps/ory/kratos.yml` — `dsn:` field synced to `memory` (was overridden at runtime by the env var; updated for consistency)
+- `.github/workflows/eks-e2e.yml` — Kratos health-check timeout reduced from 120 s to 30 s; stale comment about SQLite migrations updated
+- `README.md` — security disclaimer and architecture diagram updated to reflect the in-memory store
 
 ---
 

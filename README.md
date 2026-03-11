@@ -46,9 +46,9 @@
 
 - The self-signed certificate in `ssl/localhost.crt` is not issued by any trusted CA. Browsers will reject it unless users manually install and trust it. No certificate rotation or expiry monitoring is in place.
 
-### SQLite as the Kratos identity store
+### In-memory Kratos identity store
 
-- Kratos is configured with `dsn: sqlite:///var/lib/kratos/db.sqlite?_fk=true`. SQLite is a local file with no replication, no backups, no concurrent-write safety for distributed deployments, and no access control beyond OS file permissions. All identity data is lost when the container is removed.
+- Kratos is configured with `dsn: memory`. All identity and session data exists only in the Kratos process's memory. Data is lost on every container restart, making this configuration unsuitable for any environment where user accounts need to persist.
 
 ### No rate limiting or brute-force protection on the login endpoint
 
@@ -90,7 +90,7 @@ weather-api (.NET 9, :5220 dev / :5221 container)
   └── POST/PUT/DELETE endpoints — restricted to admin and weather_admin roles
 
 Ory Kratos (identity, :4433 public / :4434 admin)
-  └── SQLite-backed user store with role-based access
+  └── In-memory user store with role-based access (seeded on start by ory-kratos-init)
 
 PostgreSQL 17 (:5432)
 ```
