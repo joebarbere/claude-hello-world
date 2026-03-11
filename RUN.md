@@ -364,22 +364,36 @@ npx nx kube-down shell
 
 ---
 
-## CI — EKS E2E Workflow
+## CI — EKS E2E Workflows
 
-The `eks-e2e.yml` GitHub Actions workflow runs automatically on every merge to `main`. It:
+Two workflows cover EKS E2E testing at different levels of coverage.
+
+### Smoke workflow (automatic)
+
+`eks-e2e.yml` runs on every push to `main` (i.e., every merged PR). It runs only the `shell-e2e` suite, which is enough to confirm all three pods are healthy:
 
 1. Builds all three container images (nginx, weather-api, postgres) inside the runner
 2. Starts the EKS pods with `podman play kube`
 3. Waits for the nginx and weather-api pods to pass health checks
-4. Runs all three Playwright suites against `http://localhost:8080`
+4. Runs `shell-e2e` only — verifies the shell host, MFE navigation to `/weather-app` and `/weatheredit-app`, and the `/weather` API proxy
 5. Stops the pods
 6. Publishes JUnit XML as a GitHub Check Run (`dorny/test-reporter`)
-7. Uploads HTML reports as 30-day artifacts
-8. Posts a per-suite pass/fail summary comment on the merged PR
-
-To trigger manually or inspect runs:
+7. Uploads the `shell-e2e` HTML report as a 30-day artifact
+8. Posts a pass/fail comment on the merged PR with a link to the full workflow
 
 ```bash
-gh workflow run eks-e2e.yml --repo joebarbere/claude-hello-world
 gh run list --workflow=eks-e2e.yml --repo joebarbere/claude-hello-world
+```
+
+### Full workflow (manual)
+
+`eks-e2e-full.yml` runs on demand via `workflow_dispatch`. It runs all three Playwright suites for full CRUD coverage:
+
+1. Same build and pod-startup steps as the smoke workflow
+2. Runs `shell-e2e`, `weather-app-e2e`, and `weatheredit-app-e2e` in sequence
+3. Same teardown and reporting (Check Run + artifact upload for all three suites)
+
+```bash
+gh workflow run eks-e2e-full.yml --repo joebarbere/claude-hello-world
+gh run list --workflow=eks-e2e-full.yml --repo joebarbere/claude-hello-world
 ```

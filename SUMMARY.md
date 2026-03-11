@@ -929,3 +929,78 @@ This tells Nx to skip all cloud communication — caching, authorization, and di
 **Files changed:**
 - `.github/workflows/ci.yml` — added `env: NX_NO_CLOUD: true` at the workflow level
 - `.github/workflows/eks-e2e.yml` — added `env: NX_NO_CLOUD: true` at the workflow level
+
+---
+
+## Step 35: Optimize E2E CI — Smoke Workflow + Manual Full Suite
+
+**Problem:** `eks-e2e.yml` ran all three Playwright suites on every push to `main`. The full suite — including CRUD create/edit/delete tests in `weatheredit-app-e2e` — was slow and the workflow failed intermittently, blocking merges.
+
+**Fix:** Split the workflow into two:
+
+### `eks-e2e.yml` (renamed: EKS E2E Tests (Smoke))
+
+Runs on push to `main`. Now executes only `shell-e2e`, which covers:
+- Shell host loads (200 status, heading, hero banner)
+- MFE navigation to `/weather-app` and `/weatheredit-app` routes
+- `/weather` API proxy returns JSON
+
+This is enough to confirm all three pods are healthy after a deploy without running the slower CRUD suites.
+
+Reporting scoped to `shell-e2e` only:
+- `dorny/test-reporter` path changed to `apps/shell-e2e/playwright-report/junit.xml`
+- Artifact upload path changed to `apps/shell-e2e/playwright-report/`
+- PR comment updated to show only the shell result and link to the full workflow
+
+### `eks-e2e-full.yml` (new: EKS E2E Tests (Full))
+
+Triggered via `workflow_dispatch` (Actions → Run workflow). Identical build and pod-startup steps, then runs all three suites:
+
+1. `shell-e2e` at `BASE_URL=http://localhost:8080`
+2. `weather-app-e2e` at `BASE_URL=http://localhost:8080/weather-app/`
+3. `weatheredit-app-e2e` at `BASE_URL=http://localhost:8080/weatheredit-app/`
+
+Reports all three suites to a Check Run and uploads all `apps/*/playwright-report/` directories as artifacts.
+
+**Files changed:**
+- `.github/workflows/eks-e2e.yml` — scoped to `shell-e2e` only; updated name, reporting paths, and PR comment
+- `.github/workflows/eks-e2e-full.yml` — new manual workflow running all three suites
+- `README.md` — CI table updated with both workflows
+- `RUN.md` — "CI — EKS E2E Workflow" section expanded to document both workflows
+
+---
+
+## Step 36: Fix — shell-e2e Playwright Config Running Uninstalled Browsers
+
+**Problem:** `shell-e2e/playwright.config.ts` was generated with all three browser projects (`chromium`, `firefox`, `webkit`), unlike `weather-app-e2e` and `weather-app-e2e` which had already been pared down to `chromium` only. CI installs only chromium (`npx playwright install --with-deps chromium`). Webkit is not available on `ubuntu-latest` as a system browser, so all webkit test cases failed immediately with "browser not found", causing `shell-e2e` to report failures on every CI run.
+
+**Fix:** Removed the `firefox` and `webkit` project entries from `apps/shell-e2e/playwright.config.ts`, leaving only `chromium` — consistent with the other two e2e configs.
+
+**Timing impact:** With webkit removed, shell-e2e no longer incurs per-test failure overhead for 9 webkit cases. The smoke workflow now runs only chromium tests, reducing the shell-e2e phase from ~3–4 min to ~1–2 min.
+
+**Files changed:**
+- `apps/shell-e2e/playwright.config.ts` — removed `firefox` and `webkit` project entries
+
+---
+
+## Step 37: CI Performance — Playwright Cache, NuGet Cache, Parallel Health Checks
+
+Applied three independent optimizations to both `eks-e2e.yml` and `eks-e2e-full.yml` to reduce wall-clock time on every run.
+
+### Playwright browser cache
+
+Added `actions/cache@v4` for `~/.cache/ms-playwright` keyed on `runner.os` + `package-lock.json`. Chromium binaries are ~100 MB and were re-downloaded on every run (~1 min). On a cache hit the install step is skipped; only system-level apt dependencies are installed via `npx playwright install-deps chromium` (fast, no download).
+
+### NuGet package cache
+
+Added `actions/cache@v4` for `~/.nuget/packages` keyed on `runner.os` + `apps/weather-api/**/*.csproj`. NuGet packages were re-fetched from nuget.org on every `dotnet build` / `dotnet publish`. Cache is invalidated only when `.csproj` package references change (~1 min saved per run).
+
+### Parallel pod health checks
+
+The nginx `:8080` and weather-api `:5221` health check polls ran sequentially (up to 90 s each back-to-back). Both pods start at the same time, so polling them concurrently halves the worst-case wait. Combined into a single step using shell background jobs + `wait`.
+
+**Estimated savings per run: ~2–3 min** (on top of the ~1–2 min already saved by the webkit fix in Step 36).
+
+**Files changed:**
+- `.github/workflows/eks-e2e.yml` — NuGet cache, Playwright cache, parallel health checks
+- `.github/workflows/eks-e2e-full.yml` — same changes

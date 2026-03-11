@@ -153,7 +153,8 @@ BASE_URL=http://<eks-node>:8080/weatheredit-app/   npx nx run weatheredit-app-e2
 | Workflow | Trigger | What it does |
 |----------|---------|--------------|
 | **CI** (`.github/workflows/ci.yml`) | push / PR | Lint + production build for all Angular apps |
-| **EKS E2E Tests** (`.github/workflows/eks-e2e.yml`) | push to `main` | Builds all container images, starts EKS pods, runs all three Playwright suites, posts a pass/fail comment on the merged PR, uploads HTML reports as artifacts |
+| **EKS E2E Tests (Smoke)** (`.github/workflows/eks-e2e.yml`) | push to `main` | Builds all container images, starts EKS pods, runs `shell-e2e` only (verifies shell host, MFE navigation, and `/weather` API proxy), posts a result comment on the merged PR |
+| **EKS E2E Tests (Full)** (`.github/workflows/eks-e2e-full.yml`) | manual (`workflow_dispatch`) | Same pod setup, but runs all three Playwright suites including full CRUD coverage for `weather-app-e2e` and `weatheredit-app-e2e` |
 
 In CI, each Playwright config emits:
 - **GitHub annotations** — inline pass/fail markers on the diff
