@@ -1936,11 +1936,51 @@ error=map[message:could not create new connection: sqlite3 support was not compi
 
 2. **`k8s/pod.yaml`** – Changed `DSN: memory` env var on the `ory-kratos` container to the same PostgreSQL DSN (env var overrides config file).
 
-3. **`apps/ory/Containerfile`** – Added `--automigrate` to the `kratos serve` CMD so Kratos automatically applies PostgreSQL schema migrations on startup (required when using a real DB backend):
+3. **`apps/ory/Containerfile`** – Removed `--automigrate` from the `kratos serve` CMD (flag was removed in Kratos v1.3.0; migrations are now run separately via an init container):
    ```
-   CMD ["serve", "--config", "/etc/config/kratos/kratos.yml", "--dev", "--automigrate", "--watch-courier"]
+   CMD ["serve", "--config", "/etc/config/kratos/kratos.yml", "--dev", "--watch-courier"]
    ```
 
-**Result:** Kratos connects to PostgreSQL, runs migrations, starts serving on ports 4433/4434, and the init container successfully seeds test users.
+4. **`k8s/pod.yaml`** – Added a `kratos-migrate` init container to the `ory-kratos` pod. It runs `kratos migrate sql --yes` before the main `ory-kratos` container starts, applying all pending PostgreSQL schema migrations:
+   ```yaml
+   initContainers:
+     - name: kratos-migrate
+       image: localhost/ory-kratos:latest
+       args: ["migrate", "sql", "--yes", "-c", "/etc/config/kratos/kratos.yml"]
+       env:
+         - name: DSN
+           value: postgres://appuser:apppassword@host.containers.internal:5432/appdb?sslmode=disable
+   ```
 
-4. **`k8s/pod.yaml`** – Reordered pod specs to reflect dependency order: `postgres` → `ory-kratos` → `weather-api` → `claude-hello-world` (nginx).
+**Result:** Kratos connects to PostgreSQL, runs migrations via the init container, then starts serving on ports 4433/4434, and the init sidecar successfully seeds test users.
+
+5. **`k8s/pod.yaml`** – Reordered pod specs to reflect dependency order: `postgres` → `ory-kratos` → `weather-api` → `claude-hello-world` (nginx).
+
+## Fix: Remove unsupported `--automigrate` flag (2026-03-12)
+
+**Problem:** E2E smoke tests failed because Kratos v1.3.0 removed the `--automigrate` flag from `kratos serve`. The container exited immediately with:
+```
+Error: unknown flag: --automigrate
+```
+
+**Root cause:** A previous fix added `--automigrate` to the `kratos serve` CMD to handle PostgreSQL schema migrations on startup. This flag no longer exists in Kratos v1.3.0.
+
+**Changes made:**
+
+1. **`apps/ory/Containerfile`** – Removed `--automigrate` from the `kratos serve` CMD:
+   ```
+   CMD ["serve", "--config", "/etc/config/kratos/kratos.yml", "--dev", "--watch-courier"]
+   ```
+
+2. **`k8s/pod.yaml`** – Added a `kratos-migrate` init container to the `ory-kratos` pod that runs `kratos migrate sql --yes` before the main server starts. Init containers complete successfully before any regular containers are started, ensuring migrations are applied before Kratos serves traffic:
+   ```yaml
+   initContainers:
+     - name: kratos-migrate
+       image: localhost/ory-kratos:latest
+       args: ["migrate", "sql", "--yes", "-c", "/etc/config/kratos/kratos.yml"]
+       env:
+         - name: DSN
+           value: postgres://appuser:apppassword@host.containers.internal:5432/appdb?sslmode=disable
+   ```
+
+**Result:** Kratos migrations run cleanly via the init container before the server starts, and `kratos serve` no longer fails with an unknown flag error.
