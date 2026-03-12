@@ -1942,3 +1942,5 @@ error=map[message:could not create new connection: sqlite3 support was not compi
    ```
 
 **Result:** Kratos connects to PostgreSQL, runs migrations, starts serving on ports 4433/4434, and the init container successfully seeds test users.
+
+4. **`k8s/pod.yaml`** – Reordered pod specs to reflect dependency order: `postgres` → `ory-kratos` → `weather-api` → `claude-hello-world` (nginx).
