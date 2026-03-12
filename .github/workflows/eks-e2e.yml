@@ -214,6 +214,17 @@ jobs:
           BASE_URL: https://localhost:8443
         run: npx nx run shell-e2e:e2e
 
+      # Dump Kratos logs when e2e tests fail (containers still running at this point).
+      # The earlier "Dump pod logs on health-check failure" step only fires when the
+      # health-check step itself fails; this one fires when the e2e step fails.
+      - name: Dump Kratos logs on e2e failure
+        if: failure()
+        run: |
+          echo "=== ory-kratos logs (captured after e2e failure) ==="
+          podman logs ory-kratos-ory-kratos 2>&1 || true
+          echo "=== ory-kratos-init logs ==="
+          podman logs ory-kratos-ory-kratos-init 2>&1 || true
+
       # ── Teardown (always runs) ───────────────────────────────────────────────
       - name: Stop EKS pods
         if: always()
