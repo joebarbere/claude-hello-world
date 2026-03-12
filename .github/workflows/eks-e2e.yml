@@ -98,6 +98,17 @@ jobs:
           podman pod ps
           echo "=== podman ps -a ==="
           podman ps -a
+          echo "=== container state & exit codes ==="
+          for c in claude-hello-world-nginx weather-api-weather-api \
+                   ory-kratos-ory-kratos ory-kratos-ory-kratos-init \
+                   postgres-postgres; do
+            echo "--- $c ---"
+            podman inspect --format \
+              'status={{.State.Status}} exit={{.State.ExitCode}} error="{{.State.Error}}"' \
+              "$c" 2>/dev/null || echo "(not found)"
+          done
+          echo "=== listening ports ==="
+          ss -tlnp || true
 
       # Poll all pods concurrently to cut wait time when all are slow to start.
       # nginx redirects HTTP→HTTPS so we probe the HTTPS port (8443) with -k to
@@ -111,14 +122,26 @@ jobs:
       # before the step fails — makes it clear which service(s) were the bottleneck.
       - name: Wait for pods to be healthy
         run: |
-          timeout 300 bash -c \
-            'until curl -sfk https://localhost:8443/ > /dev/null 2>&1; do sleep 3; done' &
+          timeout 300 bash -c '
+            i=0
+            until curl -sfk https://localhost:8443/ > /dev/null 2>&1; do
+              i=$((i+1)); echo "[$(date +%T)] nginx not ready yet (attempt $i)"; sleep 3
+            done
+            echo "[$(date +%T)] nginx ready after attempt $i"' &
           P1=$!
-          timeout 300 bash -c \
-            'until curl -sf http://localhost:5221/weatherforecast > /dev/null 2>&1; do sleep 3; done' &
+          timeout 300 bash -c '
+            i=0
+            until curl -sf http://localhost:5221/weatherforecast > /dev/null 2>&1; do
+              i=$((i+1)); echo "[$(date +%T)] weather-api not ready yet (attempt $i)"; sleep 3
+            done
+            echo "[$(date +%T)] weather-api ready after attempt $i"' &
           P2=$!
-          timeout 300 bash -c \
-            'until curl -sf http://localhost:4433/health/ready > /dev/null 2>&1; do sleep 3; done' &
+          timeout 300 bash -c '
+            i=0
+            until curl -sf http://localhost:4433/health/ready > /dev/null 2>&1; do
+              i=$((i+1)); echo "[$(date +%T)] ory-kratos not ready yet (attempt $i)"; sleep 3
+            done
+            echo "[$(date +%T)] ory-kratos ready after attempt $i"' &
           P3=$!
           RC=0
           wait $P1; RC1=$?; [ $RC1 -ne 0 ] && echo "ERROR: nginx timed out (exit $RC1)" && RC=1 || echo "nginx ready"
@@ -133,10 +156,40 @@ jobs:
         run: |
           echo "=== podman ps -a ==="
           podman ps -a || true
+
+          echo ""
+          echo "=== container state & exit codes ==="
+          for c in claude-hello-world-nginx weather-api-weather-api \
+                   ory-kratos-ory-kratos ory-kratos-ory-kratos-init \
+                   postgres-postgres; do
+            echo "--- $c ---"
+            podman inspect --format \
+              'status={{.State.Status}} exit={{.State.ExitCode}} error="{{.State.Error}}"' \
+              "$c" 2>/dev/null || echo "(not found)"
+          done
+
+          echo ""
+          echo "=== listening ports (ss -tlnp) ==="
+          ss -tlnp || true
+
+          echo ""
+          echo "=== curl probes (verbose) ==="
+          echo "-- nginx (HTTPS 8443) --"
+          curl -vk https://localhost:8443/ 2>&1 || true
+          echo "-- weather-api (HTTP 5221) --"
+          curl -v http://localhost:5221/weatherforecast 2>&1 || true
+          echo "-- kratos public health (HTTP 4433) --"
+          curl -v http://localhost:4433/health/ready 2>&1 || true
+          echo "-- kratos admin health (HTTP 4434) --"
+          curl -v http://localhost:4434/health/ready 2>&1 || true
+
+          echo ""
           echo "=== nginx logs ==="
           podman logs claude-hello-world-nginx 2>&1 || true
           echo "=== weather-api logs ==="
           podman logs weather-api-weather-api 2>&1 || true
+          echo "=== postgres logs ==="
+          podman logs postgres-postgres 2>&1 || true
           echo "=== ory-kratos logs ==="
           podman logs ory-kratos-ory-kratos 2>&1 || true
           echo "=== ory-kratos-init logs ==="
