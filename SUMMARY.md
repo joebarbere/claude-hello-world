@@ -1918,61 +1918,49 @@ Change `"Repository"` in `apps/weather-api/appsettings.json`:
 | `apps/ory/Containerfile` | `oryd/kratos:v1.3.0-distroless` | Ory Kratos identity server |
 | `apps/ory/Containerfile.init` | `alpine:3.21` | One-shot user seeding sidecar |
 
-## Fix: Kratos SQLite3 / DSN issue (2026-03-12)
+## Step 56: Fix — Kratos DSN Switched from Memory to PostgreSQL
 
-**Problem:** `oryd/kratos:v1.3.0-distroless` does not include SQLite3 support. The `dsn: memory` setting (and `DSN=memory` env var) requires SQLite3 internally, causing Kratos to repeatedly fail to connect to its database. This prevented Kratos from ever becoming ready, so health checks on ports 4433/4434 returned "Connection reset by peer" and the init sidecar looped until timeout.
+The e2e smoke tests continued to fail because `oryd/kratos:v1.3.0-distroless` does not include SQLite3 support. The `dsn: memory` setting (and `DSN=memory` env var) requires SQLite3 internally, causing Kratos to repeatedly fail to connect to its database. Ports 4433/4434 never became ready, so the init sidecar looped until timeout.
 
 **Root cause log evidence:**
+
 ```
 error=map[message:could not create new connection: sqlite3 support was not compiled into the binary]
 ```
 
-**Changes made:**
+**Fix:**
 
-1. **`apps/ory/kratos.yml`** – Changed `dsn: memory` → PostgreSQL DSN pointing at the existing `appdb` database:
-   ```
+1. **`apps/ory/kratos.yml`** — changed `dsn: memory` → PostgreSQL DSN pointing at the existing `appdb` database:
+   ```yaml
    dsn: postgres://appuser:apppassword@host.containers.internal:5432/appdb?sslmode=disable
    ```
 
-2. **`k8s/pod.yaml`** – Changed `DSN: memory` env var on the `ory-kratos` container to the same PostgreSQL DSN (env var overrides config file).
+2. **`k8s/pod.yaml`** — changed `DSN: memory` env var on the `ory-kratos` container to the same PostgreSQL DSN (env var overrides config file).
 
-3. **`apps/ory/Containerfile`** – Removed `--automigrate` from the `kratos serve` CMD (flag was removed in Kratos v1.3.0; migrations are now run separately via an init container):
-   ```
-   CMD ["serve", "--config", "/etc/config/kratos/kratos.yml", "--dev", "--watch-courier"]
-   ```
+3. **`k8s/pod.yaml`** — reordered pod specs to reflect dependency order: `postgres` → `ory-kratos` → `weather-api` → `claude-hello-world` (nginx). This makes the manifest easier to read and mirrors the actual startup dependency chain.
 
-4. **`k8s/pod.yaml`** – Added a `kratos-migrate` init container to the `ory-kratos` pod. It runs `kratos migrate sql --yes` before the main `ory-kratos` container starts, applying all pending PostgreSQL schema migrations:
-   ```yaml
-   initContainers:
-     - name: kratos-migrate
-       image: localhost/ory-kratos:latest
-       args: ["migrate", "sql", "--yes", "-c", "/etc/config/kratos/kratos.yml"]
-       env:
-         - name: DSN
-           value: postgres://appuser:apppassword@host.containers.internal:5432/appdb?sslmode=disable
-   ```
+**Files changed:**
+- `apps/ory/kratos.yml` — DSN switched from `memory` to PostgreSQL
+- `k8s/pod.yaml` — DSN env var switched to PostgreSQL; pod specs reordered in dependency order
 
-**Result:** Kratos connects to PostgreSQL, runs migrations via the init container, then starts serving on ports 4433/4434, and the init sidecar successfully seeds test users.
+---
 
-5. **`k8s/pod.yaml`** – Reordered pod specs to reflect dependency order: `postgres` → `ory-kratos` → `weather-api` → `claude-hello-world` (nginx).
+## Step 57: Fix — Replace Unsupported `--automigrate` Flag with kratos-migrate Init Container
 
-## Fix: Remove unsupported `--automigrate` flag (2026-03-12)
+E2E smoke tests failed because the `--automigrate` flag was added to the `kratos serve` CMD in the Containerfile during Step 56, but this flag was removed in Kratos v1.3.0. The container exited immediately with:
 
-**Problem:** E2E smoke tests failed because Kratos v1.3.0 removed the `--automigrate` flag from `kratos serve`. The container exited immediately with:
 ```
 Error: unknown flag: --automigrate
 ```
 
-**Root cause:** A previous fix added `--automigrate` to the `kratos serve` CMD to handle PostgreSQL schema migrations on startup. This flag no longer exists in Kratos v1.3.0.
+**Fix:**
 
-**Changes made:**
-
-1. **`apps/ory/Containerfile`** – Removed `--automigrate` from the `kratos serve` CMD:
-   ```
+1. **`apps/ory/Containerfile`** — removed `--automigrate` from the `kratos serve` CMD:
+   ```dockerfile
    CMD ["serve", "--config", "/etc/config/kratos/kratos.yml", "--dev", "--watch-courier"]
    ```
 
-2. **`k8s/pod.yaml`** – Added a `kratos-migrate` init container to the `ory-kratos` pod that runs `kratos migrate sql --yes` before the main server starts. Init containers complete successfully before any regular containers are started, ensuring migrations are applied before Kratos serves traffic:
+2. **`k8s/pod.yaml`** — added a `kratos-migrate` init container to the `ory-kratos` pod that runs `kratos migrate sql --yes` before the main server starts. Init containers complete successfully before any regular containers are started, ensuring PostgreSQL schema migrations are applied before Kratos serves traffic:
    ```yaml
    initContainers:
      - name: kratos-migrate
@@ -1983,4 +1971,70 @@ Error: unknown flag: --automigrate
            value: postgres://appuser:apppassword@host.containers.internal:5432/appdb?sslmode=disable
    ```
 
-**Result:** Kratos migrations run cleanly via the init container before the server starts, and `kratos serve` no longer fails with an unknown flag error.
+**Files changed:**
+- `apps/ory/Containerfile` — removed `--automigrate` flag from CMD
+- `k8s/pod.yaml` — added `kratos-migrate` init container
+
+---
+
+## Step 58: Fix — Split pod.yaml and Apply Pods Sequentially to Fix kratos-migrate Race Condition
+
+The smoke tests were still failing because `podman play kube k8s/pod.yaml` started all pods simultaneously. The `kratos-migrate` init container immediately tried to connect to PostgreSQL before postgres had finished its `initdb`/bootstrap sequence, causing it to exit 1. This early init-container failure also prevented podman from creating the `weather-api` and `claude-hello-world` pods (which came later in the multi-document YAML).
+
+**Root cause:**
+
+Podman's `play kube` creates all pods from a multi-document YAML in parallel. There is no built-in mechanism to wait for one pod to become healthy before starting the next. The `kratos-migrate` init container needs PostgreSQL to be accepting connections before it can run `kratos migrate sql`, but postgres typically takes 5–10 seconds for `initdb` on first start.
+
+**Fix:**
+
+Split `k8s/pod.yaml` into three ordered files and updated the `kube-up` Nx target to apply them sequentially with a `pg_isready` gate between postgres and ory-kratos:
+
+1. `k8s/postgres-pod.yaml` — PostgreSQL pod (`:5432`)
+2. `pg_isready` poll — waits until postgres accepts connections
+3. `k8s/ory-kratos-pod.yaml` — Kratos pod with `kratos-migrate` init container (`:4433`/`:4434`)
+4. `k8s/apps-pod.yaml` — weather-api (`:5221`) + nginx (`:8080`/`:8443`)
+
+**`apps/shell/project.json`** — `kube-up` target changed from a single `podman play kube` command to a sequential command list:
+
+```json
+"kube-up": {
+  "executor": "nx:run-commands",
+  "options": {
+    "commands": [
+      "podman play kube k8s/postgres-pod.yaml",
+      "until pg_isready -h 127.0.0.1 -p 5432 -U appuser; do echo 'waiting for postgres'; sleep 2; done",
+      "podman play kube k8s/ory-kratos-pod.yaml",
+      "podman play kube k8s/apps-pod.yaml"
+    ],
+    "parallel": false,
+    "cwd": "{workspaceRoot}"
+  }
+}
+```
+
+`kube-down` tears pods down in reverse order, with `|| true` on each command so a missing pod doesn't block the others:
+
+```json
+"kube-down": {
+  "executor": "nx:run-commands",
+  "options": {
+    "commands": [
+      "podman play kube k8s/apps-pod.yaml --down || true",
+      "podman play kube k8s/ory-kratos-pod.yaml --down || true",
+      "podman play kube k8s/postgres-pod.yaml --down || true"
+    ],
+    "parallel": false,
+    "cwd": "{workspaceRoot}"
+  }
+}
+```
+
+CI workflow comments in both `eks-e2e.yml` and `eks-e2e-full.yml` were updated to document the new sequential startup order.
+
+**Files changed:**
+- `k8s/postgres-pod.yaml` — new, PostgreSQL pod definition
+- `k8s/ory-kratos-pod.yaml` — new, Kratos pod with `kratos-migrate` init container
+- `k8s/apps-pod.yaml` — new, weather-api + nginx pod definitions
+- `apps/shell/project.json` — `kube-up` and `kube-down` targets updated for sequential pod application
+- `.github/workflows/eks-e2e.yml` — updated kube-up comments
+- `.github/workflows/eks-e2e-full.yml` — updated kube-up comments

@@ -1,0 +1,32 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: ory-kratos
+  labels:
+    app: ory-kratos
+spec:
+  initContainers:
+    - name: kratos-migrate
+      image: localhost/ory-kratos:latest
+      args: ["migrate", "sql", "--yes", "-c", "/etc/config/kratos/kratos.yml"]
+      env:
+        - name: DSN
+          value: postgres://appuser:apppassword@host.containers.internal:5432/appdb?sslmode=disable
+  containers:
+    - name: ory-kratos-init
+      image: localhost/ory-kratos-init:latest
+      env:
+        - name: KRATOS_ADMIN_URL
+          value: http://localhost:4434
+    - name: ory-kratos
+      image: localhost/ory-kratos:latest
+      ports:
+        - containerPort: 4433
+          hostPort: 4433
+        - containerPort: 4434
+          hostPort: 4434
+      env:
+        - name: DSN
+          value: postgres://appuser:apppassword@host.containers.internal:5432/appdb?sslmode=disable
+        - name: OryKratosPublicUrl
+          value: http://host.containers.internal:4433
