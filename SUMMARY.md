@@ -1829,6 +1829,24 @@ timeout 300 bash -c 'until curl -sf http://localhost:4433/health/ready ...' &
 
 ---
 
+## Step 55: Fix — Kratos Cipher Secret Exceeded 32-Character Limit
+
+**Problem:** The e2e smoke tests were failing because Ory Kratos rejected its configuration on startup:
+
+```
+secrets.cipher.0: CHANGE-ME-CIPHER-SECRET-32-CHARS!
+                  ^-- length must be <= 32, but got 33
+```
+
+The placeholder cipher secret in `apps/ory/kratos.yml` was 33 characters (`CHANGE-ME-CIPHER-SECRET-32-CHARS!`) due to a trailing `!`, exceeding Kratos's `maxLength` of 32 for cipher secrets. Kratos exited immediately on startup, causing the health-check to time out.
+
+**Fix:** Removed the trailing `!` from the cipher secret in `apps/ory/kratos.yml`, bringing it to exactly 32 characters.
+
+**Files changed:**
+- `apps/ory/kratos.yml` — trimmed `secrets.cipher[0]` from 33 to 32 characters
+
+---
+
 ## Final Verification
 
 ### Individual container workflow
