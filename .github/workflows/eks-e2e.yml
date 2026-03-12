@@ -192,6 +192,8 @@ jobs:
           podman logs weather-api-weather-api 2>&1 || true
           echo "=== postgres logs ==="
           podman logs postgres-postgres 2>&1 || true
+          echo "=== kratos-migrate logs ==="
+          podman logs ory-kratos-kratos-migrate 2>&1 || true
           echo "=== ory-kratos logs ==="
           podman logs ory-kratos-ory-kratos 2>&1 || true
           echo "=== ory-kratos-init logs ==="

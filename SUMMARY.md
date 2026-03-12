@@ -1967,3 +1967,30 @@ CI workflow comments in both `eks-e2e.yml` and `eks-e2e-full.yml` were updated t
 - `apps/shell/project.json` — `kube-up` and `kube-down` targets updated for sequential pod application
 - `.github/workflows/eks-e2e.yml` — updated kube-up comments
 - `.github/workflows/eks-e2e-full.yml` — updated kube-up comments
+
+---
+
+## Step 59: Debug — Add Container-Level Postgres Connectivity Check and kratos-migrate Logs
+
+The smoke tests were failing because `kratos-migrate` (the Kratos init container) was exiting with code 1 immediately after the `pg_isready` gate passed. The existing `pg_isready -h 127.0.0.1` check only verified the host-mapped port was open — it did not verify that `host.containers.internal` (the hostname used in the Kratos DSN) was resolvable from *within* a container. Additionally, the `kratos-migrate` container logs were never captured in the CI failure dump, making the actual error invisible.
+
+**Root cause (suspected):**
+
+`host.containers.internal` may not resolve inside the init container on the GitHub Actions Ubuntu runner (rootless podman 4.9.3). The migration fails within ~0.5 s of starting, consistent with an immediate DNS resolution failure. Without init-container logs in the dump, the exact error was undiagnosable from the existing CI output.
+
+**Fix 1 — container-level connectivity gate in `kube-up`:**
+
+Added a new step in `apps/shell/project.json` between the `pg_isready` check and `podman play kube k8s/ory-kratos-pod.yaml`. The new step runs `pg_isready` from *inside* a throw-away `localhost/postgres:latest` container, targeting `host.containers.internal:5432` — the exact network path used by `kratos-migrate`. It retries up to 30 times (≈60 s) before hard-failing:
+
+```json
+"i=0; until podman run --rm localhost/postgres:latest pg_isready -h host.containers.internal -p 5432 -U appuser; do i=$((i+1)); [ $i -ge 30 ] && echo 'ERROR: postgres unreachable via host.containers.internal' && exit 1; echo 'waiting for postgres via host.containers.internal'; sleep 2; done"
+```
+
+**Fix 2 — add `kratos-migrate` to the CI failure dump:**
+
+Added `podman logs ory-kratos-kratos-migrate 2>&1 || true` to the "Dump pod logs on health-check failure" step in both `eks-e2e.yml` and `eks-e2e-full.yml`. The init container logs were previously omitted, leaving the actual migration error invisible in every failed run.
+
+**Files changed:**
+- `apps/shell/project.json` — added container-level `host.containers.internal` connectivity check to `kube-up`
+- `.github/workflows/eks-e2e.yml` — added `kratos-migrate` logs to the failure dump
+- `.github/workflows/eks-e2e-full.yml` — added `kratos-migrate` logs to the failure dump

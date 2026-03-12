@@ -132,6 +132,7 @@
         "commands": [
           "podman play kube k8s/postgres-pod.yaml",
           "until pg_isready -h 127.0.0.1 -p 5432 -U appuser; do echo 'waiting for postgres'; sleep 2; done",
+          "i=0; until podman run --rm localhost/postgres:latest pg_isready -h host.containers.internal -p 5432 -U appuser; do i=$((i+1)); [ $i -ge 30 ] && echo 'ERROR: postgres unreachable via host.containers.internal' && exit 1; echo 'waiting for postgres via host.containers.internal'; sleep 2; done",
           "podman play kube k8s/ory-kratos-pod.yaml",
           "podman play kube k8s/apps-pod.yaml"
         ],
