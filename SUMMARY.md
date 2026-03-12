@@ -1790,6 +1790,45 @@ timeout 300 bash -c 'until curl -sf http://localhost:4433/health/ready ...' &
 
 ---
 
+## Step 54: Debug — Enhance CI Debugging Output to Diagnose Ongoing Kratos Startup Failures
+
+**Problem:** The e2e smoke-test workflow continued to fail (step 16 — "Dump pod logs on health-check failure" triggered), indicating the 300 s health-check timeout was still being hit after Ory Kratos was added. The existing debug output was insufficient to identify the root cause:
+- Health-check polling was fully silent (`> /dev/null 2>&1`) — no way to tell which service stalled or at what point
+- The failure dump only logged container stdout/stderr, not container state, exit codes, or whether ports were bound
+- Postgres logs were never captured despite a postgres crash silently blocking weather-api startup
+- Kratos admin port (4434) was never probed — only the public port (4433)
+- `eks-e2e-full.yml` was missing the ory build step entirely and never checked Kratos health
+
+**Changes — `.github/workflows/eks-e2e.yml`:**
+
+1. **"Show pod status after kube-up"** — added `podman inspect` for all 5 containers (including postgres, which was missing) showing `status`, `exitCode`, and `error`; added `ss -tlnp` to confirm which ports are bound at startup.
+
+2. **"Wait for pods to be healthy"** — replaced silent polling with timestamped progress lines per service:
+   ```
+   [14:32:01] ory-kratos not ready yet (attempt 47)
+   [14:37:23] ory-kratos ready after attempt 101
+   ```
+   This shows exactly which service stalled and for how long.
+
+3. **"Dump pod logs on health-check failure"** — now includes:
+   - Per-container `podman inspect` (state + exit code + error string)
+   - `ss -tlnp` (confirms whether the port was ever opened)
+   - Verbose `curl -v` probes to all 4 endpoints: nginx `:8443`, weather-api `:5221`, kratos public `:4433`, kratos admin `:4434`
+   - Postgres logs (previously absent)
+
+**Changes — `.github/workflows/eks-e2e-full.yml`:**
+
+- Added missing `npx nx podman-build ory` step (ory images were never built in the full workflow)
+- Added missing Kratos health-check probe (only nginx and weather-api were polled before)
+- Extended health-check timeout from 90 s → 300 s to match smoke workflow
+- Mirrored all three debugging changes from the smoke workflow above
+
+**Files changed:**
+- `.github/workflows/eks-e2e.yml` — progress-logging health checks; enhanced kube-up status snapshot; enhanced failure dump
+- `.github/workflows/eks-e2e-full.yml` — added ory build step; added Kratos health check; timeout 90 s → 300 s; mirrored all debug changes
+
+---
+
 ## Final Verification
 
 ### Individual container workflow
