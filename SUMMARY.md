@@ -1917,3 +1917,28 @@ Change `"Repository"` in `apps/weather-api/appsettings.json`:
 | `apps/postgres/Containerfile` | `postgres:17-alpine` | PostgreSQL database |
 | `apps/ory/Containerfile` | `oryd/kratos:v1.3.0-distroless` | Ory Kratos identity server |
 | `apps/ory/Containerfile.init` | `alpine:3.21` | One-shot user seeding sidecar |
+
+## Fix: Kratos SQLite3 / DSN issue (2026-03-12)
+
+**Problem:** `oryd/kratos:v1.3.0-distroless` does not include SQLite3 support. The `dsn: memory` setting (and `DSN=memory` env var) requires SQLite3 internally, causing Kratos to repeatedly fail to connect to its database. This prevented Kratos from ever becoming ready, so health checks on ports 4433/4434 returned "Connection reset by peer" and the init sidecar looped until timeout.
+
+**Root cause log evidence:**
+```
+error=map[message:could not create new connection: sqlite3 support was not compiled into the binary]
+```
+
+**Changes made:**
+
+1. **`apps/ory/kratos.yml`** – Changed `dsn: memory` → PostgreSQL DSN pointing at the existing `appdb` database:
+   ```
+   dsn: postgres://appuser:apppassword@host.containers.internal:5432/appdb?sslmode=disable
+   ```
+
+2. **`k8s/pod.yaml`** – Changed `DSN: memory` env var on the `ory-kratos` container to the same PostgreSQL DSN (env var overrides config file).
+
+3. **`apps/ory/Containerfile`** – Added `--automigrate` to the `kratos serve` CMD so Kratos automatically applies PostgreSQL schema migrations on startup (required when using a real DB backend):
+   ```
+   CMD ["serve", "--config", "/etc/config/kratos/kratos.yml", "--dev", "--automigrate", "--watch-courier"]
+   ```
+
+**Result:** Kratos connects to PostgreSQL, runs migrations, starts serving on ports 4433/4434, and the init container successfully seeds test users.

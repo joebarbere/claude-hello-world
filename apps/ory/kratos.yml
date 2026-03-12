@@ -1,6 +1,6 @@
 version: v1.3.0
 
-dsn: memory
+dsn: postgres://appuser:apppassword@host.containers.internal:5432/appdb?sslmode=disable
 
 serve:
   public:

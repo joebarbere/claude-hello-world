@@ -82,6 +82,6 @@ spec:
           hostPort: 4434
       env:
         - name: DSN
-          value: memory
+          value: postgres://appuser:apppassword@host.containers.internal:5432/appdb?sslmode=disable
         - name: OryKratosPublicUrl
           value: http://host.containers.internal:4433

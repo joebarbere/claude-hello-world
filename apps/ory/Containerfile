@@ -7,4 +7,4 @@ VOLUME /var/lib/kratos
 
 EXPOSE 4433 4434
 
-CMD ["serve", "--config", "/etc/config/kratos/kratos.yml", "--dev", "--watch-courier"]
+CMD ["serve", "--config", "/etc/config/kratos/kratos.yml", "--dev", "--automigrate", "--watch-courier"]
