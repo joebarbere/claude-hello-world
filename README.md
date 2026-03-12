@@ -18,7 +18,7 @@
     cookie:
       - CHANGE-ME-COOKIE-SECRET-32-CHARS!!
     cipher:
-      - CHANGE-ME-CIPHER-SECRET-32-CHARS!
+      - CHANGE-ME-CIPHER-SECRET-32-CHARS
   ```
   Anyone with read access to this repo can forge or decrypt Kratos session cookies.
 
