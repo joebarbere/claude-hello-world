@@ -2060,3 +2060,49 @@ With the correct `base_url`, Kratos records `request_url: https://localhost:8443
 
 **Files changed:**
 - `apps/ory/kratos.yml` — `serve.public.base_url` updated from `http://localhost:4433/` to `https://localhost:8443/.ory/kratos/public/`
+
+---
+
+## Step 62: Fix — LoginComponent Infinite Redirect Loop; Add Kratos Log Dump After E2E Failure
+
+After the `base_url` fix (Step 61), the 2 login-form tests still failed with identical symptoms: URL reached `/auth/login` but `input[name="identifier"]` and `input[name="password"]` were never visible.
+
+**Root cause:**
+
+`LoginComponent` gated the entire form on `@if (flow)`. When `getLoginFlow()` failed (for any reason — 403, 410, or other), `catchError(() => of(null))` returned null and the component called `initiateLogin()` again. This caused an infinite redirect loop:
+
+1. Auth guard → `initiateLogin` → Kratos creates flow → redirect to `/auth/login?flow=<id>`
+2. `LoginComponent` → `getLoginFlow(id)` → fails → null → `initiateLogin` again
+3. Repeat indefinitely — the URL oscillated but the form never rendered
+
+`toHaveURL(/\/auth\/login/)` resolved as soon as the URL first matched, but `toBeVisible` timed out after 10 s because the inputs were never in the DOM.
+
+Additionally, the existing "Dump pod logs on health-check failure" step is positioned *before* the e2e tests in the workflow. When the health check passes but e2e tests fail, no Kratos logs were captured — making the server-side error invisible.
+
+**Fix 1 — `LoginComponent` shows form as soon as `flowId` is in URL:**
+
+- Added `flowId: string | null` property set from query params
+- Changed `@if (flow)` → `@if (flowId)` so the static form inputs always render once the URL has a flow parameter
+- `formAction` getter: uses `flow.ui.action` when available, falls back to `/.ory/kratos/public/self-service/login?flow=<flowId>`
+- On `getLoginFlow` failure: sets `errorMessage` and returns — no redirect, no loop
+- Hidden CSRF nodes and field-level messages still only populate when `flow` is loaded (`@if (flow)` inside the form)
+
+**Fix 2 — Kratos log dump after e2e failure:**
+
+Added a new step in `eks-e2e.yml` between the e2e test step and pod teardown:
+
+```yaml
+- name: Dump Kratos logs on e2e failure
+  if: failure()
+  run: |
+    echo "=== ory-kratos logs (captured after e2e failure) ==="
+    podman logs ory-kratos-ory-kratos 2>&1 || true
+    echo "=== ory-kratos-init logs ==="
+    podman logs ory-kratos-ory-kratos-init 2>&1 || true
+```
+
+This fires when the e2e step fails (containers still running at that point), providing the actual Kratos server-side errors for diagnosis.
+
+**Files changed:**
+- `apps/shell/src/app/auth/login/login.component.ts` — show form on `flowId`; stop redirect loop on flow-fetch failure
+- `.github/workflows/eks-e2e.yml` — add Kratos log dump step after e2e failure

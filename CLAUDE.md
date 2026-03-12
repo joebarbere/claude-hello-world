@@ -21,3 +21,9 @@
 - The `nx-generate` skill handles generator discovery internally - don't call nx_docs just to look up generator syntax
 
 <!-- nx configuration end-->
+
+## SUMMARY.md
+
+- **Always update `SUMMARY.md` before committing.** Every non-trivial change (bug fix, feature, config change, workflow update) must be documented as a new numbered step.
+- Follow the existing format: `## Step N: <verb> — <short description>`, then root cause, fix, and files changed.
+- Do this proactively — do not wait to be asked.
