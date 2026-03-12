@@ -84,9 +84,11 @@ jobs:
         run: npx nx podman-build ory
 
       # ── Start EKS pods ───────────────────────────────────────────────────────
-      # kube-up runs: podman play kube k8s/pod.yaml
-      # Pods defined: claude-hello-world (nginx :8080), weather-api (:5221),
-      # postgres (:5432)
+      # kube-up applies pods in dependency order:
+      #   1. postgres-pod.yaml (:5432)
+      #   2. waits for pg_isready
+      #   3. ory-kratos-pod.yaml (:4433/:4434)  — kratos-migrate runs after postgres is ready
+      #   4. apps-pod.yaml: weather-api (:5221) + claude-hello-world/nginx (:8080/:8443)
       - name: Start EKS pods (podman play kube)
         run: npx nx kube-up shell
 
