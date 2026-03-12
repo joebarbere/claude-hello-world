@@ -62,7 +62,7 @@ secrets:
   cookie:
     - CHANGE-ME-COOKIE-SECRET-32-CHARS!!
   cipher:
-    - CHANGE-ME-CIPHER-SECRET-32-CHARS!
+    - CHANGE-ME-CIPHER-SECRET-32-CHARS
 
 ciphers:
   algorithm: xchacha20-poly1305
