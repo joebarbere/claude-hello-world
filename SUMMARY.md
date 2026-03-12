@@ -2028,3 +2028,35 @@ With `-e`, kratos reads the DSN from the `DSN` environment variable or the `dsn`
 
 **Files changed:**
 - `k8s/ory-kratos-pod.yaml` — added `-e` flag to `kratos-migrate` init container args
+
+---
+
+## Step 61: Fix — Kratos `serve.public.base_url` Mismatch Caused Login Flow Fetch to Fail
+
+After the kratos-migrate fix (Step 60), 7/9 smoke tests passed. The remaining 2 failures both navigated to `/weatheredit-app`, correctly reached `/auth/login` (URL assertion passed), but the login form inputs (`input[name="identifier"]`, `input[name="password"]`) never appeared.
+
+**Root cause:**
+
+`serve.public.base_url` was set to `http://localhost:4433/` — Kratos's internal direct address — but Kratos is publicly accessible through nginx at `https://localhost:8443/.ory/kratos/public/`. This caused a silent origin mismatch:
+
+1. Auth guard calls `initiateLogin` → browser navigates to `/.ory/kratos/public/self-service/login/browser?return_to=...`
+2. Nginx proxies to Kratos → Kratos creates a login flow and records `request_url: http://localhost:4433/self-service/login/browser?...` (using `base_url`)
+3. Kratos redirects to `https://localhost:8443/auth/login?flow=<id>` → `toHaveURL` passes ✅
+4. `LoginComponent` calls `getLoginFlow(flowId)` → XHR to `/.ory/kratos/public/self-service/login/flows?id=<flowId>` with `Origin: https://localhost:8443`
+5. Kratos compares `Origin: https://localhost:8443` against the flow's stored `request_url` origin `http://localhost:4433` → **mismatch → 403**
+6. `catchError(() => of(null))` returns `null` → `LoginComponent` calls `initiateLogin` again → infinite redirect loop → form never renders ❌
+
+**Fix:**
+
+Updated `serve.public.base_url` in `apps/ory/kratos.yml` to the actual public-facing URL:
+
+```yaml
+serve:
+  public:
+    base_url: https://localhost:8443/.ory/kratos/public/
+```
+
+With the correct `base_url`, Kratos records `request_url: https://localhost:8443/.ory/kratos/public/self-service/login/browser?...`. The `Origin: https://localhost:8443` now matches the `request_url` origin and Kratos returns the flow. The Kratos container image is rebuilt automatically by the `ory:podman-build` CI step since `kratos.yml` is baked in via `COPY`.
+
+**Files changed:**
+- `apps/ory/kratos.yml` — `serve.public.base_url` updated from `http://localhost:4433/` to `https://localhost:8443/.ory/kratos/public/`

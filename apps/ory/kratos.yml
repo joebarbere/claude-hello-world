@@ -4,7 +4,7 @@ dsn: postgres://appuser:apppassword@host.containers.internal:5432/appdb?sslmode=
 
 serve:
   public:
-    base_url: http://localhost:4433/
+    base_url: https://localhost:8443/.ory/kratos/public/
     cors:
       enabled: true
       allowed_origins:
