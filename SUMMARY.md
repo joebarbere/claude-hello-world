@@ -1994,3 +1994,37 @@ Added `podman logs ory-kratos-kratos-migrate 2>&1 || true` to the "Dump pod logs
 - `apps/shell/project.json` — added container-level `host.containers.internal` connectivity check to `kube-up`
 - `.github/workflows/eks-e2e.yml` — added `kratos-migrate` logs to the failure dump
 - `.github/workflows/eks-e2e-full.yml` — added `kratos-migrate` logs to the failure dump
+
+---
+
+## Step 60: Fix — kratos-migrate Missing `-e` Flag Caused Immediate Exit
+
+The smoke tests were still failing after Step 59. The `kratos-migrate` logs added in Step 59 revealed the actual error: kratos was printing its usage/help text and exiting with code 1 immediately, without ever attempting a database connection.
+
+**Root cause:**
+
+The `kratos migrate sql` command requires either a positional `<database-url>` argument or the `-e` flag to read the DSN from the environment variable or config file:
+
+```
+Usage:
+  kratos migrate sql <database-url> [flags]
+
+Flags:
+  -e, --read-from-env    If set, reads the database connection string from
+                         the environment variable DSN or config file key dsn.
+```
+
+The init container args were `["migrate", "sql", "--yes", "-c", "/etc/config/kratos/kratos.yml"]` — no `-e` and no positional URL. Kratos printed usage and exited 1 immediately on every run. This also explains why the failure was instantaneous (~0.5 s) and why `host.containers.internal` was a red herring.
+
+**Fix:**
+
+Added `-e` to the `kratos-migrate` init container args in `k8s/ory-kratos-pod.yaml`:
+
+```yaml
+args: ["migrate", "sql", "--yes", "-e", "-c", "/etc/config/kratos/kratos.yml"]
+```
+
+With `-e`, kratos reads the DSN from the `DSN` environment variable or the `dsn` key in `kratos.yml` — both of which were already configured correctly.
+
+**Files changed:**
+- `k8s/ory-kratos-pod.yaml` — added `-e` flag to `kratos-migrate` init container args
