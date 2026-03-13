@@ -2198,3 +2198,53 @@ Merged 10 of 12 open Dependabot PRs. Two were closed due to merge conflicts (cau
 **Closed (merge conflict — Dependabot will recreate):**
 - #37 — Bump `Microsoft.AspNetCore.OpenApi` 9.0.9 → 9.0.14
 - #35 — Bump `@typescript-eslint/utils` 8.56.1 → 8.57.0
+
+---
+
+## Step 69: Fix broken `main` after Dependabot batch merge — sync package-lock.json
+
+**Root cause:** Merging multiple Dependabot PRs in rapid succession left `package-lock.json` out of sync with `package.json` on `main`. Each Dependabot PR carries its own version of the lock file rebased only against the PR's base commit. When 10 PRs land back-to-back via squash merge, each one overwrites the lock file with its own snapshot — the final state reflects only the last-merged PR's lock file, leaving transitive dependencies from the other PRs (e.g. `@noble/hashes@2.0.1`) absent. The CI `npm ci` step requires perfect sync and immediately fails with `EUSAGE`.
+
+**Fix:** Ran `npm install --package-lock-only --ignore-scripts` locally to regenerate the lock file against the fully-updated `package.json`, then committed and pushed.
+
+```bash
+npm install --package-lock-only --ignore-scripts
+git add package-lock.json
+git commit -m "fix: sync package-lock.json after Dependabot merges"
+git push
+```
+
+**Files changed:**
+- `package-lock.json` — regenerated (194 insertions, 75 deletions)
+
+---
+
+### How to avoid this next time: merging multiple Dependabot PRs safely
+
+The root problem is that lock files are not composable — each Dependabot PR's lock file only knows about its own change, not the cumulative effect of all the others.
+
+**Option A — Merge one at a time (slow but safe)**
+Merge a single Dependabot PR, wait for CI to go green on `main`, then merge the next. Each merge produces a clean lock file because the next PR's branch is rebased against the already-updated `main`.
+
+**Option B — Merge all, then immediately sync the lock file (fast)**
+1. Merge all Dependabot PRs (as done here).
+2. Immediately run `npm install --package-lock-only --ignore-scripts` locally on `main`.
+3. Commit and push `package-lock.json` before any CI run has a chance to pick up the broken state (or accept that one CI run will fail and fix it reactively as done here).
+
+**Option C — Add a post-merge lock-sync CI job (automated)**
+Add a workflow triggered on `push` to `main` that detects lock file drift and auto-commits a fix. Example:
+
+```yaml
+- name: Detect and fix lock file drift
+  run: |
+    npm install --package-lock-only --ignore-scripts
+    if ! git diff --quiet package-lock.json; then
+      git config user.name "github-actions[bot]"
+      git config user.email "github-actions[bot]@users.noreply.github.com"
+      git add package-lock.json
+      git commit -m "chore: sync package-lock.json [skip ci]"
+      git push
+    fi
+```
+
+**Recommended approach:** Option B — it's fast, requires no extra infrastructure, and the one-liner is easy to remember. Keep it as a checklist step whenever doing a batch Dependabot merge.
