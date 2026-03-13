@@ -44,7 +44,7 @@ jobs:
 
       - name: Build C# project
         if: matrix.language == 'csharp'
-        run: dotnet build apps/weather-api/WeatherApi.csproj
+        run: dotnet build apps/weather-api/WeatherApi.csproj /p:NxSkipModuleBoundaries=true
 
       - name: Perform CodeQL Analysis
         uses: github/codeql-action/analyze@v3

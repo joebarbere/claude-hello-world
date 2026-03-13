@@ -2273,3 +2273,15 @@ Added GitHub Actions CodeQL Analysis workflow and a README badge.
 
 **Files changed:**
 - `apps/weather-api/WeatherApi.csproj`
+
+---
+
+## Step 72: Fix CodeQL build failure — Nx module boundary check fails without Node.js
+
+**Root cause:** `Directory.Build.targets` defines a `CheckNxModuleBoundaries` target that runs a Node.js script from `@nx-dotnet/core` before every `dotnet build`. The CodeQL workflow does not install Node.js or `node_modules`, so this target fails with exit code 1, breaking the C# CodeQL analysis.
+
+**Fix:** Added a `Condition="'$(NxSkipModuleBoundaries)' != 'true'"` to the `CheckNxModuleBoundaries` target in `Directory.Build.targets`, and passed `/p:NxSkipModuleBoundaries=true` in the CodeQL workflow's `dotnet build` command.
+
+**Files changed:**
+- `Directory.Build.targets`
+- `.github/workflows/codeql.yml`
