@@ -41,7 +41,7 @@ jobs:
       # Cache NuGet packages across runs; keyed on WeatherApi.csproj so the cache
       # is invalidated only when package references change (~1 min saved per run).
       - name: Cache NuGet packages
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: ~/.nuget/packages
           key: nuget-${{ runner.os }}-${{ hashFiles('apps/weather-api/**/*.csproj') }}
@@ -51,7 +51,7 @@ jobs:
       # on every run. System-level deps are still installed when cache is hit.
       - name: Cache Playwright browsers
         id: playwright-cache
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: ~/.cache/ms-playwright
           key: playwright-chromium-${{ runner.os }}-${{ hashFiles('package-lock.json') }}
