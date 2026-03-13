@@ -2154,3 +2154,25 @@ Added `.github/workflows/dependency-check.yml` to scan npm and NuGet dependencie
 **Files changed:**
 - `.github/workflows/dependency-check.yml` — new OWASP Dependency-Check workflow
 - `README.md` — added OWASP Dependency-Check badge next to existing badges
+
+---
+
+## Step 66: Fix Dependabot CI failures — regenerate lock file before `npm ci`
+
+**Root cause:** Dependabot PRs update `package.json` but sometimes generate an incomplete `package-lock.json`, missing transitive dependencies (e.g. `@noble/hashes@2.0.1`). `npm ci` requires the lock file to be in perfect sync with `package.json`, so it exits with `EUSAGE`.
+
+**Fix:** Added a conditional step in `ci.yml` that runs `npm install --package-lock-only --ignore-scripts` before `npm ci` when the actor is `dependabot[bot]`. This regenerates the lock file on the fly without installing packages, so the subsequent `npm ci` sees a consistent lock file.
+
+**Files changed:**
+- `.github/workflows/ci.yml` — added Dependabot-only lock file regeneration step
+
+---
+
+## Step 67: Skip e2e smoke tests for Dependabot merges
+
+**Root cause:** The EKS E2E smoke workflow triggers on every push to `main`, including when Dependabot dependency-bump PRs are merged. Running the full container build + Playwright suite for routine dep updates wastes CI minutes and can produce noisy failures unrelated to app logic.
+
+**Fix:** Added `if: github.actor != 'dependabot[bot]'` to the `e2e` job so the entire job is skipped when Dependabot is the actor.
+
+**Files changed:**
+- `.github/workflows/eks-e2e.yml` — added job-level condition to exclude Dependabot

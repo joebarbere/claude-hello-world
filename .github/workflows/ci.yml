@@ -24,6 +24,10 @@ jobs:
           node-version: 20
           cache: 'npm'
 
+      - name: Regenerate lock file (Dependabot only)
+        if: github.actor == 'dependabot[bot]'
+        run: npm install --package-lock-only --ignore-scripts
+
       - run: npm ci
 
       - run: npx nx run-many --target=lint --projects=shell,weather-app,weatheredit-app --parallel=3
