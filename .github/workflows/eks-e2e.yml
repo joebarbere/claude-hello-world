@@ -254,7 +254,7 @@ jobs:
       # Post a summary comment on the PR that was just merged into main.
       - name: Comment results on merged PR
         if: always()
-        uses: actions/github-script@v7
+        uses: actions/github-script@v8
         with:
           script: |
             // Find the PR merged into main for this commit.
