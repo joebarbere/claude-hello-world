@@ -1,6 +1,8 @@
 # claude-hello-world
 
 [![EKS E2E Tests](https://github.com/joebarbere/claude-hello-world/actions/workflows/eks-e2e.yml/badge.svg)](https://github.com/joebarbere/claude-hello-world/actions/workflows/eks-e2e.yml)
+[![Dependabot enabled](https://img.shields.io/badge/dependabot-enabled-blue?logo=dependabot)](https://github.com/joebarbere/claude-hello-world/blob/main/.github/dependabot.yml)
+[![OWASP Dependency-Check](https://github.com/joebarbere/claude-hello-world/actions/workflows/dependency-check.yml/badge.svg)](https://github.com/joebarbere/claude-hello-world/actions/workflows/dependency-check.yml)
 
 > **This project is for learning [Claude Code](https://claude.ai/code) only. It is not intended for production use.**
 
@@ -22,7 +24,7 @@
   ```
   Anyone with read access to this repo can forge or decrypt Kratos session cookies.
 
-- **PostgreSQL credentials** are hardcoded in `k8s/pod.yaml` (`appuser` / `apppassword`) and exposed as plaintext environment variables in the pod spec. They are also hardcoded in the `ConnectionStrings__DefaultConnection` passed to the weather-api container.
+- **PostgreSQL credentials** are hardcoded in `k8s/postgres-pod.yaml` and `k8s/ory-kratos-pod.yaml` (`appuser` / `apppassword`) and exposed as plaintext environment variables in the pod spec. They are also hardcoded in the `ConnectionStrings__DefaultConnection` passed to the weather-api container.
 
 - **Default application user passwords** are hardcoded in `apps/ory/init-users.sh` and seeded on every fresh deployment:
   | Email | Password |
@@ -36,19 +38,19 @@
 
 ### Unauthenticated admin API exposed
 
-- The **Ory Kratos admin API** (port `4434`) is bound to the host with no authentication, no network policy, and no firewall rule (`hostPort: 4434` in `k8s/pod.yaml`). Anyone who can reach this port can create, modify, or delete identities without credentials.
+- The **Ory Kratos admin API** (port `4434`) is bound to the host with no authentication, no network policy, and no firewall rule (`hostPort: 4434` in `k8s/ory-kratos-pod.yaml`). Anyone who can reach this port can create, modify, or delete identities without credentials.
 
 ### No Kubernetes Secrets — credentials in pod spec env vars
 
-- All secrets (DB password, connection strings) are passed as plaintext `env` values directly in `k8s/pod.yaml` rather than Kubernetes `Secret` objects. They appear in `kubectl describe pod` output and are visible to any user with read access to the cluster or the repo.
+- All secrets (DB password, connection strings) are passed as plaintext `env` values directly in the pod spec files (`k8s/postgres-pod.yaml`, `k8s/ory-kratos-pod.yaml`, `k8s/apps-pod.yaml`) rather than Kubernetes `Secret` objects. They appear in `kubectl describe pod` output and are visible to any user with read access to the cluster or the repo.
 
 ### Self-signed TLS certificate
 
 - The self-signed certificate in `ssl/localhost.crt` is not issued by any trusted CA. Browsers will reject it unless users manually install and trust it. No certificate rotation or expiry monitoring is in place.
 
-### In-memory Kratos identity store
+### Plaintext credentials in Kratos DSN
 
-- Kratos is configured with `dsn: memory`. All identity and session data exists only in the Kratos process's memory. Data is lost on every container restart, making this configuration unsuitable for any environment where user accounts need to persist.
+- Kratos is configured with a PostgreSQL DSN that contains the database username and password in plaintext (`apps/ory/kratos.yml`). The connection string is committed to source control and visible to anyone with repo access.
 
 ### No rate limiting or brute-force protection on the login endpoint
 
@@ -90,7 +92,7 @@ weather-api (.NET 9, :5220 dev / :5221 container)
   └── POST/PUT/DELETE endpoints — restricted to admin and weather_admin roles
 
 Ory Kratos (identity, :4433 public / :4434 admin)
-  └── In-memory user store with role-based access (seeded on start by ory-kratos-init)
+  └── PostgreSQL-backed user store with role-based access (seeded on start by ory-kratos-init)
 
 PostgreSQL 17 (:5432)
 ```

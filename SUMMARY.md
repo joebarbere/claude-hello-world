@@ -2106,3 +2106,51 @@ This fires when the e2e step fails (containers still running at that point), pro
 **Files changed:**
 - `apps/shell/src/app/auth/login/login.component.ts` — show form on `flowId`; stop redirect loop on flow-fetch failure
 - `.github/workflows/eks-e2e.yml` — add Kratos log dump step after e2e failure
+
+
+---
+
+## Step 63: Docs — Update README.md to Reflect Current Project State
+
+**Root cause:** README.md contained stale information from earlier stages of the project that no longer matched the current codebase.
+
+**Fixes:**
+- Replaced the "In-memory Kratos identity store" security disclaimer with a "Plaintext credentials in Kratos DSN" note, since Kratos now uses PostgreSQL (`dsn: postgres://...` in `apps/ory/kratos.yml`)
+- Updated all references from `k8s/pod.yaml` (old monolithic pod file, now unused by `kube-up`/`kube-down`) to the correct split pod files: `k8s/postgres-pod.yaml`, `k8s/ory-kratos-pod.yaml`, and `k8s/apps-pod.yaml`
+- Updated the architecture diagram to say "PostgreSQL-backed user store" instead of "In-memory user store" for Ory Kratos
+
+**Files changed:**
+- `README.md` — corrected security disclaimers and architecture diagram
+
+---
+
+## Step 64: Feat — Add Dependabot Integration and Badge
+
+Added `.github/dependabot.yml` to enable automated dependency update PRs for all three ecosystems in the monorepo, and added a Dependabot badge to the top of README.md.
+
+**Ecosystems configured:**
+- `npm` (root `/`) — weekly, covers all Angular/Nx/Node packages
+- `nuget` (`/apps/weather-api`) — weekly, covers .NET NuGet packages
+- `github-actions` (root `/`) — weekly, covers workflow action versions
+
+**Files changed:**
+- `.github/dependabot.yml` — new Dependabot configuration
+- `README.md` — added Dependabot badge next to existing CI badge
+
+---
+
+## Step 65: Feat — Add OWASP Dependency-Check GitHub Action and Badge
+
+Added `.github/workflows/dependency-check.yml` to scan npm and NuGet dependencies for known CVEs using OWASP Dependency-Check, with results uploaded to the GitHub Security tab as SARIF and stored as a 30-day HTML artifact.
+
+**Workflow triggers:** push to `main`, pull requests, and weekly schedule (Monday 03:00 UTC).
+
+**What it does:**
+- Restores .NET packages so NuGet deps are present for scanning
+- Runs `dependency-check/Dependency-Check_Action` across the entire repo
+- Uploads SARIF report to the GitHub Security tab (code scanning alerts)
+- Uploads the full HTML/JSON report as a 30-day artifact
+
+**Files changed:**
+- `.github/workflows/dependency-check.yml` — new OWASP Dependency-Check workflow
+- `README.md` — added OWASP Dependency-Check badge next to existing badges
