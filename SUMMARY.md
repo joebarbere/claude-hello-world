@@ -2248,3 +2248,17 @@ Add a workflow triggered on `push` to `main` that detects lock file drift and au
 ```
 
 **Recommended approach:** Option B — it's fast, requires no extra infrastructure, and the one-liner is easy to remember. Keep it as a checklist step whenever doing a batch Dependabot merge.
+
+---
+
+## Step 70: Add CodeQL Analysis — static security scanning workflow and badge
+
+Added GitHub Actions CodeQL Analysis workflow and a README badge.
+
+**What was added:**
+- `.github/workflows/codeql.yml` — runs CodeQL on push to `main`, on pull requests, and on a weekly Monday schedule (`cron: '0 3 * * 1'`). Analyzes both `javascript-typescript` (no build needed) and `csharp` (manual build with `dotnet build`). Requires `security-events: write` permission to upload SARIF results.
+- `README.md` — CodeQL badge added at the top, before the EKS E2E badge.
+
+**Files changed:**
+- `.github/workflows/codeql.yml` (new)
+- `README.md`

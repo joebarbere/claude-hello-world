@@ -1,8 +1,9 @@
 # claude-hello-world
 
 [![EKS E2E Tests](https://github.com/joebarbere/claude-hello-world/actions/workflows/eks-e2e.yml/badge.svg)](https://github.com/joebarbere/claude-hello-world/actions/workflows/eks-e2e.yml)
-[![Dependabot enabled](https://img.shields.io/badge/dependabot-enabled-blue?logo=dependabot)](https://github.com/joebarbere/claude-hello-world/blob/main/.github/dependabot.yml)
 [![OWASP Dependency-Check](https://github.com/joebarbere/claude-hello-world/actions/workflows/dependency-check.yml/badge.svg)](https://github.com/joebarbere/claude-hello-world/actions/workflows/dependency-check.yml)
+[![CodeQL](https://github.com/joebarbere/claude-hello-world/actions/workflows/codeql.yml/badge.svg)](https://github.com/joebarbere/claude-hello-world/actions/workflows/codeql.yml)
+[![Dependabot enabled](https://img.shields.io/badge/dependabot-enabled-blue?logo=dependabot)](https://github.com/joebarbere/claude-hello-world/blob/main/.github/dependabot.yml)
 
 > **This project is for learning [Claude Code](https://claude.ai/code) only. It is not intended for production use.**
 
