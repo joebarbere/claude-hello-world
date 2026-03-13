@@ -2262,3 +2262,14 @@ Added GitHub Actions CodeQL Analysis workflow and a README badge.
 **Files changed:**
 - `.github/workflows/codeql.yml` (new)
 - `README.md`
+
+---
+
+## Step 71: Fix CodeQL build failure — invalid NuGet package version
+
+**Root cause:** The `Microsoft.AspNetCore.OpenApi` package was pinned to version `9.0.9`, which was never published to NuGet (the 9.0.x release line skipped from 9.0.7 to 9.0.10). This caused `dotnet build` to fail during NuGet restore in the CodeQL workflow's C# build step.
+
+**Fix:** Updated the package version from `9.0.9` to `9.0.11` (the latest available 9.0.x release).
+
+**Files changed:**
+- `apps/weather-api/WeatherApi.csproj`
