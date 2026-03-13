@@ -40,7 +40,7 @@
     "angular-eslint": "^21.0.1",
     "eslint": "^9.8.0",
     "eslint-config-prettier": "^10.0.0",
-    "eslint-plugin-playwright": "^1.6.2",
+    "eslint-plugin-playwright": "^2.9.0",
     "jsdom": "^27.1.0",
     "nx": "22.5.1",
     "prettier": "^2.6.2",
