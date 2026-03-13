@@ -2176,3 +2176,25 @@ Added `.github/workflows/dependency-check.yml` to scan npm and NuGet dependencie
 
 **Files changed:**
 - `.github/workflows/eks-e2e.yml` — added job-level condition to exclude Dependabot
+
+---
+
+## Step 68: Merge all open Dependabot pull requests
+
+Merged 10 of 12 open Dependabot PRs. Two were closed due to merge conflicts (caused by related packages landing simultaneously) — Dependabot will recreate them on its next schedule.
+
+**Merged:**
+- #39 — Bump `Scalar.AspNetCore` 2.13.1 → 2.13.7
+- #38 — Bump `typescript-eslint` 8.56.1 → 8.57.0
+- #36 — Bump `eslint-plugin-playwright` 1.8.3 → 2.9.0
+- #34 — Bump `@angular/cli` 21.1.5 → 21.2.2
+- #33 — Bump `@nx/web` 22.5.1 → 22.5.4
+- #32 — Bump `actions/setup-node` v4 → v6
+- #31 — Bump `github/codeql-action` v3 → v4
+- #30 — Bump `actions/cache` v4 → v5
+- #29 — Bump `actions/github-script` v7 → v8
+- #28 — Bump `actions/checkout` v4 → v6
+
+**Closed (merge conflict — Dependabot will recreate):**
+- #37 — Bump `Microsoft.AspNetCore.OpenApi` 9.0.9 → 9.0.14
+- #35 — Bump `@typescript-eslint/utils` 8.56.1 → 8.57.0
