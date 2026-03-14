@@ -1,4 +1,4 @@
-FROM traefik:v3.3-alpine
+FROM traefik:v3.3
 COPY traefik/traefik.yml /etc/traefik/traefik.yml
 COPY traefik/traefik-dynamic.yml /etc/traefik/traefik-dynamic.yml
 RUN mkdir -p /etc/traefik/ssl
