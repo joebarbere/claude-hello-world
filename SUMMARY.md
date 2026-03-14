@@ -2285,3 +2285,32 @@ Added GitHub Actions CodeQL Analysis workflow and a README badge.
 **Files changed:**
 - `Directory.Build.targets`
 - `.github/workflows/codeql.yml`
+
+---
+
+## Step 73: Add Traefik SSL termination and reverse proxy
+
+**Root cause:** nginx was handling three responsibilities — SSL termination, reverse proxying (to weather-api and Ory Kratos), and static file serving for Angular apps. This tight coupling made it harder to manage routing and TLS independently of the web server.
+
+**Fix:** Added a lightweight Traefik container (`traefik:v3.3-alpine`) that handles SSL termination and reverse proxying. nginx was simplified to only serve static Angular files on port 8080 (internal, no host port). Traefik and nginx run in the same pod, sharing a network namespace. Traefik exposes host ports 8080 (HTTP → HTTPS redirect) and 8443 (HTTPS), and routes requests to nginx (static files), weather-api, and Ory Kratos based on path rules. Path rewriting for `/weather` → `/weatherforecast` and `/.ory/kratos/public/` prefix stripping are handled by Traefik middleware.
+
+**Files created:**
+- `traefik/traefik.yml` — Traefik static configuration (entrypoints, file provider, HTTP→HTTPS redirect)
+- `traefik/traefik-dynamic.yml` — Traefik dynamic configuration (routers, services, middleware, TLS certificate)
+- `traefik/Containerfile` — Lightweight Traefik container image
+- `apps/traefik/project.json` — Nx project with `podman-build` target
+
+**Files changed:**
+- `nginx/nginx.conf` — removed SSL, HTTP→HTTPS redirect, and proxy locations; listen on port 8080 only
+- `Containerfile.nginx` — removed SSL cert copy and port 443 exposure; expose only 8080
+- `k8s/apps-pod.yaml` — added traefik container to claude-hello-world pod, removed nginx host ports
+- `k8s/pod.yaml` — same pod changes
+- `apps/shell/project.json` — added `traefik:podman-build` to `kube-up` dependsOn
+- `apps/shell-e2e/playwright.config.ts` — updated comments to reference Traefik
+- `apps/shell-e2e/src/eks.spec.ts` — updated doc comments to reference Traefik
+- `apps/weather-app-e2e/playwright.config.ts` — updated comments to reference Traefik
+- `apps/weatheredit-app-e2e/playwright.config.ts` — updated comments to reference Traefik
+- `.github/workflows/eks-e2e.yml` — added traefik build step, updated container names and health checks
+- `.github/workflows/eks-e2e-full.yml` — same CI workflow updates
+- `README.md` — updated architecture diagram, SSL section, build instructions
+- `RUN.md` — updated container and Kubernetes sections

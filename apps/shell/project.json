@@ -115,7 +115,7 @@
     "podman-up": {
       "executor": "nx:run-commands",
       "options": {
-        "command": "podman run -d --name claude-hello-world -p 8080:80 localhost/claude-hello-world:latest",
+        "command": "podman run -d --name claude-hello-world -p 8080:8080 localhost/claude-hello-world:latest",
         "cwd": "{workspaceRoot}"
       }
     },
@@ -139,7 +139,7 @@
         "parallel": false,
         "cwd": "{workspaceRoot}"
       },
-      "dependsOn": ["postgres:podman-build", "ory:podman-build"]
+      "dependsOn": ["postgres:podman-build", "ory:podman-build", "traefik:podman-build"]
     },
     "kube-down": {
       "executor": "nx:run-commands",

@@ -1,0 +1,86 @@
+http:
+  routers:
+    # Ory Kratos public API — highest priority
+    kratos-router:
+      rule: "PathPrefix(`/.ory/kratos/public`)"
+      entryPoints:
+        - websecure
+      service: kratos
+      priority: 30
+      middlewares:
+        - strip-ory-prefix
+      tls: {}
+
+    # Weather API — exact /weather (list/create)
+    weather-exact-router:
+      rule: "Path(`/weather`)"
+      entryPoints:
+        - websecure
+      service: weather-api
+      priority: 20
+      middlewares:
+        - weather-replace-path
+      tls: {}
+
+    # Weather API — /weather/{id} sub-paths (get/update/delete)
+    # Excludes /weather-app/ and /weatheredit-app/ which are Angular MFE routes
+    weather-sub-router:
+      rule: "PathPrefix(`/weather/`) && !PathPrefix(`/weather-app/`) && !PathPrefix(`/weatheredit-app/`)"
+      entryPoints:
+        - websecure
+      service: weather-api
+      priority: 15
+      middlewares:
+        - weather-replace-path-regex
+      tls: {}
+
+    # Angular apps — catch-all to nginx (static files)
+    nginx-router:
+      rule: "PathPrefix(`/`)"
+      entryPoints:
+        - websecure
+      service: nginx
+      priority: 1
+      tls: {}
+
+  services:
+    # nginx serves Angular static files (same pod, shared network namespace)
+    nginx:
+      loadBalancer:
+        servers:
+          - url: "http://localhost:8080"
+
+    # Weather API in separate pod
+    weather-api:
+      loadBalancer:
+        servers:
+          - url: "http://host.containers.internal:5221"
+
+    # Ory Kratos in separate pod
+    kratos:
+      loadBalancer:
+        servers:
+          - url: "http://host.containers.internal:4433"
+
+  middlewares:
+    # Strip /.ory/kratos/public prefix before forwarding to Kratos
+    strip-ory-prefix:
+      stripPrefix:
+        prefixes:
+          - "/.ory/kratos/public"
+
+    # Rewrite /weather → /weatherforecast
+    weather-replace-path:
+      replacePath:
+        path: "/weatherforecast"
+
+    # Rewrite /weather/{id} → /weatherforecast/{id}
+    weather-replace-path-regex:
+      replacePathRegex:
+        regex: "^/weather/(.*)"
+        replacement: "/weatherforecast/$1"
+
+tls:
+  certificates:
+    - certFile: /etc/traefik/ssl/localhost.crt
+      keyFile: /etc/traefik/ssl/localhost.key

@@ -1,16 +1,16 @@
 import { test, expect } from '@playwright/test';
 
 /**
- * E2E tests for the shell (host) application running in the EKS nginx pod.
+ * E2E tests for the shell (host) application running behind the Traefik reverse proxy.
  *
- * The nginx pod serves:
- *   /               → shell Angular host app
- *   /weather-app/   → weather-app MFE remote
- *   /weatheredit-app/ → weatheredit-app MFE remote
+ * Traefik handles SSL termination and proxying:
+ *   /               → nginx (static files) → shell Angular host app
+ *   /weather-app/   → nginx (static files) → weather-app MFE remote
+ *   /weatheredit-app/ → nginx (static files) → weatheredit-app MFE remote
  *   /weather        → proxied to weather-api pod
  *
  * Run against the EKS pod:
- *   BASE_URL=http://<eks-node>:8080 npx nx run shell-e2e:e2e
+ *   BASE_URL=https://<eks-node>:8443 npx nx run shell-e2e:e2e
  */
 
 test.describe('Shell host – home page', () => {
