@@ -2424,3 +2424,29 @@ Added GitHub Actions CodeQL Analysis workflow and a README badge.
 **Files changed:**
 - `.github/workflows/ci.yml` — removed `unit-tests` job (coverage upload to Codecov, `nx run-many --target=test`)
 - `README.md` — removed Unit Tests workflow badge and Codecov coverage badge
+
+---
+
+## Step 79: Enforce 80% code coverage threshold in CI
+
+**Root cause / motivation:** The `unit-tests` CI job ran tests with coverage collection but did not enforce a minimum coverage threshold, and it excluded the weather-api dotnet project entirely. Added Vitest coverage thresholds (80% for lines, branches, functions, and statements) to all three Angular app vite configs. Created a new xUnit test project for weather-api with 30 tests covering the model, InMemoryWeatherForecastRepository, and RandomWeatherForecastRepository. Added dotnet SDK setup and weather-api-tests to the CI unit-tests job with coverlet 80% line coverage threshold.
+
+**Files changed:**
+- `.github/workflows/ci.yml` — added `actions/setup-dotnet@v4`, added `weather-api-tests:test` step to unit-tests job
+- `apps/shell/vite.config.mts` — added `coverage.thresholds` with 80% minimum for lines, branches, functions, statements
+- `apps/weather-app/vite.config.mts` — added `coverage.thresholds` with 80% minimum for lines, branches, functions, statements
+- `apps/weatheredit-app/vite.config.mts` — added `coverage.thresholds` with 80% minimum for lines, branches, functions, statements
+- `apps/weather-api-tests/WeatherApi.Tests.csproj` — new xUnit test project referencing WeatherApi, with coverlet for coverage
+- `apps/weather-api-tests/project.json` — Nx project config with test target using dotnet test + coverlet 80% threshold
+- `apps/weather-api-tests/WeatherForecastModelTests.cs` — tests for WeatherForecast model (temperature conversion, properties)
+- `apps/weather-api-tests/InMemoryWeatherForecastRepositoryTests.cs` — full CRUD tests for InMemoryWeatherForecastRepository
+- `apps/weather-api-tests/RandomWeatherForecastRepositoryTests.cs` — tests for RandomWeatherForecastRepository (read ops + write rejection)
+
+---
+
+## Step 80: Add weather-api lint and build to CI build job
+
+**Root cause / motivation:** The CI `build` job only linted and built the Angular apps, excluding the weather-api dotnet project. Added `actions/setup-dotnet@v4` and included `weather-api` in the lint and build `nx run-many` commands.
+
+**Files changed:**
+- `.github/workflows/ci.yml` — added dotnet 9.0 setup to `build` job; added `weather-api` to lint and build targets
