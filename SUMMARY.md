@@ -2450,3 +2450,59 @@ Added GitHub Actions CodeQL Analysis workflow and a README badge.
 
 **Files changed:**
 - `.github/workflows/ci.yml` — added dotnet 9.0 setup to `build` job; added `weather-api` to lint and build targets
+
+---
+
+## Step 81: Fix — Ory Kratos init container health check uses HEAD (405)
+
+**Root cause:** The `init-users.sh` script used `wget --spider` (HEAD request) to check Kratos readiness, but Kratos's `/health/ready` endpoint returns 405 Method Not Allowed for HEAD. The init container never detected Kratos as ready, so no user identities were seeded — all login attempts failed with "invalid credentials."
+
+**Fix:** Changed the health check to `wget -q -O /dev/null` (GET request) targeting the correct `/admin/health/ready` path.
+
+**Files changed:**
+- `apps/ory/init-users.sh` — switched from `wget --spider` (HEAD) to `wget -q -O /dev/null` (GET); corrected path to `/admin/health/ready`
+
+---
+
+## Step 82: Fix — Remove unreachable host-level pg_isready from shell kube-up
+
+**Root cause:** The `shell:kube-up` target included a host-level `pg_isready` health check that loops forever on macOS (command not found). A working podman-based check already existed on the next line.
+
+**Fix:** Removed the host-level `until pg_isready …` command, keeping only the `podman run --rm localhost/postgres:latest pg_isready …` variant.
+
+**Files changed:**
+- `apps/shell/project.json` — removed unreachable host-level `pg_isready` command from `kube-up` target
+
+---
+
+## Step 83: Fix — Login form CSRF race condition and missing /auth/error route
+
+**Root cause:** The login form rendered (with submit button) as soon as the Kratos flow ID was present in the URL, but the CSRF hidden fields only appeared after an async API call to fetch the flow data. If the user submitted before the flow loaded, the form POST lacked the `csrf_token`, causing a 403 CSRF violation. Kratos then redirected to `/auth/error`, which had no route in the Angular shell — Angular fell through to the home page, making it look like "nothing happened."
+
+**Fix:** Gated the entire form on `flow` (not `flowId`) so the form only renders when the CSRF token is available. Added `/auth/error` route mapping to `LoginComponent` so Kratos error redirects are handled. When the flow fetch fails, the component now starts a fresh login flow instead of showing a broken form.
+
+**Files changed:**
+- `apps/shell/src/app/auth/login/login.component.ts` — form gated on `flow` instead of `flowId`; removed `formAction` getter; redirect to fresh flow on fetch failure
+- `apps/shell/src/app/app.routes.ts` — added `auth/error` route pointing to `LoginComponent`
+
+---
+
+## Step 84: Fix — Login form stuck on "Loading…" due to zoneless change detection
+
+**Root cause:** Angular 21 is running without Zone.js (zoneless mode — no `provideZoneChangeDetection()` in the app config). The HTTP response from `getLoginFlow()` returned 200 OK with valid flow data, but setting `this.flow = flow` inside a subscribe callback did not trigger Angular's change detection. The template stayed in the `@else` branch showing "Loading…" indefinitely.
+
+**Fix:** Injected `ChangeDetectorRef` and called `detectChanges()` after setting `this.flow`, forcing Angular to re-render the template with the form.
+
+**Files changed:**
+- `apps/shell/src/app/auth/login/login.component.ts` — added `ChangeDetectorRef` injection; call `cdr.detectChanges()` after setting the flow
+
+---
+
+## Step 85: Fix — Containerfile.nginx OOM during parallel Angular builds
+
+**Root cause:** Building three Angular apps in parallel (`--parallel=3`) inside the Podman VM exceeded available memory, causing SIGINT (exit 130) and build failures.
+
+**Fix:** Reduced build parallelism to `--parallel=1` to fit within the VM's memory constraints.
+
+**Files changed:**
+- `Containerfile.nginx` — changed `--parallel=3` to `--parallel=1`

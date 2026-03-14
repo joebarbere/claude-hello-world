@@ -6,7 +6,7 @@ KRATOS_ADMIN_URL="${KRATOS_ADMIN_URL:-http://localhost:4434}"
 wait_for_kratos() {
   echo "Waiting for Kratos admin API..."
   for i in $(seq 1 30); do
-    if wget -q --spider "${KRATOS_ADMIN_URL}/health/ready" 2>/dev/null; then
+    if wget -q -O /dev/null "${KRATOS_ADMIN_URL}/admin/health/ready" 2>/dev/null; then
       echo "Kratos is ready."
       return 0
     fi

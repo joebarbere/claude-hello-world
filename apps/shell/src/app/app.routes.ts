@@ -23,6 +23,10 @@ export const appRoutes: Route[] = [
     component: UnauthorizedComponent,
   },
   {
+    path: 'auth/error',
+    component: LoginComponent,
+  },
+  {
     path: '',
     component: NxWelcome,
   },
