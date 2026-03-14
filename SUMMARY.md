@@ -2292,7 +2292,7 @@ Added GitHub Actions CodeQL Analysis workflow and a README badge.
 
 **Root cause:** nginx was handling three responsibilities — SSL termination, reverse proxying (to weather-api and Ory Kratos), and static file serving for Angular apps. This tight coupling made it harder to manage routing and TLS independently of the web server.
 
-**Fix:** Added a lightweight Traefik container (`traefik:v3.3-alpine`) that handles SSL termination and reverse proxying. nginx was simplified to only serve static Angular files on port 8080 (internal, no host port). Traefik and nginx run in the same pod, sharing a network namespace. Traefik exposes host ports 8080 (HTTP → HTTPS redirect) and 8443 (HTTPS), and routes requests to nginx (static files), weather-api, and Ory Kratos based on path rules. Path rewriting for `/weather` → `/weatherforecast` and `/.ory/kratos/public/` prefix stripping are handled by Traefik middleware.
+**Fix:** Added a lightweight Traefik container (`traefik:v3.3`) that handles SSL termination and reverse proxying. nginx was simplified to only serve static Angular files on port 8080 (internal, no host port). Traefik and nginx run in the same pod, sharing a network namespace. Traefik exposes host ports 8080 (HTTP → HTTPS redirect) and 8443 (HTTPS), and routes requests to nginx (static files), weather-api, and Ory Kratos based on path rules. Path rewriting for `/weather` → `/weatherforecast` and `/.ory/kratos/public/` prefix stripping are handled by Traefik middleware.
 
 **Files created:**
 - `traefik/traefik.yml` — Traefik static configuration (entrypoints, file provider, HTTP→HTTPS redirect)
@@ -2314,3 +2314,14 @@ Added GitHub Actions CodeQL Analysis workflow and a README badge.
 - `.github/workflows/eks-e2e-full.yml` — same CI workflow updates
 - `README.md` — updated architecture diagram, SSL section, build instructions
 - `RUN.md` — updated container and Kubernetes sections
+
+---
+
+## Step 74: Fix Traefik e2e test failures — invalid base image tag
+
+**Root cause:** The Traefik Containerfile used `traefik:v3.3-alpine` as the base image, but the `-alpine` suffix was only available for Traefik v1.x. For v3.x, the base `traefik:v3.3` tag is already Alpine-based (multi-arch Linux). The non-existent tag caused `podman build` to fail in CI, blocking all downstream e2e tests.
+
+**Fix:** Changed the base image from `traefik:v3.3-alpine` to `traefik:v3.3`.
+
+**Files changed:**
+- `traefik/Containerfile` — updated base image tag
