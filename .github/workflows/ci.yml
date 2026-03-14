@@ -33,3 +33,29 @@ jobs:
       - run: npx nx run-many --target=lint --projects=shell,weather-app,weatheredit-app --parallel=3
 
       - run: npx nx run-many --target=build --projects=shell,weather-app,weatheredit-app --configuration=production --parallel=3
+
+  unit-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 20
+          cache: 'npm'
+
+      - name: Regenerate lock file (Dependabot only)
+        if: github.actor == 'dependabot[bot]'
+        run: npm install --package-lock-only --ignore-scripts
+
+      - run: npm ci
+
+      - name: Run unit tests with coverage
+        run: npx nx run-many --target=test --projects=shell,weather-app,weatheredit-app --parallel=3 --coverage
+
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v5
+        with:
+          directory: coverage/
+          flags: unittests
+          fail_ci_if_error: false

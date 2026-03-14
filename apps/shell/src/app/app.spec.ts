@@ -1,10 +1,16 @@
+import { describe, it, expect, beforeEach } from 'vitest';
 import { TestBed } from '@angular/core/testing';
+import { ɵresolveComponentResources as resolveComponentResources } from '@angular/core';
 import { App } from './app';
 import { NxWelcome } from './nx-welcome';
-import { Router, RouterModule } from '@angular/router';
+import { RouterTestingHarness } from '@angular/router/testing';
+import { RouterModule } from '@angular/router';
 
 describe('App', () => {
   beforeEach(async () => {
+    await resolveComponentResources(() =>
+      Promise.resolve({ text: () => Promise.resolve('') } as Response)
+    );
     await TestBed.configureTestingModule({
       imports: [
         RouterModule.forRoot([{ path: '', component: NxWelcome }]),
@@ -27,13 +33,8 @@ describe('App', () => {
   });
 
   it('should render title', async () => {
-    const fixture = TestBed.createComponent(App);
-    const router = TestBed.inject(Router);
-    await router.navigate(['']);
-    await fixture.whenStable();
-    const compiled = fixture.nativeElement as HTMLElement;
-    expect(compiled.querySelector('h1')?.textContent).toContain(
-      'Welcome shell'
-    );
+    const harness = await RouterTestingHarness.create('/');
+    const compiled = harness.routeNativeElement as HTMLElement;
+    expect(compiled.querySelector('h1')?.textContent).toContain('Welcome shell');
   });
 });

@@ -36,3 +36,10 @@ spec:
           hostPort: 8443
     - name: nginx
       image: localhost/claude-hello-world:latest
+    - name: nginx-exporter
+      image: nginx/nginx-prometheus-exporter:latest
+      args:
+        - --nginx.scrape-uri=http://localhost:8080/nginx_status
+      ports:
+        - containerPort: 9113
+          hostPort: 9113

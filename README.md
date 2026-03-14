@@ -1,5 +1,8 @@
 # claude-hello-world
 
+[![CI](https://github.com/joebarbere/claude-hello-world/actions/workflows/ci.yml/badge.svg)](https://github.com/joebarbere/claude-hello-world/actions/workflows/ci.yml)
+[![Unit Tests](https://github.com/joebarbere/claude-hello-world/actions/workflows/ci.yml/badge.svg?event=push&label=unit-tests)](https://github.com/joebarbere/claude-hello-world/actions/workflows/ci.yml)
+[![codecov](https://codecov.io/gh/joebarbere/claude-hello-world/branch/main/graph/badge.svg)](https://codecov.io/gh/joebarbere/claude-hello-world)
 [![EKS E2E Tests](https://github.com/joebarbere/claude-hello-world/actions/workflows/eks-e2e.yml/badge.svg)](https://github.com/joebarbere/claude-hello-world/actions/workflows/eks-e2e.yml)
 [![OWASP Dependency-Check](https://github.com/joebarbere/claude-hello-world/actions/workflows/dependency-check.yml/badge.svg)](https://github.com/joebarbere/claude-hello-world/actions/workflows/dependency-check.yml)
 [![CodeQL](https://github.com/joebarbere/claude-hello-world/actions/workflows/codeql.yml/badge.svg)](https://github.com/joebarbere/claude-hello-world/actions/workflows/codeql.yml)

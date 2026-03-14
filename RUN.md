@@ -245,6 +245,72 @@ Runs `podman play kube k8s/pod.yaml --down`, stopping and removing all pods defi
 
 ---
 
+## Observability (Prometheus, Loki, Grafana)
+
+The observability stack runs as a separate pod — it is **not** started by `kube-up shell` and is never activated during e2e tests. Stand it up independently when you want metrics and logs locally.
+
+### Build observability images
+
+```bash
+npx nx run observability:podman-build
+```
+
+Builds four images in parallel:
+
+| Image | Base | Purpose |
+|-------|------|---------|
+| `localhost/prometheus:latest` | `prom/prometheus` | Metrics scraping and storage |
+| `localhost/loki:latest` | `grafana/loki` | Log aggregation and storage |
+| `localhost/promtail:latest` | `grafana/promtail` | Log collection from pod/container logs |
+| `localhost/grafana:latest` | `grafana/grafana` | Dashboards for metrics and logs |
+
+### Start the observability pod
+
+```bash
+npx nx run observability:kube-up
+```
+
+Builds images (if not already built) then runs `podman play kube k8s/observability-pod.yaml`.
+
+| Service | URL | Purpose |
+|---------|-----|---------|
+| Grafana | http://localhost:3000 | Dashboards (login: `admin` / `admin`) |
+| Prometheus | http://localhost:9090 | Metrics query UI |
+| Loki | http://localhost:3100 | Log query API (used by Grafana) |
+| Promtail | — | No external port; ships logs to Loki |
+
+### What gets scraped
+
+**Metrics (Prometheus):**
+- `weather-api` — ASP.NET Core HTTP metrics via `prometheus-net` at `host.containers.internal:5221/metrics`
+- `nginx` — connection stats via the `nginx-prometheus-exporter` sidecar at `host.containers.internal:9113`
+- `prometheus` — self-scrape at `localhost:9090`
+
+**Logs (Promtail → Loki):**
+- `/var/log/pods/*/*/*.log` — CRI-format logs written by the container runtime for all running pods
+- `/var/lib/containers/storage/overlay-containers/*/userdata/ctr.log` — raw Podman container logs (fallback)
+
+> **macOS note:** Podman containers run inside a Linux VM. The `hostPath` volume mounts (`/var/log`, `/var/lib/containers`) refer to paths inside that VM, not the macOS host filesystem. Log collection works automatically when `kube-up shell` and `kube-up observability` are both running inside the same Podman Machine.
+
+### Grafana datasources (auto-provisioned)
+
+Both datasources are provisioned at startup — no manual setup required.
+
+| Datasource | Type | URL |
+|-----------|------|-----|
+| Prometheus | Prometheus | `http://localhost:9090` |
+| Loki | Loki | `http://localhost:3100` |
+
+The pre-built **Weather API** dashboard (under the Default folder) shows HTTP request rate, p99 latency, in-flight requests, process memory, and nginx active connections. Use **Explore → Loki** to query container logs.
+
+### Stop the observability pod
+
+```bash
+npx nx run observability:kube-down
+```
+
+---
+
 ## Weather API (.NET)
 
 ### Build the API

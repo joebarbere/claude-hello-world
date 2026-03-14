@@ -1,15 +1,17 @@
 /// <reference types='vitest' />
 import { defineConfig } from 'vite';
-import angular from '@analogjs/vite-plugin-angular';
 
 export default defineConfig(() => ({
   root: __dirname,
   cacheDir: '../../node_modules/.vite/apps/shell',
-  plugins: [angular()],
-  // Uncomment this if you are using workers.
-  // worker: {
-  //  plugins: [],
-  // },
+  esbuild: {
+    tsconfigRaw: {
+      compilerOptions: {
+        experimentalDecorators: true,
+        useDefineForClassFields: false,
+      },
+    },
+  },
   test: {
     name: 'shell',
     watch: false,

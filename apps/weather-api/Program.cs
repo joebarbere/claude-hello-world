@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using Prometheus;
 using Scalar.AspNetCore;
 using WeatherApi.Data;
 using WeatherApi.Middleware;
@@ -42,6 +43,7 @@ if (repositoryType == "EfCore")
 }
 
 app.UseHttpsRedirection();
+app.UseHttpMetrics();
 app.UseMiddleware<KratosAuthMiddleware>();
 
 var forecasts = app.MapGroup("/weatherforecast");
@@ -98,5 +100,7 @@ forecasts.MapDelete("/{id:int}", async (int id, IWeatherForecastRepository repo)
     }
 })
 .WithName("DeleteWeatherForecast");
+
+app.MapMetrics();
 
 app.Run();

@@ -1,11 +1,18 @@
 /// <reference types='vitest' />
 import { defineConfig } from 'vite';
-import angular from '@analogjs/vite-plugin-angular';
 
 export default defineConfig(() => ({
   root: __dirname,
   cacheDir: '../../node_modules/.vite/apps/weatheredit-app',
-  plugins: [angular()],
+  plugins: [],
+  esbuild: {
+    tsconfigRaw: {
+      compilerOptions: {
+        experimentalDecorators: true,
+        useDefineForClassFields: false,
+      },
+    },
+  },
   // Uncomment this if you are using workers.
   // worker: {
   //  plugins: [],

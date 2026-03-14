@@ -1,0 +1,43 @@
+server:
+  http_listen_port: 9080
+  grpc_listen_port: 0
+
+positions:
+  filename: /tmp/positions.yaml
+
+clients:
+  - url: http://localhost:3100/loki/api/v1/push
+
+scrape_configs:
+  # Scrape pod logs written by the container runtime (CRI format)
+  - job_name: pod-logs
+    static_configs:
+      - targets:
+          - localhost
+        labels:
+          job: pod-logs
+          __path__: /var/log/pods/*/*/*.log
+    pipeline_stages:
+      - cri: {}
+      - labeldrop:
+          - filename
+
+  # Scrape Podman container logs (fallback for non-k8s managed containers)
+  - job_name: container-logs
+    static_configs:
+      - targets:
+          - localhost
+        labels:
+          job: container-logs
+          __path__: /var/lib/containers/storage/overlay-containers/*/userdata/ctr.log
+    pipeline_stages:
+      - regex:
+          expression: '^(?P<timestamp>\S+) (?P<stream>stdout|stderr) .+ (?P<content>.*)$'
+      - labels:
+          stream:
+      - timestamp:
+          source: timestamp
+          format: RFC3339Nano
+          action_on_failure: skip
+      - output:
+          source: content

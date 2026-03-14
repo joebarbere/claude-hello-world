@@ -1,0 +1,48 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: observability
+  labels:
+    app: observability
+spec:
+  containers:
+    - name: prometheus
+      image: localhost/prometheus:latest
+      ports:
+        - containerPort: 9090
+          hostPort: 9090
+
+    - name: loki
+      image: localhost/loki:latest
+      ports:
+        - containerPort: 3100
+          hostPort: 3100
+
+    - name: grafana
+      image: localhost/grafana:latest
+      ports:
+        - containerPort: 3000
+          hostPort: 3000
+      env:
+        - name: GF_SECURITY_ADMIN_PASSWORD
+          value: admin
+        - name: GF_USERS_ALLOW_SIGN_UP
+          value: "false"
+
+    - name: promtail
+      image: localhost/promtail:latest
+      volumeMounts:
+        - name: varlog
+          mountPath: /var/log
+          readOnly: true
+        - name: varlibcontainers
+          mountPath: /var/lib/containers
+          readOnly: true
+
+  volumes:
+    - name: varlog
+      hostPath:
+        path: /var/log
+    - name: varlibcontainers
+      hostPath:
+        path: /var/lib/containers

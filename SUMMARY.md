@@ -2325,3 +2325,92 @@ Added GitHub Actions CodeQL Analysis workflow and a README badge.
 
 **Files changed:**
 - `traefik/Containerfile` — updated base image tag
+
+---
+
+## Step 75: Add unit tests across all Angular MFE apps
+
+**Root cause / motivation:** No unit tests existed for the Angular MFE apps (shell, weather-app, weatheredit-app). Tests were needed to add CI unit-test reporting and coverage badges.
+
+**Key discovery:** `@analogjs/vite-plugin-angular` v2.1.3 is incompatible with Vitest v4 — its `angularVitestPlugins()` intercept disrupts vitest's test registration. Fix: remove the Angular build plugin from all `vite.config.mts` test configs and rely on Angular JIT compiler (`@angular/compiler`) via `setupTestBed()` from `@analogjs/vitest-angular` for runtime component compilation.
+
+**Key discovery 2:** `resolveComponentResources` is exported as `ɵresolveComponentResources` (private API) from `@angular/core`. Components with external `styleUrl`/`templateUrl` require this to be called before `TestBed.configureTestingModule()` so Angular JIT can handle external resource references without a real fetch implementation.
+
+**Fix:**
+- Removed `@analogjs/vite-plugin-angular` plugin from `vite.config.mts` in all 3 apps; added explicit `esbuild.tsconfigRaw` with `experimentalDecorators: true` and `useDefineForClassFields: false`
+- Fixed `test-setup.ts` in all 3 apps: removed `@analogjs/vitest-angular/setup-snapshots` import (crashes vitest v4)
+- Added `ɵresolveComponentResources` call in `beforeEach` for shell and weatheredit-app specs (components with external templateUrl/styleUrl)
+- Used `RouterTestingHarness.create()` for the shell "should render title" test (zoneless Angular requires harness for router outlet rendering)
+- Added 12 tests for `weather-app` RemoteEntry (HTTP GET, loading state, data display, error handling)
+- Added 24 tests for `weatheredit-app` RemoteEntry (CRUD operations, tempClass, form state, delete flow, save flow)
+- Deleted temporary debug spec files created during investigation
+
+**Files changed:**
+- `apps/shell/vite.config.mts` — removed Angular plugin, added esbuild config
+- `apps/weather-app/vite.config.mts` — same
+- `apps/weatheredit-app/vite.config.mts` — same
+- `apps/shell/src/test-setup.ts` — removed setup-snapshots import
+- `apps/weather-app/src/test-setup.ts` — same
+- `apps/weatheredit-app/src/test-setup.ts` — same
+- `apps/shell/src/app/app.spec.ts` — added vitest imports, resolveComponentResources, RouterTestingHarness
+- `apps/weather-app/src/app/remote-entry/entry.spec.ts` — new file, 12 tests
+- `apps/weatheredit-app/src/app/remote-entry/entry.spec.ts` — new file, 24 tests
+
+---
+
+## Step 76: Add unit test CI job, coverage badges, and observability stack
+
+**Motivation:** CI needed a dedicated unit-test job with coverage reporting. README needed status badges. The system needed Prometheus + Grafana observability for local development.
+
+**Unit test CI:**
+- Added `unit-tests` job to `.github/workflows/ci.yml` running `nx run-many --target=test` with coverage
+- Uploads coverage reports to Codecov via `codecov/codecov-action@v5`
+- Added CI badge and Codecov coverage badge to `README.md`
+
+**Observability stack (local podman only):**
+- Added `prometheus-net.AspNetCore` to `apps/weather-api/WeatherApi.csproj`; added `app.UseHttpMetrics()` and `app.MapMetrics()` to `Program.cs` (exposes `/metrics`)
+- Added `stub_status` location to `nginx/nginx.conf`
+- Added `nginx/nginx-prometheus-exporter` sidecar container to `k8s/apps-pod.yaml` (port 9113)
+- Created `apps/observability/` with baked Prometheus and Grafana container images
+- Created `k8s/observability-pod.yaml` for local `podman play kube` (separate from e2e CI pod)
+- Created `apps/observability/project.json` Nx project with isolated `kube-up`/`kube-down` targets — never triggered by e2e tests
+
+**Files changed:**
+- `.github/workflows/ci.yml` — new unit-tests job
+- `README.md` — CI and coverage badges
+- `apps/weather-api/WeatherApi.csproj` — prometheus-net package
+- `apps/weather-api/Program.cs` — UseHttpMetrics, MapMetrics
+- `nginx/nginx.conf` — stub_status location
+- `k8s/apps-pod.yaml` — nginx-exporter sidecar
+- `k8s/observability-pod.yaml` — new
+- `apps/observability/prometheus/prometheus.yml` — new
+- `apps/observability/prometheus/Containerfile` — new
+- `apps/observability/grafana/Containerfile` — new
+- `apps/observability/grafana/provisioning/datasources/prometheus.yml` — new
+- `apps/observability/grafana/provisioning/dashboards/dashboards.yml` — new
+- `apps/observability/grafana/provisioning/dashboards/weather-api.json` — new
+- `apps/observability/project.json` — new Nx project
+
+---
+
+## Step 77: Add Loki log aggregation to observability stack
+
+**Motivation:** Complete the observability stack with log aggregation alongside existing metrics (Prometheus/Grafana). Loki is excluded from e2e test runs by design — the observability project's `kube-up` is not a dependency of shell's `kube-up`, so CI e2e tests never start it.
+
+**Architecture:**
+- **Loki** (port 3100) — log storage server using tsdb/filesystem backend, single-instance mode
+- **Promtail** — log collector sidecar; scrapes CRI-format pod logs from `/var/log/pods/` and Podman container logs from `/var/lib/containers/`; pushes to Loki at `localhost:3100`
+- **Grafana** — Loki datasource added alongside existing Prometheus datasource; queries logs at `localhost:3100`
+
+**Log collection:** Promtail mounts `/var/log` and `/var/lib/containers` as read-only hostPath volumes. On Linux, these map directly to host paths. On macOS with Podman Machine, they map to paths inside the Linux VM where containers run.
+
+**Files created:**
+- `apps/observability/loki/loki.yml` — Loki config (single-instance, filesystem storage, no auth)
+- `apps/observability/loki/Containerfile` — FROM grafana/loki
+- `apps/observability/promtail/promtail.yml` — Promtail config with pod-logs and container-logs scrape jobs
+- `apps/observability/promtail/Containerfile` — FROM grafana/promtail
+- `apps/observability/grafana/provisioning/datasources/loki.yml` — Loki datasource for Grafana
+
+**Files modified:**
+- `k8s/observability-pod.yaml` — added loki and promtail containers with hostPath volume mounts
+- `apps/observability/project.json` — added podman-build-loki and podman-build-promtail targets; updated podman-build dependsOn

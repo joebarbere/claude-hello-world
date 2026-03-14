@@ -1,0 +1,65 @@
+{
+  "name": "observability",
+  "$schema": "../../node_modules/nx/schemas/project-schema.json",
+  "projectType": "application",
+  "sourceRoot": "apps/observability",
+  "tags": [],
+  "targets": {
+    "podman-build-prometheus": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "podman build -t prometheus -f apps/observability/prometheus/Containerfile apps/observability/prometheus",
+        "cwd": "{workspaceRoot}"
+      }
+    },
+    "podman-build-grafana": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "podman build -t grafana -f apps/observability/grafana/Containerfile apps/observability/grafana",
+        "cwd": "{workspaceRoot}"
+      }
+    },
+    "podman-build-loki": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "podman build -t loki -f apps/observability/loki/Containerfile apps/observability/loki",
+        "cwd": "{workspaceRoot}"
+      }
+    },
+    "podman-build-promtail": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "podman build -t promtail -f apps/observability/promtail/Containerfile apps/observability/promtail",
+        "cwd": "{workspaceRoot}"
+      }
+    },
+    "podman-build": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "echo 'Observability images built'",
+        "cwd": "{workspaceRoot}"
+      },
+      "dependsOn": [
+        "podman-build-prometheus",
+        "podman-build-grafana",
+        "podman-build-loki",
+        "podman-build-promtail"
+      ]
+    },
+    "kube-up": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "podman play kube k8s/observability-pod.yaml",
+        "cwd": "{workspaceRoot}"
+      },
+      "dependsOn": ["podman-build"]
+    },
+    "kube-down": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "podman play kube k8s/observability-pod.yaml --down || true",
+        "cwd": "{workspaceRoot}"
+      }
+    }
+  }
+}
