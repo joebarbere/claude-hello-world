@@ -11,6 +11,9 @@
     },
     {
       "path": "./apps/weatheredit-app-e2e"
+    },
+    {
+      "path": "./apps/admin-app-e2e"
     }
   ]
 }

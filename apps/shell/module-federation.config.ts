@@ -14,7 +14,7 @@ const config: ModuleFederationConfig = {
    * declare module 'my-external-remote';
    *
    */
-  remotes: ['weather-app', 'weatheredit-app'],
+  remotes: ['weather-app', 'weatheredit-app', 'admin-app'],
 };
 
 /**

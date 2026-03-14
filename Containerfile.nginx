@@ -4,7 +4,7 @@ WORKDIR /app
 COPY package*.json ./
 RUN npm ci --ignore-scripts
 COPY . .
-RUN npx nx run-many --target=build --projects=shell,weather-app,weatheredit-app --configuration=production --parallel=1
+RUN npx nx run-many --target=build --projects=shell,weather-app,weatheredit-app,admin-app --configuration=production --parallel=1
 
 # Stage 2: Serve
 FROM nginx:alpine AS runner
@@ -13,5 +13,6 @@ RUN sed -i 's|application/javascript\s*js;|application/javascript js mjs;|' /etc
 COPY --from=builder /app/dist/apps/shell /usr/share/nginx/html/shell
 COPY --from=builder /app/dist/apps/weather-app /usr/share/nginx/html/weather-app
 COPY --from=builder /app/dist/apps/weatheredit-app /usr/share/nginx/html/weatheredit-app
+COPY --from=builder /app/dist/apps/admin-app /usr/share/nginx/html/admin-app
 EXPOSE 8080
 CMD ["nginx", "-g", "daemon off;"]

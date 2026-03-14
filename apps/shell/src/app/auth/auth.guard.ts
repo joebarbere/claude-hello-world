@@ -20,3 +20,21 @@ export const weatherEditAuthGuard: CanActivateFn = (_route, state) => {
     })
   );
 };
+
+export const adminAuthGuard: CanActivateFn = (_route, state) => {
+  const authService = inject(AuthService);
+  const router = inject(Router);
+
+  return authService.getSession().pipe(
+    map((session) => {
+      if (!session) {
+        authService.initiateLogin(state.url);
+        return false;
+      }
+      if (!authService.canAccessAdmin(session)) {
+        return router.createUrlTree(['/auth/unauthorized']);
+      }
+      return true;
+    })
+  );
+};

@@ -2506,3 +2506,62 @@ Added GitHub Actions CodeQL Analysis workflow and a README badge.
 
 **Files changed:**
 - `Containerfile.nginx` — changed `--parallel=3` to `--parallel=1`
+
+---
+
+## Step 86: Feat — Add admin-app MFE with admin-only access control
+
+Added a new Angular micro-frontend application (`admin-app`) that displays admin-useful links (Weather API Swagger, Ory Kratos Admin, Grafana, Traefik Dashboard). The app is protected by a new `adminAuthGuard` that restricts access to users with the `admin` role only (not `weather_admin`).
+
+**What was done:**
+- Scaffolded `admin-app` as an MF remote via `@nx/angular:remote` generator (directory: `apps/admin-app`, port 4203)
+- Created `RemoteEntry` component with a categorized link-card dashboard (API, Identity, Observability, Infrastructure)
+- Added `adminAuthGuard` in the shell's auth guard module — checks for `admin` role only
+- Added `canAccessAdmin()` method to `AuthService` with a separate `ADMIN_ROLES` whitelist
+- Registered the remote in shell's module federation config (dev + prod)
+- Added route `admin-app` in shell with the admin guard and nav link
+- Updated nginx config, Traefik routing, Containerfile.nginx, and Kratos allowed return URLs
+- Added 12 unit tests for the admin-app entry component
+- Added 3 unit tests for `adminAuthGuard` and 11 unit tests for `AuthService` (including `canAccessAdmin`)
+- Added Playwright e2e tests for admin-app (access control, link display, categories)
+- Added shell-e2e test for admin-app redirect to login when unauthenticated
+
+**Files changed:**
+- `apps/admin-app/` — new MFE application (module-federation.config.ts, entry.ts, entry.routes.ts, entry.spec.ts, project.json, webpack configs, vite.config.mts, tsconfig files, bootstrap.ts, test-setup.ts)
+- `apps/admin-app-e2e/` — new Playwright e2e test project (playwright.config.ts, eks.spec.ts)
+- `apps/shell/module-federation.config.ts` — added `admin-app` remote
+- `apps/shell/webpack.prod.config.ts` — added `admin-app` production remote URL
+- `apps/shell/src/app/app.routes.ts` — added `admin-app` route with `adminAuthGuard`
+- `apps/shell/src/app/app.html` — added Admin nav link
+- `apps/shell/src/app/auth/auth.guard.ts` — added `adminAuthGuard`
+- `apps/shell/src/app/auth/auth.service.ts` — added `ADMIN_ROLES` and `canAccessAdmin()`
+- `apps/shell/src/app/auth/auth.guard.spec.ts` — new: 3 tests for adminAuthGuard
+- `apps/shell/src/app/auth/auth.service.spec.ts` — new: 11 tests for AuthService
+- `apps/shell/project.json` — added `admin-app` to build-all target
+- `apps/shell-e2e/src/eks.spec.ts` — added admin-app redirect test
+- `Containerfile.nginx` — added `admin-app` to build and COPY steps
+- `nginx/nginx.conf` — added `/admin-app/` location block
+- `apps/ory/kratos.yml` — added admin-app to allowed return URLs
+
+---
+
+## Step 87: Refactor — Rename adminApp to admin-app for consistency
+
+**Root cause:** The `@nx/angular:remote` generator rejected `admin-app` as a Module Federation name (hyphens not allowed per its regex). The workaround used `adminApp` as the MF/project name, but the existing remotes (`weather-app`, `weatheredit-app`) already use hyphenated names successfully.
+
+**Fix:** Renamed all occurrences of `adminApp` to `admin-app` across project names, MF config, build targets, import paths, tsconfig paths, Containerfile, and e2e configs.
+
+**Files changed:**
+- `apps/admin-app/module-federation.config.ts` — `name: 'admin-app'`
+- `apps/admin-app/project.json` — `"name": "admin-app"`, all build targets
+- `apps/admin-app/vite.config.mts` — test name
+- `apps/admin-app/src/index.html` — title and root selector
+- `apps/admin-app-e2e/project.json` — project name and implicit dependency
+- `apps/admin-app-e2e/package.json` — package and nx name
+- `apps/admin-app-e2e/playwright.config.ts` — serve command
+- `apps/shell/module-federation.config.ts` — remote name
+- `apps/shell/webpack.prod.config.ts` — remote tuple
+- `apps/shell/src/app/app.routes.ts` — import path
+- `apps/shell/project.json` — build-all command
+- `tsconfig.base.json` — path alias
+- `Containerfile.nginx` — build projects list

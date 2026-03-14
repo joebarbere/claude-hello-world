@@ -7,6 +7,7 @@ import { test, expect } from '@playwright/test';
  *   /               → nginx (static files) → shell Angular host app
  *   /weather-app/   → nginx (static files) → weather-app MFE remote
  *   /weatheredit-app/ → nginx (static files) → weatheredit-app MFE remote
+ *   /admin-app/     → nginx (static files) → admin-app MFE remote
  *   /weather        → proxied to weather-api pod
  *
  * Run against the EKS pod:
@@ -72,6 +73,17 @@ test.describe('Shell host – MFE navigation', () => {
     // Auth guard triggers Kratos browser flow → redirects to /auth/login?flow=<id>
     await expect(page).toHaveURL(/\/auth\/login/, { timeout: 15000 });
     await expect(page.locator('input[name="password"]')).toBeVisible({
+      timeout: 10000,
+    });
+  });
+
+  test('navigates to admin-app and is redirected to the Ory login page', async ({
+    page,
+  }) => {
+    await page.goto('/admin-app');
+    // Admin auth guard redirects to Kratos browser flow → /auth/login?flow=<id>
+    await expect(page).toHaveURL(/\/auth\/login/, { timeout: 15000 });
+    await expect(page.locator('input[name="identifier"]')).toBeVisible({
       timeout: 10000,
     });
   });

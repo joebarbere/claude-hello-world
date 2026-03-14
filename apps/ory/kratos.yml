@@ -36,6 +36,9 @@ selfservice:
     - http://localhost:8080/weatheredit-app
     - https://localhost:8443
     - https://localhost:8443/weatheredit-app
+    - http://localhost:4200/admin-app
+    - http://localhost:8080/admin-app
+    - https://localhost:8443/admin-app
 
   methods:
     password:

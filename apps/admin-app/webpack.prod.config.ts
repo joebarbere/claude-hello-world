@@ -9,11 +9,16 @@ import config from './module-federation.config';
 export default withModuleFederation(
   {
     ...config,
-    remotes: [
-      ['weather-app', '/weather-app/remoteEntry.mjs'],
-      ['weatheredit-app', '/weatheredit-app/remoteEntry.mjs'],
-      ['admin-app', '/admin-app/remoteEntry.mjs'],
-    ],
+    /*
+     * Remote overrides for production.
+     * Each entry is a pair of a unique name and the URL where it is deployed.
+     *
+     * e.g.
+     * remotes: [
+     *   ['app1', 'https://app1.example.com'],
+     *   ['app2', 'https://app2.example.com'],
+     * ]
+     */
   },
   { dts: false }
 );
