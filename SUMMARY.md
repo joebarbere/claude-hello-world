@@ -2414,3 +2414,13 @@ Added GitHub Actions CodeQL Analysis workflow and a README badge.
 **Files modified:**
 - `k8s/observability-pod.yaml` — added loki and promtail containers with hostPath volume mounts
 - `apps/observability/project.json` — added podman-build-loki and podman-build-promtail targets; updated podman-build dependsOn
+
+---
+
+## Step 78: Remove unit-test CI job and coverage badges
+
+**Root cause / motivation:** Removed the `unit-tests` job from `.github/workflows/ci.yml` and removed the Unit Tests and Codecov badges from `README.md`. The unit tests still exist and pass locally but are not run in CI.
+
+**Files changed:**
+- `.github/workflows/ci.yml` — removed `unit-tests` job (coverage upload to Codecov, `nx run-many --target=test`)
+- `README.md` — removed Unit Tests workflow badge and Codecov coverage badge
