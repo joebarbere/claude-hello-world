@@ -20,7 +20,7 @@ Starts the Module Federation dev server for the shell on port 4200. `--devRemote
 | weather-app (remote) | http://localhost:4201 |
 | weatheredit-app (remote) | http://localhost:4202 |
 
-> **Auth in dev mode:** The Angular auth guard calls `/.ory/kratos/public/sessions/whoami`. In dev mode there is no nginx proxy, so this request goes directly to `http://localhost:4200/.ory/kratos/public/` — which the webpack dev server does not proxy by default. To test the auth guard locally, either run a Kratos instance on port 4433 and add a proxy rule for `/.ory/kratos/public/` in `apps/shell/proxy.conf.json`, or temporarily bypass the guard during frontend development.
+> **Auth in dev mode:** The Angular auth guard calls `/.ory/kratos/public/sessions/whoami`. In dev mode there is no Traefik proxy, so this request goes directly to `http://localhost:4200/.ory/kratos/public/` — which the webpack dev server does not proxy by default. To test the auth guard locally, either run a Kratos instance on port 4433 and add a proxy rule for `/.ory/kratos/public/` in `apps/shell/proxy.conf.json`, or temporarily bypass the guard during frontend development.
 
 ### Serve shell only (remotes served as static builds)
 
@@ -130,7 +130,7 @@ First runs `build-all` (production builds for all three apps), then runs:
 podman build -t claude-hello-world -f Containerfile.nginx .
 ```
 
-The multi-stage `Containerfile.nginx` compiles the apps inside a `node:20-alpine` container and copies the outputs into an `nginx:alpine` image. The resulting image is tagged `localhost/claude-hello-world:latest`.
+The multi-stage `Containerfile.nginx` compiles the apps inside a `node:20-alpine` container and copies the outputs into an `nginx:alpine` image. The resulting image is tagged `localhost/claude-hello-world:latest`. This image only serves static files — SSL termination and reverse proxying are handled by Traefik.
 
 To verify the image was created:
 
@@ -144,20 +144,15 @@ podman images | grep claude-hello-world
 npx nx podman-up shell
 ```
 
-Runs `podman run -d` to start the `claude-hello-world` container in detached mode, mapping:
-- port 8080 on the host to port 80 (HTTP, redirects to HTTPS)
-- port 8443 on the host to port 443 (HTTPS with SSL termination)
+Runs `podman run -d` to start the `claude-hello-world` container in detached mode, mapping port 8080 on the host to port 8080 in the container (static files only, no SSL). For the full setup with Traefik SSL termination, use `kube-up` instead.
 
 The image must have been built first with `podman-build`.
 
 | URL | Serves |
 |-----|--------|
-| https://localhost:8443 | Shell (host app, HTTPS) |
-| https://localhost:8443/weather-app/ | weather-app remote |
-| https://localhost:8443/weatheredit-app/ | weatheredit-app remote (login required) |
-| https://localhost:8443/weather-app/remoteEntry.mjs | weather-app Module Federation entry point |
-| https://localhost:8443/weatheredit-app/remoteEntry.mjs | weatheredit-app Module Federation entry point |
-| http://localhost:8080 | Redirects to https://localhost:8443 |
+| http://localhost:8080 | Shell (host app, HTTP only — no Traefik) |
+| http://localhost:8080/weather-app/ | weather-app remote |
+| http://localhost:8080/weatheredit-app/ | weatheredit-app remote |
 
 > **Browser trust:** The first time you open `https://localhost:8443` your browser will warn about the self-signed certificate. To suppress this, run the install script for your OS (see `ssl/` directory and the SSL section of `README.md`).
 
@@ -202,18 +197,19 @@ The init container calls `POST /admin/identities` on the Kratos Admin API for ea
 | 4433 | Public API (sessions, self-service login flows) |
 | 4434 | Admin API (identity management) |
 
-The nginx container proxies `/.ory/kratos/public/` → `http://host.containers.internal:4433/` so the Angular app can reach Kratos without cross-origin issues.
+Traefik proxies `/.ory/kratos/public/` → `http://host.containers.internal:4433/` so the Angular app can reach Kratos without cross-origin issues.
 
 ---
 
 ## Kubernetes (podman play kube)
 
-Runs the nginx MFE, weather-api, postgres, and Ory Kratos containers together using a Kubernetes Pod manifest (`k8s/pod.yaml`) and `podman play kube`. All images must be built before running.
+Runs the Traefik reverse proxy, nginx static file server, weather-api, postgres, and Ory Kratos containers together using Kubernetes Pod manifests and `podman play kube`. Traefik handles SSL termination and proxying; nginx only serves Angular static files. All images must be built before running.
 
 ### Prerequisites — build all images
 
 ```bash
 npx nx podman-build shell
+npx nx podman-build traefik
 npx nx podman-build weather-api
 npx nx podman-build ory
 # postgres is built automatically via dependsOn
@@ -358,10 +354,11 @@ Three Playwright suites (`shell-e2e`, `weather-app-e2e`, `weatheredit-app-e2e`) 
 
 ```bash
 npx nx podman-build shell        # builds Angular MFEs + nginx image
+npx nx podman-build traefik      # builds Traefik reverse proxy image
 npx nx podman-build weather-api  # builds .NET API image
 npx nx podman-build ory          # builds ory-kratos and ory-kratos-init images
 # postgres is built automatically via dependsOn
-npx nx kube-up shell             # starts all pods (nginx :8080, weather-api :5221, postgres :5432, kratos :4433/:4434)
+npx nx kube-up shell             # starts all pods (traefik :8080/:8443, nginx internal, weather-api :5221, postgres :5432, kratos :4433/:4434)
 ```
 
 > **Auth note:** `weatheredit-app-e2e` navigates to `/weatheredit-app/` which triggers the Ory auth guard. The guard redirects to Kratos if no valid session cookie is present. The e2e suite expects Kratos to be running (included in the pod manifest) and tests cover the redirect behaviour.
@@ -419,9 +416,9 @@ Two workflows cover EKS E2E testing at different levels of coverage.
 
 `eks-e2e.yml` runs on every push to `main` (i.e., every merged PR). It runs only the `shell-e2e` suite, which is enough to confirm all pods are healthy:
 
-1. Builds all container images (nginx, weather-api, postgres, ory) inside the runner
+1. Builds all container images (nginx, traefik, weather-api, postgres, ory) inside the runner
 2. Starts all pods with `podman play kube` — including the Ory Kratos init container that seeds default users
-3. Waits for the nginx and weather-api pods to pass health checks (parallel)
+3. Waits for the Traefik and weather-api pods to pass health checks (parallel)
 4. Runs `shell-e2e` — verifies the shell host, MFE navigation to `/weather-app` and `/weatheredit-app`, and the `/weather` API proxy
 5. Stops the pods
 6. Publishes JUnit XML as a GitHub Check Run (`dorny/test-reporter`)

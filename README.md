@@ -55,7 +55,7 @@
 
 ### No rate limiting or brute-force protection on the login endpoint
 
-- nginx does not apply `limit_req` or any other throttle to `/.ory/kratos/public/`. The Kratos login flow has no lockout policy configured, making credential stuffing and brute-force attacks trivial.
+- Traefik does not apply any rate limiting to `/.ory/kratos/public/`. The Kratos login flow has no lockout policy configured, making credential stuffing and brute-force attacks trivial.
 
 ### Kratos CORS allows all configured origins unconditionally
 
@@ -67,11 +67,11 @@
 
 ### No container image scanning
 
-- Container images are built from base images (`node:20-alpine`, `nginx:alpine`, `dotnet/sdk:9.0-alpine`, `postgres:17-alpine`, `oryd/kratos:v1.3.0-distroless`) with no CVE scanning, no image signing, and no dependency pinning beyond the tag.
+- Container images are built from base images (`node:20-alpine`, `nginx:alpine`, `traefik:v3.3-alpine`, `dotnet/sdk:9.0-alpine`, `postgres:17-alpine`, `oryd/kratos:v1.3.0-distroless`) with no CVE scanning, no image signing, and no dependency pinning beyond the tag.
 
 ---
 
-An Nx monorepo demonstrating Angular Module Federation micro-frontends with a .NET 9 Weather API backend and PostgreSQL, all containerized with Podman and orchestrated via `podman play kube`. Authentication is handled by [Ory Kratos](https://www.ory.sh/kratos/).
+An Nx monorepo demonstrating Angular Module Federation micro-frontends with a .NET 9 Weather API backend and PostgreSQL, all containerized with Podman and orchestrated via `podman play kube`. Traefik handles SSL termination and reverse proxying, while nginx serves the Angular static files. Authentication is handled by [Ory Kratos](https://www.ory.sh/kratos/).
 
 ## Architecture
 
@@ -81,12 +81,17 @@ Browser
         ├── weather-app (remote, :4201) — weather forecast table (public)
         └── weatheredit-app (remote, :4202) — weather forecast CRUD (admin/weather_admin only)
 
-nginx (container, :8080 → redirects to HTTPS, :8443 SSL termination)
+Traefik (reverse proxy, :8080 → redirects to HTTPS, :8443 SSL termination)
+  ├── /                        → nginx (static files) → shell app
+  ├── /weather-app/            → nginx (static files) → weather-app remote
+  ├── /weatheredit-app/        → nginx (static files) → weatheredit-app remote
+  ├── /weather                 → weather-api
+  └── /.ory/kratos/public/     → Ory Kratos public API (:4433)
+
+nginx (container, :8080 internal — static file server only)
   ├── /                        → shell app
   ├── /weather-app/            → weather-app remote
-  ├── /weatheredit-app/        → weatheredit-app remote
-  ├── /weather                 → proxy → weather-api
-  └── /.ory/kratos/public/     → proxy → Ory Kratos public API (:4433)
+  └── /weatheredit-app/        → weatheredit-app remote
 
 weather-api (.NET 9, :5220 dev / :5221 container)
   ├── GET endpoints — public
@@ -133,8 +138,8 @@ npm install
 
 ## SSL / HTTPS
 
-nginx serves all traffic over HTTPS using a self-signed certificate for `localhost`.
-HTTP on port 8080 automatically redirects to HTTPS on port 8443.
+Traefik serves as the SSL termination reverse proxy using a self-signed certificate for `localhost`.
+HTTP on port 8080 automatically redirects to HTTPS on port 8443. nginx serves only static Angular files behind Traefik.
 
 The certificate and private key are pre-generated and stored in `ssl/`:
 
@@ -210,9 +215,9 @@ Uses the `openssl` that ships with macOS; Homebrew `openssl` also works.
 ```
 Requires OpenSSL for Windows (`winget install ShiningLight.OpenSSL`, `choco install openssl`, or Git for Windows which bundles `openssl.exe`).
 
-After regenerating, rebuild the container image and re-trust the new cert on each machine:
+After regenerating, rebuild the Traefik container image and re-trust the new cert on each machine:
 ```sh
-npx nx podman-build shell
+npx nx podman-build traefik
 # then run the appropriate install-cert script for your OS
 ```
 
@@ -236,7 +241,8 @@ npx nx build-all shell
 NX_DAEMON=false npx nx build weather-api
 
 # Build container images
-npx nx podman-build shell          # nginx image (Angular MFE)
+npx nx podman-build shell          # nginx image (Angular MFE static files)
+npx nx podman-build traefik        # Traefik reverse proxy + SSL termination
 npx nx podman-build weather-api    # .NET API image
 npx nx podman-build postgres       # PostgreSQL image
 npx nx podman-build ory            # Ory Kratos image + init image
@@ -249,6 +255,7 @@ npx nx podman-build ory            # Ory Kratos image + init image
 ```sh
 # Build images first, then start all pods
 npx nx podman-build shell
+npx nx podman-build traefik
 npx nx podman-build weather-api
 npx nx podman-build ory
 npx nx kube-up shell
@@ -297,7 +304,7 @@ Change `"Repository"` in `apps/weather-api/appsettings.json`:
 
 ## E2E Tests (Playwright)
 
-Three Playwright suites test the apps running inside the EKS pods (nginx on `:8080`). Each suite targets its app via `BASE_URL`:
+Three Playwright suites test the apps running inside the EKS pods (Traefik on `:8080`/`:8443`). Each suite targets its app via `BASE_URL`:
 
 | Suite | Default `BASE_URL` | Tests |
 |-------|--------------------|-------|

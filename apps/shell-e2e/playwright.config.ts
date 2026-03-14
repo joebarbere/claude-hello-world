@@ -2,7 +2,7 @@ import { defineConfig, devices } from '@playwright/test';
 import { nxE2EPreset } from '@nx/playwright/preset';
 import { workspaceRoot } from '@nx/devkit';
 
-// For EKS pods, set BASE_URL to the nginx pod host (e.g. https://<eks-node>:8443).
+// For EKS pods, set BASE_URL to the Traefik proxy host (e.g. https://<eks-node>:8443).
 // When BASE_URL is set, no local dev server is started.
 const baseURL = process.env['BASE_URL'] || 'https://localhost:8443';
 
@@ -20,7 +20,7 @@ export default defineConfig({
   /* Shared settings for all the projects below. See https://playwright.dev/docs/api/class-testoptions. */
   use: {
     baseURL,
-    /* Ignore self-signed certificate errors for the local nginx SSL cert */
+    /* Ignore self-signed certificate errors for the local Traefik SSL cert */
     ignoreHTTPSErrors: true,
     /* Collect trace when retrying the failed test. See https://playwright.dev/docs/trace-viewer */
     trace: 'on-first-retry',

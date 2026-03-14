@@ -1,0 +1,14 @@
+{
+  "name": "traefik",
+  "$schema": "../../node_modules/nx/schemas/project-schema.json",
+  "projectType": "application",
+  "targets": {
+    "podman-build": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "podman build -t traefik -f traefik/Containerfile .",
+        "cwd": "{workspaceRoot}"
+      }
+    }
+  }
+}
