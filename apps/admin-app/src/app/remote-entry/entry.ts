@@ -1,36 +1,38 @@
-import { Component } from '@angular/core';
+import { Component, inject, OnInit } from '@angular/core';
+import { HttpClient } from '@angular/common/http';
+import { NgClass } from '@angular/common';
+import { RouterLink } from '@angular/router';
 
 export interface AdminLink {
   name: string;
-  url: string;
   description: string;
   category: string;
+  url?: string;
+  routerLink?: string;
+  badge?: { type: 'health'; endpoint: string };
+  credentials?: { username: string; password: string };
 }
 
 const ADMIN_LINKS: AdminLink[] = [
   {
-    name: 'Weather API Swagger',
-    url: 'http://localhost:5220/swagger',
-    description: 'Interactive API documentation for the Weather Forecast REST API.',
+    name: 'Weather API Docs',
+    url: 'http://localhost:5221/scalar/v1',
+    description: 'Interactive Scalar API reference for the Weather Forecast REST API.',
     category: 'API',
   },
   {
     name: 'Ory Kratos Admin',
-    url: 'http://localhost:4434/admin/identities',
-    description: 'Manage user identities, sessions, and authentication flows.',
+    routerLink: '/admin-app/kratos',
+    description: 'Manage user identities, roles, and authentication.',
     category: 'Identity',
-  },
-  {
-    name: 'Ory Kratos Health',
-    url: 'http://localhost:4434/health/alive',
-    description: 'Check Kratos admin health status.',
-    category: 'Identity',
+    badge: { type: 'health', endpoint: 'http://localhost:4434/health/alive' },
   },
   {
     name: 'Grafana Dashboard',
     url: 'http://localhost:3000',
     description: 'Metrics dashboards, alerting, and log exploration.',
     category: 'Observability',
+    credentials: { username: 'admin', password: 'admin' },
   },
   {
     name: 'Traefik Dashboard',
@@ -43,6 +45,7 @@ const ADMIN_LINKS: AdminLink[] = [
 @Component({
   selector: 'app-admin-app-entry',
   standalone: true,
+  imports: [NgClass, RouterLink],
   template: `
     <div class="page">
       <header class="page-header">
@@ -60,11 +63,39 @@ const ADMIN_LINKS: AdminLink[] = [
           <h2 class="section-title">{{ category }}</h2>
           <div class="link-grid">
             @for (link of linksByCategory(category); track link.name) {
-              <a [href]="link.url" target="_blank" rel="noopener noreferrer" class="link-card">
-                <div class="link-name">{{ link.name }}</div>
-                <div class="link-desc">{{ link.description }}</div>
-                <div class="link-url">{{ link.url }}</div>
-              </a>
+              @if (link.routerLink) {
+                <a [routerLink]="link.routerLink" class="link-card">
+                  <div class="link-header">
+                    <div class="link-name">{{ link.name }}</div>
+                    @if (link.badge) {
+                      <span class="status-badge" [ngClass]="healthStatus[link.badge.endpoint] || 'pending'">
+                        {{ healthLabels[healthStatus[link.badge.endpoint] || 'pending'] }}
+                      </span>
+                    }
+                  </div>
+                  <div class="link-desc">{{ link.description }}</div>
+                  <div class="link-url">{{ link.routerLink }}</div>
+                </a>
+              } @else {
+                <a [href]="link.url" target="_blank" rel="noopener noreferrer" class="link-card">
+                  <div class="link-header">
+                    <div class="link-name">{{ link.name }}</div>
+                    @if (link.badge) {
+                      <span class="status-badge" [ngClass]="healthStatus[link.badge.endpoint] || 'pending'">
+                        {{ healthLabels[healthStatus[link.badge.endpoint] || 'pending'] }}
+                      </span>
+                    }
+                  </div>
+                  <div class="link-desc">{{ link.description }}</div>
+                  @if (link.credentials) {
+                    <div class="credentials">
+                      <span class="cred-label">Login:</span>
+                      <code>{{ link.credentials.username }}</code> / <code>{{ link.credentials.password }}</code>
+                    </div>
+                  }
+                  <div class="link-url">{{ link.url }}</div>
+                </a>
+              }
             }
           </div>
         </section>
@@ -133,11 +164,16 @@ const ADMIN_LINKS: AdminLink[] = [
       border-color: #6366f1;
       box-shadow: 0 2px 12px rgba(99, 102, 241, 0.15);
     }
+    .link-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 0.375rem;
+    }
     .link-name {
       font-size: 1rem;
       font-weight: 600;
       color: #111827;
-      margin-bottom: 0.375rem;
     }
     .link-desc {
       font-size: 0.875rem;
@@ -151,13 +187,75 @@ const ADMIN_LINKS: AdminLink[] = [
       font-family: ui-monospace, monospace;
       word-break: break-all;
     }
+    .status-badge {
+      font-size: 0.7rem;
+      font-weight: 600;
+      padding: 0.15rem 0.5rem;
+      border-radius: 9999px;
+      text-transform: uppercase;
+      letter-spacing: 0.03em;
+      flex-shrink: 0;
+    }
+    .status-badge.up {
+      background: #dcfce7;
+      color: #166534;
+    }
+    .status-badge.down {
+      background: #fee2e2;
+      color: #991b1b;
+    }
+    .status-badge.pending {
+      background: #f3f4f6;
+      color: #6b7280;
+    }
+    .credentials {
+      display: flex;
+      align-items: center;
+      gap: 0.35rem;
+      font-size: 0.8rem;
+      color: #374151;
+      margin-bottom: 0.5rem;
+    }
+    .cred-label {
+      font-weight: 500;
+    }
+    .credentials code {
+      background: #f3f4f6;
+      padding: 0.1rem 0.35rem;
+      border-radius: 4px;
+      font-family: ui-monospace, monospace;
+      font-size: 0.8rem;
+    }
   `],
 })
-export class RemoteEntry {
+export class RemoteEntry implements OnInit {
   readonly links = ADMIN_LINKS;
   readonly categories = [...new Set(ADMIN_LINKS.map((l) => l.category))];
+  readonly healthStatus: Record<string, string> = {};
+  readonly healthLabels: Record<string, string> = {
+    up: 'Healthy',
+    down: 'Down',
+    pending: 'Checking\u2026',
+  };
+
+  private readonly http = inject(HttpClient);
+
+  ngOnInit(): void {
+    for (const link of this.links) {
+      if (link.badge?.type === 'health') {
+        this.checkHealth(link.badge.endpoint);
+      }
+    }
+  }
 
   linksByCategory(category: string): AdminLink[] {
     return this.links.filter((l) => l.category === category);
+  }
+
+  private checkHealth(endpoint: string): void {
+    this.http.get(endpoint, { responseType: 'text' }).subscribe({
+      next: () => (this.healthStatus[endpoint] = 'up'),
+      error: () => (this.healthStatus[endpoint] = 'down'),
+    });
   }
 }

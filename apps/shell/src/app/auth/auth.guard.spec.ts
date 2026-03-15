@@ -90,3 +90,77 @@ describe('adminAuthGuard', () => {
     });
   });
 });
+
+describe('weatherEditAuthGuard', () => {
+  let authService: AuthService;
+  let router: Router;
+
+  beforeEach(async () => {
+    await resolveComponentResources(() =>
+      Promise.resolve({ text: () => Promise.resolve('') } as Response)
+    );
+    await TestBed.configureTestingModule({
+      providers: [
+        {
+          provide: AuthService,
+          useValue: {
+            getSession: vi.fn(),
+            canAccessWeatherEdit: vi.fn(),
+            initiateLogin: vi.fn(),
+          },
+        },
+        {
+          provide: Router,
+          useValue: {
+            createUrlTree: vi.fn().mockReturnValue('unauthorized-tree' as unknown as UrlTree),
+          },
+        },
+      ],
+    }).compileComponents();
+
+    authService = TestBed.inject(AuthService);
+    router = TestBed.inject(Router);
+  });
+
+  it('should redirect to login when no session', () => {
+    vi.mocked(authService.getSession).mockReturnValue(of(null));
+
+    const result$ = TestBed.runInInjectionContext(() =>
+      weatherEditAuthGuard({} as any, { url: '/weatheredit-app' } as any)
+    );
+
+    (result$ as any).subscribe((result: boolean | UrlTree) => {
+      expect(result).toBe(false);
+      expect(authService.initiateLogin).toHaveBeenCalledWith('/weatheredit-app');
+    });
+  });
+
+  it('should redirect to unauthorized when role is not allowed', () => {
+    const session = makeSession('viewer');
+    vi.mocked(authService.getSession).mockReturnValue(of(session));
+    vi.mocked(authService.canAccessWeatherEdit).mockReturnValue(false);
+
+    const result$ = TestBed.runInInjectionContext(() =>
+      weatherEditAuthGuard({} as any, { url: '/weatheredit-app' } as any)
+    );
+
+    (result$ as any).subscribe((result: boolean | UrlTree) => {
+      expect(result).toBe('unauthorized-tree');
+      expect(router.createUrlTree).toHaveBeenCalledWith(['/auth/unauthorized']);
+    });
+  });
+
+  it('should allow access when role is weather_admin', () => {
+    const session = makeSession('weather_admin');
+    vi.mocked(authService.getSession).mockReturnValue(of(session));
+    vi.mocked(authService.canAccessWeatherEdit).mockReturnValue(true);
+
+    const result$ = TestBed.runInInjectionContext(() =>
+      weatherEditAuthGuard({} as any, { url: '/weatheredit-app' } as any)
+    );
+
+    (result$ as any).subscribe((result: boolean | UrlTree) => {
+      expect(result).toBe(true);
+    });
+  });
+});

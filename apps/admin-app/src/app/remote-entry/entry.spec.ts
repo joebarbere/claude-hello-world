@@ -1,5 +1,8 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { TestBed } from '@angular/core/testing';
+import { provideHttpClient } from '@angular/common/http';
+import { provideHttpClientTesting } from '@angular/common/http/testing';
+import { provideRouter } from '@angular/router';
 import { ɵresolveComponentResources as resolveComponentResources } from '@angular/core';
 import { RemoteEntry } from './entry';
 
@@ -10,6 +13,7 @@ describe('RemoteEntry (admin-app)', () => {
     );
     await TestBed.configureTestingModule({
       imports: [RemoteEntry],
+      providers: [provideHttpClient(), provideHttpClientTesting(), provideRouter([])],
     }).compileComponents();
   });
 
@@ -50,28 +54,32 @@ describe('RemoteEntry (admin-app)', () => {
     expect(component.linksByCategory('NonExistent')).toEqual([]);
   });
 
-  it('should include Weather API Swagger link', () => {
+  it('should include Weather API Docs link', () => {
     const fixture = TestBed.createComponent(RemoteEntry);
     const component = fixture.componentInstance;
-    const swagger = component.links.find((l) => l.name === 'Weather API Swagger');
-    expect(swagger).toBeDefined();
-    expect(swagger!.url).toContain('swagger');
+    const docs = component.links.find((l) => l.name === 'Weather API Docs');
+    expect(docs).toBeDefined();
+    expect(docs!.url).toContain('scalar');
   });
 
-  it('should include Ory Kratos Admin link', () => {
+  it('should include Ory Kratos Admin link with routerLink and health badge', () => {
     const fixture = TestBed.createComponent(RemoteEntry);
     const component = fixture.componentInstance;
     const kratos = component.links.find((l) => l.name === 'Ory Kratos Admin');
     expect(kratos).toBeDefined();
-    expect(kratos!.url).toContain('4434');
+    expect(kratos!.routerLink).toBe('/admin-app/kratos');
+    expect(kratos!.url).toBeUndefined();
+    expect(kratos!.badge).toBeDefined();
+    expect(kratos!.badge!.endpoint).toContain('health/alive');
   });
 
-  it('should include Grafana Dashboard link', () => {
+  it('should include Grafana Dashboard link with credentials', () => {
     const fixture = TestBed.createComponent(RemoteEntry);
     const component = fixture.componentInstance;
     const grafana = component.links.find((l) => l.name === 'Grafana Dashboard');
     expect(grafana).toBeDefined();
     expect(grafana!.url).toContain('3000');
+    expect(grafana!.credentials).toEqual({ username: 'admin', password: 'admin' });
   });
 
   it('should include Traefik Dashboard link', () => {
@@ -89,15 +97,20 @@ describe('RemoteEntry (admin-app)', () => {
     expect(compiled.querySelector('h1')?.textContent).toContain('Admin Dashboard');
   });
 
-  it('should render link cards with target="_blank"', () => {
+  it('should render link cards', () => {
     const fixture = TestBed.createComponent(RemoteEntry);
     fixture.detectChanges();
     const compiled = fixture.nativeElement as HTMLElement;
     const cards = compiled.querySelectorAll('.link-card');
-    expect(cards.length).toBeGreaterThan(0);
-    cards.forEach((card) => {
-      expect(card.getAttribute('target')).toBe('_blank');
-    });
+    expect(cards.length).toBe(4);
+  });
+
+  it('should render external links with target="_blank"', () => {
+    const fixture = TestBed.createComponent(RemoteEntry);
+    fixture.detectChanges();
+    const compiled = fixture.nativeElement as HTMLElement;
+    const externalCards = compiled.querySelectorAll('.link-card[target="_blank"]');
+    expect(externalCards.length).toBe(3);
   });
 
   it('should render category section titles', () => {

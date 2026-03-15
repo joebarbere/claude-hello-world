@@ -34,6 +34,8 @@ spec:
           hostPort: 8080
         - containerPort: 443
           hostPort: 8443
+        - containerPort: 8081
+          hostPort: 8081
     - name: nginx
       image: localhost/claude-hello-world:latest
     - name: nginx-exporter

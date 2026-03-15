@@ -2576,3 +2576,79 @@ Added a new Angular micro-frontend application (`admin-app`) that displays admin
 
 **Files changed:**
 - `apps/ory/init-users.sh` — added `exec sleep infinity` after user creation
+
+---
+
+## Step 89: Fix — Add missing weather-api:podman-build dependency to shell kube-up
+
+**Root cause:** The shell `kube-up` target deploys `k8s/apps-pod.yaml` which references `localhost/weather-api:latest`, but the target's `dependsOn` did not include `weather-api:podman-build`. This caused `podman play kube` to fail when the weather-api image had not been built beforehand.
+
+**Fix:** Added `weather-api:podman-build` to the `dependsOn` array of the shell `kube-up` target.
+
+**Files changed:**
+- `apps/shell/project.json` — added `weather-api:podman-build` to `kube-up.dependsOn`
+
+---
+
+## Step 90: Fix — Admin dashboard tiles (Swagger, Kratos, Grafana, Traefik)
+
+**Issues:**
+1. Weather API Swagger link pointed to wrong port (5220) and Swagger/Scalar was dev-only, so it returned nothing in production.
+2. Ory Kratos Admin link returned raw JSON — not an admin UI — and lacked context.
+3. Ory Kratos Health was a plain link; user wanted a status badge instead.
+4. Grafana Dashboard tile didn't show login credentials (admin/admin).
+5. Traefik Dashboard link (port 8081) didn't work because the Traefik API/dashboard was not enabled.
+
+**Fixes:**
+- **Weather API**: Enabled `MapOpenApi()` and `MapScalarApiReference()` in all environments (removed dev-only guard). Updated link to `http://localhost:5221/scalar/v1`.
+- **Ory Kratos**: Removed separate Health link. Added an inline health status badge to the Kratos Admin API tile that fetches `/health/alive` on load and shows Healthy/Down.
+- **Grafana**: Added credentials display (`admin` / `admin`) to the Grafana tile.
+- **Traefik**: Added `traefik` entrypoint on port 8081 and enabled `api.dashboard` + `api.insecure` in `traefik.yml`. Exposed port 8081 in `apps-pod.yaml`.
+- **Admin component**: Added `HttpClient` injection, `OnInit` health check, `NgClass` for badge styling, and credential display. Updated tests with `provideHttpClient`/`provideHttpClientTesting`.
+
+**Files changed:**
+- `apps/weather-api/Program.cs` — removed dev-only guard around OpenAPI/Scalar
+- `traefik/traefik.yml` — added `traefik` entrypoint (8081) and `api.dashboard`/`api.insecure`
+- `k8s/apps-pod.yaml` — exposed container port 8081 for Traefik dashboard
+- `apps/admin-app/src/app/remote-entry/entry.ts` — rewrote tiles, added health badge and credentials
+- `apps/admin-app/src/app/remote-entry/entry.spec.ts` — updated tests for new tile structure
+- `apps/admin-app/src/app/app.config.ts` — added `provideHttpClient()`
+
+---
+
+## Step 91: Fix — Shell unit test coverage below 80% threshold
+
+**Root cause:** The shell app's `auth.guard.ts` only had tests for `adminAuthGuard`; `weatherEditAuthGuard` was completely untested. In `auth.service.ts`, the methods `getSession()`, `initiateLogin()`, `logout()`, and `getLoginFlow()` had no test coverage. Overall coverage was ~58% lines, ~37% functions — well below the 80% threshold.
+
+**Fix:** Added tests for `weatherEditAuthGuard` (login redirect, unauthorized redirect, allow access). Rewrote `auth.service.spec.ts` to use `HttpTestingController` and added tests for `getSession()` (success + error), `initiateLogin()` (window.location redirect), `logout()` (success + error), and `getLoginFlow()` (success + error). Coverage is now 100% across all metrics.
+
+**Files changed:**
+- `apps/shell/src/app/auth/auth.guard.spec.ts` — added `weatherEditAuthGuard` describe block with 3 tests
+- `apps/shell/src/app/auth/auth.service.spec.ts` — switched to `HttpTestingController`, added tests for `getSession`, `initiateLogin`, `logout`, `getLoginFlow`
+
+---
+
+## Step 92: Feat — Add Ory Kratos identity management page in admin-app
+
+**What:** Replaced the raw Kratos Admin API JSON link on the admin dashboard with an in-app identity management page at `/admin-app/kratos`. The new page provides a full CRUD interface for Ory Kratos identities.
+
+**Features:**
+- **List identities** — table showing email, role, state, and creation date, fetched from `GET /admin/identities`
+- **Create identity** — form with email, password, and role (admin / weather_admin / none), calls `POST /admin/identities`
+- **Edit role** — inline role dropdown per row, calls `PUT /admin/identities/:id`
+- **Delete identity** — per-row delete button, calls `DELETE /admin/identities/:id`
+- **Health badge** — checks `GET /health/alive` on load and displays Healthy/Down status
+- **Back to Dashboard** link via Angular routerLink
+
+**Dashboard tile change:** The "Ory Kratos Admin" tile now uses an Angular `routerLink` to `/admin-app/kratos` instead of an external `href` to `http://localhost:4434/admin/identities`. The health badge remains on the dashboard tile.
+
+**Tests:** 37 admin-app tests pass (13 entry, 18 component, 6 service). Coverage: 97.72% statements, 87.5% branches, 94.28% functions, 97.59% lines.
+
+**Files changed:**
+- `apps/admin-app/src/app/kratos-admin/kratos-admin.service.ts` — new service wrapping Kratos Admin API (list, get, create, update, delete, health)
+- `apps/admin-app/src/app/kratos-admin/kratos-admin.component.ts` — new standalone component with identity table, create form, inline role editing, delete, health badge
+- `apps/admin-app/src/app/kratos-admin/kratos-admin.service.spec.ts` — 6 unit tests for the service
+- `apps/admin-app/src/app/kratos-admin/kratos-admin.component.spec.ts` — 18 unit tests for the component
+- `apps/admin-app/src/app/remote-entry/entry.routes.ts` — added `kratos` child route
+- `apps/admin-app/src/app/remote-entry/entry.ts` — changed Kratos tile from external `url` to internal `routerLink`, added `RouterLink` import, updated template to conditionally render `<a routerLink>` vs `<a href>`
+- `apps/admin-app/src/app/remote-entry/entry.spec.ts` — updated tests for routerLink tile, added `provideRouter`

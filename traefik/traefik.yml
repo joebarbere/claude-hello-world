@@ -8,6 +8,12 @@ entryPoints:
           scheme: https
   websecure:
     address: ":443"
+  traefik:
+    address: ":8081"
+
+api:
+  dashboard: true
+  insecure: true
 
 providers:
   file:
