@@ -2923,3 +2923,17 @@ Added a new Angular micro-frontend application (`admin-app`) that displays admin
 
 **Files changed:**
 - `apps/shell/project.json` — added `-R` flag to both `chmod 777` commands in the kube-up target
+
+---
+
+## Step 111: Docs — Update README.md and RUN.md with observability stack documentation
+
+**What:** README.md and RUN.md were missing documentation for the full observability pipeline added in steps 76–109: Traefik/nginx access log collection, the System Health dashboard, Grafana SSO via Ory Kratos (auth-proxy + forwardAuth), and the auth-proxy container image.
+
+**Changes:**
+- README.md: added Observability section covering components, scraped metrics, collected logs, dashboards, and Grafana SSO architecture; added observability to Architecture diagram; added Grafana/Prometheus/Loki URLs to the service table
+- RUN.md: expanded the Observability section with auth-proxy image, Traefik metrics scrape target, access log collection (traefik + nginx), System Health dashboard details, Grafana SSO flow, datasource UIDs, and prerequisite note about apps pod
+
+**Files changed:**
+- `README.md`
+- `RUN.md`

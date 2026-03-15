@@ -255,14 +255,15 @@ The observability stack runs as a separate pod — it is **not** started by `kub
 npx nx run observability:podman-build
 ```
 
-Builds four images in parallel:
+Builds five images in parallel:
 
 | Image | Base | Purpose |
 |-------|------|---------|
 | `localhost/prometheus:latest` | `prom/prometheus` | Metrics scraping and storage |
 | `localhost/loki:latest` | `grafana/loki` | Log aggregation and storage |
-| `localhost/promtail:latest` | `grafana/promtail` | Log collection from pod/container logs |
+| `localhost/promtail:latest` | `grafana/promtail` | Log collection from pod/container logs and access logs |
 | `localhost/grafana:latest` | `grafana/grafana` | Dashboards for metrics and logs |
+| `localhost/auth-proxy:latest` | `python:3.13-alpine` | Kratos session validation for Grafana SSO |
 
 ### Start the observability pod
 
@@ -272,36 +273,71 @@ npx nx run observability:kube-up
 
 Builds images (if not already built) then runs `podman play kube k8s/observability-pod.yaml`.
 
+> **Prerequisite:** The apps pod (`kube-up shell`) must be running first so that Prometheus can scrape metrics and Promtail can read log volumes.
+
 | Service | URL | Purpose |
 |---------|-----|---------|
-| Grafana | http://localhost:3000 | Dashboards (login: `admin` / `admin`) |
+| Grafana | https://localhost:8443/grafana/ | Dashboards (SSO via Kratos — no separate login needed) |
+| Grafana (direct) | http://localhost:3000 | Direct access (bypasses SSO) |
 | Prometheus | http://localhost:9090 | Metrics query UI |
 | Loki | http://localhost:3100 | Log query API (used by Grafana) |
 | Promtail | — | No external port; ships logs to Loki |
+| auth-proxy | http://localhost:4180 | Kratos forwardAuth endpoint (used by Traefik internally) |
 
 ### What gets scraped
 
 **Metrics (Prometheus):**
 - `weather-api` — ASP.NET Core HTTP metrics via `prometheus-net` at `host.containers.internal:5221/metrics`
 - `nginx` — connection stats via the `nginx-prometheus-exporter` sidecar at `host.containers.internal:9113`
+- `traefik` — request counts, error rates, and latency histograms at `host.containers.internal:8081/metrics`
 - `prometheus` — self-scrape at `localhost:9090`
 
 **Logs (Promtail → Loki):**
 - `/var/log/pods/*/*/*.log` — CRI-format logs written by the container runtime for all running pods
 - `/var/lib/containers/storage/overlay-containers/*/userdata/ctr.log` — raw Podman container logs (fallback)
+- `/var/log/traefik/access.log` — Traefik JSON access logs (client IP, User-Agent, status, route, service)
+- `/var/log/nginx/access.log` — nginx JSON access logs (remote_addr, request, status, request_time)
 
 > **macOS note:** Podman containers run inside a Linux VM. The `hostPath` volume mounts (`/var/log`, `/var/lib/containers`) refer to paths inside that VM, not the macOS host filesystem. Log collection works automatically when `kube-up shell` and `kube-up observability` are both running inside the same Podman Machine.
 
 ### Grafana datasources (auto-provisioned)
 
-Both datasources are provisioned at startup — no manual setup required.
+Both datasources are provisioned at startup with explicit UIDs — no manual setup required.
 
-| Datasource | Type | URL |
-|-----------|------|-----|
-| Prometheus | Prometheus | `http://localhost:9090` |
-| Loki | Loki | `http://localhost:3100` |
+| Datasource | Type | UID | URL |
+|-----------|------|-----|-----|
+| Prometheus | Prometheus | `prometheus` | `http://localhost:9090` |
+| Loki | Loki | `loki` | `http://localhost:3100` |
 
-The pre-built **Weather API** dashboard (under the Default folder) shows HTTP request rate, p99 latency, in-flight requests, process memory, and nginx active connections. Use **Explore → Loki** to query container logs.
+### Grafana dashboards
+
+Two pre-provisioned dashboards are available under the Default folder:
+
+**Weather API** — HTTP request rate, p99 latency, in-flight requests, process memory, and nginx active connections.
+
+**System Health** — 12 panels covering:
+- System health % (percentage of scrape targets UP)
+- Running pods count and total container count
+- Container health table (per-target UP/DOWN with color mapping)
+- HTTP request rate by service and HTTP error rate (4xx + 5xx) from Traefik metrics
+- Total 5xx / 4xx / all requests (1h stat panels)
+- Top IP + User-Agent table (Loki LogQL `topk` over traefik-access logs)
+- Recent error logs (Loki log panel filtering status >= 400)
+
+Use **Explore → Loki** to query container logs interactively.
+
+### Grafana SSO via Ory Kratos
+
+Grafana is served at `https://localhost:8443/grafana/` through Traefik with automatic SSO:
+
+1. Traefik routes `/grafana` requests through a `forwardAuth` middleware to the auth-proxy container (port 4180)
+2. The auth-proxy reads the Kratos session cookie (`ory_kratos_session`) and calls Kratos `/sessions/whoami`
+3. If the session is valid, it returns `200` with an `X-Webauth-User: <email>` header; Traefik copies this to the proxied request
+4. If the session is invalid, it returns a `302` redirect to the Kratos login page with `return_to` pointing back to Grafana
+5. Grafana's `auth.proxy` trusts the `X-Webauth-User` header and auto-signs-up/logs in the user
+6. The login form and sign-out menu are disabled in Grafana since auth is handled externally
+
+> **Note:** Grafana SSO only works when accessing via `https://localhost:8443/grafana/` (through Traefik). Direct access at `http://localhost:3000` bypasses authentication entirely.
 
 ### Stop the observability pod
 

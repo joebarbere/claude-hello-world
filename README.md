@@ -106,7 +106,60 @@ Ory Kratos (identity, :4433 public / :4434 admin)
   └── PostgreSQL-backed user store with role-based access (seeded on start by ory-kratos-init)
 
 PostgreSQL 17 (:5432)
+Observability (separate pod, not started by kube-up shell)
+  ├── Prometheus (:9090) — metrics scraping and storage
+  ├── Loki (:3100) — log aggregation (tsdb/filesystem backend)
+  ├── Promtail — log collection from pod/container logs, traefik & nginx access logs
+  ├── Grafana (:3000 / https://localhost:8443/grafana/) — dashboards, SSO via Kratos
+  └── auth-proxy (:4180) — Kratos session validation for Grafana forwardAuth
 ```
+
+## Observability
+
+The observability stack runs as a **separate pod** and is never started by `kube-up shell` or during e2e tests. It provides metrics, log aggregation, and dashboards for local development.
+
+### Components
+
+| Component | Port | Purpose |
+|-----------|------|---------|
+| Prometheus | 9090 | Scrapes metrics from weather-api, nginx-exporter, traefik, and itself |
+| Loki | 3100 | Log storage (single-instance, filesystem backend) |
+| Promtail | — | Collects CRI pod logs, Podman container logs, and Traefik/nginx access logs; ships to Loki |
+| Grafana | 3000 | Dashboards and log exploration; served at `https://localhost:8443/grafana/` via Traefik |
+| auth-proxy | 4180 | Validates Kratos sessions for Grafana SSO (Traefik forwardAuth middleware) |
+
+### Metrics scraped by Prometheus
+
+- `weather-api` — ASP.NET Core HTTP metrics via `prometheus-net` at `host.containers.internal:5221/metrics`
+- `nginx` — connection stats via the `nginx-prometheus-exporter` sidecar at `host.containers.internal:9113`
+- `traefik` — request counts, error rates, latency histograms at `host.containers.internal:8081/metrics`
+- `prometheus` — self-scrape at `localhost:9090`
+
+### Logs collected by Promtail
+
+- `/var/log/pods/*/*/*.log` — CRI-format pod logs
+- `/var/lib/containers/storage/overlay-containers/*/userdata/ctr.log` — raw Podman container logs
+- `/var/log/traefik/access.log` — Traefik JSON access logs (client IP, User-Agent, status, route, service)
+- `/var/log/nginx/access.log` — nginx JSON access logs (remote_addr, request, status, request_time)
+
+### Grafana dashboards
+
+Two pre-provisioned dashboards are available:
+
+- **Weather API** — HTTP request rate, p99 latency, in-flight requests, process memory, nginx active connections
+- **System Health** — system health %, running pods, container health table, HTTP request/error rates by service, top IP + User-Agent, recent error logs (status >= 400)
+
+### Grafana SSO via Ory Kratos
+
+Grafana is accessible at `https://localhost:8443/grafana/` with automatic SSO through Ory Kratos:
+
+1. Traefik routes `/grafana` through a `forwardAuth` middleware to the auth-proxy
+2. The auth-proxy reads the Kratos session cookie and calls `/sessions/whoami`
+3. If valid, it returns `200` with `X-Webauth-User: <email>`; Traefik copies this header to the proxied request
+4. If invalid, it redirects to the Kratos login page with `return_to` pointing back to Grafana
+5. Grafana's `auth.proxy` trusts the `X-Webauth-User` header and auto-signs-up/logs in the user
+
+> **macOS note:** Podman containers run inside a Linux VM. The `hostPath` volume mounts (`/var/log`, `/var/lib/containers`) refer to paths inside that VM, not the macOS host filesystem. Log collection works automatically when `kube-up shell` and `kube-up observability` are both running inside the same Podman Machine.
 
 ## Authentication
 
@@ -280,6 +333,9 @@ npx nx kube-down shell
 | localhost:4433 | Ory Kratos public API |
 | localhost:4434 | Ory Kratos admin API |
 | localhost:5432 | PostgreSQL |
+| https://localhost:8443/grafana/ | Grafana (SSO via Kratos, requires observability pod) |
+| http://localhost:9090 | Prometheus (requires observability pod) |
+| http://localhost:3100 | Loki (requires observability pod) |
 
 ### Individual containers
 
