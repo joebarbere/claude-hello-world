@@ -146,7 +146,8 @@
         "commands": [
           "podman play kube k8s/apps-pod.yaml --down || true",
           "podman play kube k8s/ory-kratos-pod.yaml --down || true",
-          "podman play kube k8s/postgres-pod.yaml --down || true"
+          "podman play kube k8s/postgres-pod.yaml --down || true",
+          "podman image prune -a -f || true"
         ],
         "parallel": false,
         "cwd": "{workspaceRoot}"
