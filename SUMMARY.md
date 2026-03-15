@@ -2834,3 +2834,14 @@ Added a new Angular micro-frontend application (`admin-app`) that displays admin
 - `.github/workflows/eks-e2e-full.yml` — same storage reset change
 - `Containerfile.nginx` — added nginx log directory creation with correct ownership
 - `apps/shell/project.json` — `kube-up` target now verifies all required images exist and sets log directory permissions
+
+---
+
+## Step 103: Fix — Remove `podman image prune -af` from shell:podman-build to prevent parallel build corruption
+
+**Root cause:** `shell:podman-build` ran `podman image prune -af` before building the nginx image. Since `kube-up` depends on all podman-build targets, Nx runs them in parallel. The prune in one build deletes images and layers that other concurrent builds (ory, postgres, traefik, weather-api) have just created, corrupting Podman's storage and causing "image not known" errors.
+
+**Fix:** Removed `podman image prune -af` from the `shell:podman-build` target. Storage cleanup is already handled by `podman system reset --force` in the CI workflow before any builds start, so the per-build prune was redundant and harmful.
+
+**Files changed:**
+- `apps/shell/project.json` — removed `podman image prune -af` from `podman-build` commands

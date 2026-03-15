@@ -108,7 +108,6 @@
       "executor": "nx:run-commands",
       "options": {
         "commands": [
-          "podman image prune -af",
           "podman build -t claude-hello-world -f Containerfile.nginx ."
         ],
         "cwd": "{workspaceRoot}"
