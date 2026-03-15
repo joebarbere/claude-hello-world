@@ -2845,3 +2845,14 @@ Added a new Angular micro-frontend application (`admin-app`) that displays admin
 
 **Files changed:**
 - `apps/shell/project.json` — removed `podman image prune -af` from `podman-build` commands
+
+---
+
+## Step 104: Fix — Make kube-up log directory creation work on both macOS and Linux CI
+
+**Root cause:** The `kube-up` target used `podman machine ssh` to create host log directories (`/var/log/traefik`, `/var/log/nginx`). This only works on macOS/Windows where Podman runs inside a VM. On GitHub Actions Linux runners, Podman runs natively without a VM, so `podman machine ssh` fails with "VM does not exist".
+
+**Fix:** Replaced the unconditional `podman machine ssh` call with a conditional: if `podman machine inspect` succeeds (macOS/Windows), use `podman machine ssh`; otherwise (Linux/CI), create the directories directly with `sudo mkdir`.
+
+**Files changed:**
+- `apps/shell/project.json` — `kube-up` log directory command now detects whether a Podman VM exists and falls back to direct `mkdir` on Linux
