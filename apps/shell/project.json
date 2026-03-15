@@ -107,7 +107,10 @@
     "podman-build": {
       "executor": "nx:run-commands",
       "options": {
-        "command": "podman build -t claude-hello-world -f Containerfile.nginx .",
+        "commands": [
+          "podman image prune -af",
+          "podman build -t claude-hello-world -f Containerfile.nginx ."
+        ],
         "cwd": "{workspaceRoot}"
       },
       "dependsOn": ["build-all"]
@@ -138,7 +141,7 @@
         "parallel": false,
         "cwd": "{workspaceRoot}"
       },
-      "dependsOn": ["postgres:podman-build", "ory:podman-build", "traefik:podman-build", "weather-api:podman-build"]
+      "dependsOn": ["postgres:podman-build", "ory:podman-build", "traefik:podman-build", "weather-api:podman-build", "podman-build"]
     },
     "kube-down": {
       "executor": "nx:run-commands",

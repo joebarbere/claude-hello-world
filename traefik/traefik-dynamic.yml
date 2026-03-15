@@ -1,6 +1,17 @@
 http:
   routers:
-    # Ory Kratos public API — highest priority
+    # Ory Kratos admin API — highest priority
+    kratos-admin-router:
+      rule: "PathPrefix(`/.ory/kratos/admin`)"
+      entryPoints:
+        - websecure
+      service: kratos-admin
+      priority: 31
+      middlewares:
+        - strip-ory-admin-prefix
+      tls: {}
+
+    # Ory Kratos public API
     kratos-router:
       rule: "PathPrefix(`/.ory/kratos/public`)"
       entryPoints:
@@ -62,12 +73,24 @@ http:
         servers:
           - url: "http://host.containers.internal:4433"
 
+    # Ory Kratos admin API in separate pod
+    kratos-admin:
+      loadBalancer:
+        servers:
+          - url: "http://host.containers.internal:4434"
+
   middlewares:
     # Strip /.ory/kratos/public prefix before forwarding to Kratos
     strip-ory-prefix:
       stripPrefix:
         prefixes:
           - "/.ory/kratos/public"
+
+    # Strip /.ory/kratos/admin prefix before forwarding to Kratos admin
+    strip-ory-admin-prefix:
+      stripPrefix:
+        prefixes:
+          - "/.ory/kratos/admin"
 
     # Rewrite /weather → /weatherforecast
     weather-replace-path:

@@ -2652,3 +2652,35 @@ Added a new Angular micro-frontend application (`admin-app`) that displays admin
 - `apps/admin-app/src/app/remote-entry/entry.routes.ts` — added `kratos` child route
 - `apps/admin-app/src/app/remote-entry/entry.ts` — changed Kratos tile from external `url` to internal `routerLink`, added `RouterLink` import, updated template to conditionally render `<a routerLink>` vs `<a href>`
 - `apps/admin-app/src/app/remote-entry/entry.spec.ts` — updated tests for routerLink tile, added `provideRouter`
+
+---
+
+## Step 93: Fix — Add image prune and podman-build dependency to shell kube-up
+
+**What:** The shell `podman-build` target was hitting "no space left on device" errors because old images accumulated. The `kube-up` target also didn't depend on `podman-build`, so the shell container image could be stale.
+
+**Changes:**
+- `apps/shell/project.json` — changed `podman-build` from single `command` to `commands` array, adding `podman image prune -af` before the build to reclaim disk space; added `"podman-build"` to `kube-up` `dependsOn` so the shell image is always rebuilt before starting pods
+
+**Files changed:**
+- `apps/shell/project.json`
+
+---
+
+## Step 94: Fix — CORS errors on Kratos admin API calls from admin-app
+
+**Root cause:** The admin-app's `KratosAdminService` called `http://localhost:4434` directly from the browser. Since the app is served from `https://localhost:8443`, the browser blocked these cross-origin requests. The Kratos admin API has no CORS configuration, and Traefik had no route to proxy admin API traffic.
+
+**Fix:** Proxy the Kratos admin API through Traefik at `/.ory/kratos/admin/`, matching the existing pattern for the public API. Updated the admin-app service to use the relative proxied path instead of the hardcoded localhost URL.
+
+**Changes:**
+- `traefik/traefik-dynamic.yml` — added `kratos-admin-router` (priority 31, path prefix `/.ory/kratos/admin`), `kratos-admin` service (pointing to `host.containers.internal:4434`), and `strip-ory-admin-prefix` middleware
+- `apps/admin-app/src/app/kratos-admin/kratos-admin.service.ts` — changed `KRATOS_ADMIN_URL` from `http://localhost:4434` to `/.ory/kratos/admin`
+- `apps/shell/project.json` — added `-f` flag to `podman image prune -a` to prevent interactive prompt hang
+- `README.md` — added admin-app to architecture diagram, Traefik routes, nginx routes, and service URL table
+
+**Files changed:**
+- `traefik/traefik-dynamic.yml`
+- `apps/admin-app/src/app/kratos-admin/kratos-admin.service.ts`
+- `apps/shell/project.json`
+- `README.md`

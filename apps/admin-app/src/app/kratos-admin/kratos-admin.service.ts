@@ -26,7 +26,7 @@ export interface CreateIdentityPayload {
   };
 }
 
-const KRATOS_ADMIN_URL = 'http://localhost:4434';
+const KRATOS_ADMIN_URL = '/.ory/kratos/admin';
 
 @Injectable({ providedIn: 'root' })
 export class KratosAdminService {

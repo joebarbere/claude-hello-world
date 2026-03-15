@@ -80,19 +80,23 @@ An Nx monorepo demonstrating Angular Module Federation micro-frontends with a .N
 Browser
   └── Shell (Angular MFE host, :4200 / :8443 HTTPS / :8080 HTTP→redirect)
         ├── weather-app (remote, :4201) — weather forecast table (public)
-        └── weatheredit-app (remote, :4202) — weather forecast CRUD (admin/weather_admin only)
+        ├── weatheredit-app (remote, :4202) — weather forecast CRUD (admin/weather_admin only)
+        └── admin-app (remote, :4203) — admin UI (admin only)
 
 Traefik (reverse proxy, :8080 → redirects to HTTPS, :8443 SSL termination)
   ├── /                        → nginx (static files) → shell app
   ├── /weather-app/            → nginx (static files) → weather-app remote
   ├── /weatheredit-app/        → nginx (static files) → weatheredit-app remote
+  ├── /admin-app/              → nginx (static files) → admin-app remote
   ├── /weather                 → weather-api
-  └── /.ory/kratos/public/     → Ory Kratos public API (:4433)
+  ├── /.ory/kratos/public/     → Ory Kratos public API (:4433)
+  └── /.ory/kratos/admin/      → Ory Kratos admin API (:4434)
 
 nginx (container, :8080 internal — static file server only)
   ├── /                        → shell app
   ├── /weather-app/            → weather-app remote
-  └── /weatheredit-app/        → weatheredit-app remote
+  ├── /weatheredit-app/        → weatheredit-app remote
+  └── /admin-app/              → admin-app remote
 
 weather-api (.NET 9, :5220 dev / :5221 container)
   ├── GET endpoints — public
@@ -270,6 +274,7 @@ npx nx kube-down shell
 | https://localhost:8443 | Shell (HTTPS) |
 | https://localhost:8443/weather-app/ | Weather table (public, HTTPS) |
 | https://localhost:8443/weatheredit-app/ | Weather CRUD (login required, HTTPS) |
+| https://localhost:8443/admin-app/ | Kratos identity admin (admin only, HTTPS) |
 | http://localhost:8080 | Redirects to HTTPS |
 | http://localhost:5221/weatherforecast | Weather API (GET public, writes require auth) |
 | localhost:4433 | Ory Kratos public API |
