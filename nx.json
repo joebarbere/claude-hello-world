@@ -42,7 +42,6 @@
       }
     }
   ],
-  "nxCloudId": "69ac50a2215e7c4ada855a45",
   "targetDefaults": {
     "@angular-devkit/build-angular:browser": {
       "cache": true,

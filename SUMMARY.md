@@ -2709,3 +2709,25 @@ Added a new Angular micro-frontend application (`admin-app`) that displays admin
 **Files changed:**
 - `apps/admin-app/src/app/kratos-admin/kratos-admin.component.ts` — properties → signals, template → signal reads
 - `apps/admin-app/src/app/kratos-admin/kratos-admin.component.spec.ts` — assertions updated for signal accessors
+
+---
+
+## Step 97: Fix — Remove expired Nx Cloud connection
+
+**Root cause:** `nx.json` contained an `nxCloudId` for an unclaimed workspace. After 3 days without claiming, Nx Cloud returns a 401 error on every `nx` command.
+
+**Fix:** Removed the `nxCloudId` property from `nx.json`. No `nx-cloud` package was installed, so no dependency removal was needed.
+
+**Files changed:**
+- `nx.json` — removed `nxCloudId` line
+
+---
+
+## Step 98: Fix — tsconfig non-relative path error in admin-app and weather-app
+
+**Root cause:** `tsconfig.base.json` defined `paths` entries (e.g., `"weather-app/Routes"`, `"admin-app/Routes"`) but did not set `baseUrl`. TypeScript requires `baseUrl` to resolve non-relative path mappings.
+
+**Fix:** Added `"baseUrl": "."` to `tsconfig.base.json` so all path mappings resolve relative to the workspace root.
+
+**Files changed:**
+- `tsconfig.base.json` — added `"baseUrl": "."`
