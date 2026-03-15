@@ -2816,3 +2816,21 @@ Added a new Angular micro-frontend application (`admin-app`) that displays admin
 - `apps/shell-e2e/src/eks.spec.ts` — added "Traefik reverse proxy – health" test suite (dashboard API + routers)
 - `.github/workflows/eks-e2e.yml` — added pre-build step to remove potentially corrupted base images
 - `.github/workflows/eks-e2e-full.yml` — same pre-build step added
+
+---
+
+## Step 102: Fix — Reset Podman storage, create nginx log dir, and verify images before kube-up
+
+**Root cause:** Three separate issues: (1) `podman image rm` only removes image references but leaves corrupted layer blobs behind, so CI builds still fail on re-pull; (2) nginx container crashes because `/var/log/nginx` doesn't exist with correct ownership; (3) `kube-up` fails silently when required container images haven't been built yet.
+
+**Fix:**
+1. Replaced `podman image rm -f` with `podman system reset --force` in both CI workflows to fully wipe Podman's storage (including broken layers) before rebuilding.
+2. Added `RUN mkdir -p /var/log/nginx && chown nginx:nginx /var/log/nginx` to `Containerfile.nginx` so the log directory exists with correct ownership at runtime.
+3. Added an image-existence pre-check loop to the `kube-up` target that verifies all six required images (`postgres`, `ory-kratos`, `ory-kratos-init`, `traefik`, `weather-api`, `claude-hello-world`) exist before starting pods, failing fast with a clear error if any are missing.
+4. Updated `kube-up` to `chmod 777` the host log directories so containers can write regardless of UID.
+
+**Files changed:**
+- `.github/workflows/eks-e2e.yml` — replaced `podman image rm` with `podman system reset --force`
+- `.github/workflows/eks-e2e-full.yml` — same storage reset change
+- `Containerfile.nginx` — added nginx log directory creation with correct ownership
+- `apps/shell/project.json` — `kube-up` target now verifies all required images exist and sets log directory permissions
