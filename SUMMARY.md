@@ -2771,3 +2771,27 @@ Added a new Angular micro-frontend application (`admin-app`) that displays admin
 - `k8s/apps-pod.yaml` — added hostPath volume mounts for traefik and nginx logs
 - `k8s/observability-pod.yaml` — added read-only volume mounts for traefik and nginx logs
 - `apps/observability/grafana/provisioning/dashboards/system-health.json` — new dashboard
+
+---
+
+## Step 100: Feat — Grafana SSO via Ory Kratos (no password login)
+
+**What:** Grafana is now accessible at `https://localhost:8443/grafana/` with automatic SSO through the existing Ory Kratos authentication. Authenticated users are signed in automatically; unauthenticated users are redirected to the Kratos login page.
+
+**Architecture:**
+1. Traefik routes `/grafana` requests through a `forwardAuth` middleware
+2. The `auth-proxy` container (Python, port 4180) receives the forwarded request, reads the session cookie, and calls Kratos `/sessions/whoami`
+3. If valid → returns `200` with `X-Webauth-User: <email>` header; Traefik copies this to the proxied request
+4. If invalid → returns `302` redirect to Kratos login with `return_to` pointing back to Grafana
+5. Grafana's `auth.proxy` trusts the `X-Webauth-User` header and auto-signs-up/logs in the user
+6. Password login form and sign-out menu are disabled since auth is handled externally
+
+**Files created:**
+- `apps/observability/auth-proxy/auth-proxy.py` — lightweight HTTP server that validates Kratos sessions
+- `apps/observability/auth-proxy/Containerfile` — Python 3.13 alpine image
+
+**Files changed:**
+- `traefik/traefik-dynamic.yml` — added `grafana-router` (priority 25), `grafana` service, `grafana-auth` forwardAuth middleware, `strip-grafana-prefix` middleware
+- `k8s/observability-pod.yaml` — added `auth-proxy` container (port 4180), Grafana env vars for `auth.proxy` + sub-path serving
+- `apps/observability/project.json` — added `podman-build-auth-proxy` target and dependency
+- `apps/ory/kratos.yml` — added `https://localhost:8443/grafana` to `allowed_return_urls`

@@ -39,6 +39,8 @@ selfservice:
     - http://localhost:4200/admin-app
     - http://localhost:8080/admin-app
     - https://localhost:8443/admin-app
+    - https://localhost:8443/grafana
+    - https://localhost:8443/grafana/
 
   methods:
     password:

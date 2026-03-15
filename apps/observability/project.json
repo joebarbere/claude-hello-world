@@ -33,6 +33,13 @@
         "cwd": "{workspaceRoot}"
       }
     },
+    "podman-build-auth-proxy": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "podman build -t auth-proxy -f apps/observability/auth-proxy/Containerfile apps/observability/auth-proxy",
+        "cwd": "{workspaceRoot}"
+      }
+    },
     "podman-build": {
       "executor": "nx:run-commands",
       "options": {
@@ -43,7 +50,8 @@
         "podman-build-prometheus",
         "podman-build-grafana",
         "podman-build-loki",
-        "podman-build-promtail"
+        "podman-build-promtail",
+        "podman-build-auth-proxy"
       ]
     },
     "kube-up": {
