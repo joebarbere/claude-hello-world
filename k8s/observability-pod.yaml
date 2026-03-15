@@ -38,6 +38,12 @@ spec:
         - name: varlibcontainers
           mountPath: /var/lib/containers
           readOnly: true
+        - name: traefik-logs
+          mountPath: /var/log/traefik
+          readOnly: true
+        - name: nginx-logs
+          mountPath: /var/log/nginx
+          readOnly: true
 
   volumes:
     - name: varlog
@@ -46,3 +52,9 @@ spec:
     - name: varlibcontainers
       hostPath:
         path: /var/lib/containers
+    - name: traefik-logs
+      hostPath:
+        path: /var/log/traefik
+    - name: nginx-logs
+      hostPath:
+        path: /var/log/nginx

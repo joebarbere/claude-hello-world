@@ -1,7 +1,7 @@
 FROM traefik:v3.3
 COPY traefik/traefik.yml /etc/traefik/traefik.yml
 COPY traefik/traefik-dynamic.yml /etc/traefik/traefik-dynamic.yml
-RUN mkdir -p /etc/traefik/ssl
+RUN mkdir -p /etc/traefik/ssl /var/log/traefik
 COPY ssl/localhost.crt /etc/traefik/ssl/localhost.crt
 COPY ssl/localhost.key /etc/traefik/ssl/localhost.key
 RUN chmod 600 /etc/traefik/ssl/localhost.key

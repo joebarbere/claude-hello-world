@@ -36,8 +36,14 @@ spec:
           hostPort: 8443
         - containerPort: 8081
           hostPort: 8081
+      volumeMounts:
+        - name: traefik-logs
+          mountPath: /var/log/traefik
     - name: nginx
       image: localhost/claude-hello-world:latest
+      volumeMounts:
+        - name: nginx-logs
+          mountPath: /var/log/nginx
     - name: nginx-exporter
       image: nginx/nginx-prometheus-exporter:latest
       args:
@@ -45,3 +51,10 @@ spec:
       ports:
         - containerPort: 9113
           hostPort: 9113
+  volumes:
+    - name: traefik-logs
+      hostPath:
+        path: /var/log/traefik
+    - name: nginx-logs
+      hostPath:
+        path: /var/log/nginx

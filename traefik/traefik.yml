@@ -22,3 +22,19 @@ providers:
 
 log:
   level: WARN
+
+accessLog:
+  filePath: /var/log/traefik/access.log
+  format: json
+  fields:
+    headers:
+      defaultMode: drop
+      names:
+        User-Agent: keep
+
+metrics:
+  prometheus:
+    entryPoint: traefik
+    addEntryPointsLabels: true
+    addRoutersLabels: true
+    addServicesLabels: true

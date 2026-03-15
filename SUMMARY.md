@@ -2731,3 +2731,43 @@ Added a new Angular micro-frontend application (`admin-app`) that displays admin
 
 **Files changed:**
 - `tsconfig.base.json` — added `"baseUrl": "."`
+
+---
+
+## Step 99: Feat — Full observability pipeline with logs, metrics, and system health dashboard
+
+**What:** Ship all logs to Loki, all metrics to Prometheus, and provide a Grafana dashboard covering system health, running pods, container count/health, top IP+User-Agent combinations, and error counts.
+
+**Changes:**
+
+1. **Traefik access logs + Prometheus metrics** — enabled JSON access logs at `/var/log/traefik/access.log` (captures client IP, User-Agent, status, route, service) and Prometheus metrics endpoint on the Traefik entrypoint (`:8081/metrics`) with entrypoint, router, and service labels.
+
+2. **nginx JSON access logs** — added `json_combined` log format to `nginx.conf` outputting structured JSON to `/var/log/nginx/access.log` (remote_addr, request, status, user_agent, request_time).
+
+3. **Prometheus scrape targets** — added `traefik` job scraping `host.containers.internal:8081/metrics` for Traefik request counts, error rates, and latency histograms.
+
+4. **Promtail log pipelines** — added two new scrape jobs: `traefik-access` (parses JSON access logs, extracts `status`, `method`, `service`, `router`, `client_ip` labels) and `nginx-access` (parses JSON access logs, extracts `status`, `remote_addr` labels).
+
+5. **Shared log volumes** — apps pod mounts `hostPath` volumes for `/var/log/traefik` and `/var/log/nginx`; observability pod mounts the same paths read-only so Promtail can tail them.
+
+6. **System Health dashboard** (`system-health.json`) with 12 panels:
+   - System Health % (stat — % of scrape targets UP)
+   - Running Pods (stat — count of targets with `up == 1`)
+   - Total Containers (stat — total scrape target count)
+   - Containers Down (stat — `up == 0` count, red when > 0)
+   - Container Health table (per-target UP/DOWN with color mapping)
+   - HTTP Request Rate by Service (timeseries from Traefik metrics)
+   - HTTP Error Rate 4xx+5xx (bar chart from Traefik metrics)
+   - Total 5xx / 4xx / All Requests (stat panels, 1h window)
+   - Top IP + User-Agent table (Loki LogQL `topk` over `traefik-access` logs)
+   - Recent Error Logs (Loki log panel filtering `status >= 400`)
+
+**Files changed:**
+- `traefik/traefik.yml` — added `accessLog` and `metrics.prometheus` sections
+- `traefik/Containerfile` — create `/var/log/traefik` directory
+- `nginx/nginx.conf` — added `json_combined` log format and access_log directive
+- `apps/observability/prometheus/prometheus.yml` — added `traefik` scrape job
+- `apps/observability/promtail/promtail.yml` — added `traefik-access` and `nginx-access` scrape jobs
+- `k8s/apps-pod.yaml` — added hostPath volume mounts for traefik and nginx logs
+- `k8s/observability-pod.yaml` — added read-only volume mounts for traefik and nginx logs
+- `apps/observability/grafana/provisioning/dashboards/system-health.json` — new dashboard
