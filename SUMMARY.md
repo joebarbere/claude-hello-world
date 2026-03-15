@@ -2856,3 +2856,59 @@ Added a new Angular micro-frontend application (`admin-app`) that displays admin
 
 **Files changed:**
 - `apps/shell/project.json` — `kube-up` log directory command now detects whether a Podman VM exists and falls back to direct `mkdir` on Linux
+
+---
+
+## Step 105: Fix — Add SELinux relabeling for hostPath log volumes
+
+**Root cause:** The `claude-hello-world` pod's nginx container crashed in a loop with `open() "/var/log/nginx/access.log" failed (13: Permission denied)`. The hostPath volumes (`/var/log/traefik`, `/var/log/nginx`) had `chmod 777` permissions, but SELinux on the Podman VM (Fedora CoreOS) was `Enforcing` with the directories labeled `var_log_t`. Containers run under the `container_t` domain and can only write to paths labeled `container_file_t`, so SELinux denied all writes regardless of Unix permissions.
+
+**Fix:** Added `sudo chcon -Rt container_file_t /var/log/traefik /var/log/nginx` to the `kube-up` directory-creation step, for both the Podman VM (macOS) and native Linux paths. This relabels the directories so containers are allowed to write log files.
+
+**Files changed:**
+- `apps/shell/project.json` — `kube-up` log directory command now applies `container_file_t` SELinux label after creating directories
+
+---
+
+## Step 106: Fix — Escape JMESPath hyphen in Promtail JSON stage expression
+
+**Root cause:** The `observability-promtail` container was crash-looping with `invalid json stage config: could not compile JMES expression: SyntaxError: Unexpected token at the end of the expression: tNumber`. The Promtail config's Traefik access log pipeline had `user_agent: 'request_User-Agent'` — the hyphen in `User-Agent` was parsed by JMESPath as a subtraction operator, causing a syntax error.
+
+**Fix:** Wrapped the field name in JMESPath double-quote syntax: `'"request_User-Agent"'`. This tells JMESPath to treat the entire string (including the hyphen) as a single key identifier.
+
+**Files changed:**
+- `apps/observability/promtail/promtail.yml` — quoted `request_User-Agent` as a JMESPath identifier
+
+---
+
+## Step 107: Fix — Remove strip-grafana-prefix middleware to fix ERR_TOO_MANY_REDIRECTS
+
+**Root cause:** Grafana was configured with `GF_SERVER_SERVE_FROM_SUB_PATH=true` and `GF_SERVER_ROOT_URL=https://localhost:8443/grafana/`, which means Grafana expects to receive requests with the `/grafana` prefix and handles the sub-path routing internally. However, Traefik's `grafana-router` applied a `strip-grafana-prefix` middleware that removed `/grafana` before forwarding. Grafana then saw a bare `/` path, and since it was configured to serve from `/grafana/`, it redirected back to `/grafana/` — which Traefik stripped again, creating an infinite redirect loop.
+
+**Fix:** Removed `strip-grafana-prefix` from the `grafana-router` middleware chain. Traefik now forwards the full `/grafana/...` path to Grafana, which handles it correctly via `serve_from_sub_path`.
+
+**Files changed:**
+- `traefik/traefik-dynamic.yml` — removed `strip-grafana-prefix` from `grafana-router` middlewares
+
+---
+
+## Step 108: Fix — Use ThreadingHTTPServer in auth-proxy to handle concurrent Grafana requests
+
+**Root cause:** Grafana loaded its initial HTML and a few assets successfully, but then returned HTTP 500 for the majority of JS bundles, fonts, and plugin modules. Traefik's access log showed `OriginStatus=0` (backend never reached) with short durations (~50-70ms, not timeouts). The `grafana-auth` forwardAuth middleware sends every Grafana request to the auth-proxy at port 4180 first. The auth-proxy used Python's `HTTPServer`, which is single-threaded and can only process one request at a time. When the browser fired 30+ concurrent requests to load Grafana's assets, the auth-proxy's listen backlog filled up, connections were dropped, and Traefik returned 500 for those failed forwardAuth checks.
+
+**Fix:** Replaced `HTTPServer` with `ThreadingHTTPServer` (available since Python 3.7). This spawns a new thread per incoming request, allowing the auth-proxy to handle all concurrent forwardAuth checks from Traefik without dropping connections.
+
+**Files changed:**
+- `apps/observability/auth-proxy/auth-proxy.py` — switched from `HTTPServer` to `ThreadingHTTPServer`
+
+---
+
+## Step 109: Fix — Add explicit UIDs to Grafana provisioned datasources
+
+**Root cause:** The System Health dashboard showed "No data" for all panels despite Prometheus scraping all targets successfully. The dashboard JSON referenced datasources by `uid: 'prometheus'` and `uid: 'loki'`, but the provisioning YAML files did not specify a `uid` field. Grafana auto-generated random UIDs (`PBFA97CFB590B2093`, `P8E80F9AEF21F6940`), which didn't match the dashboard references, so every panel query silently failed to find its datasource.
+
+**Fix:** Added `uid: prometheus` and `uid: loki` to the respective datasource provisioning files so the UIDs match the dashboard panel references.
+
+**Files changed:**
+- `apps/observability/grafana/provisioning/datasources/prometheus.yml` — added `uid: prometheus`
+- `apps/observability/grafana/provisioning/datasources/loki.yml` — added `uid: loki`

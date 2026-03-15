@@ -133,7 +133,7 @@
       "options": {
         "commands": [
           "for img in postgres ory-kratos ory-kratos-init traefik weather-api claude-hello-world; do podman image exists localhost/$img:latest || { echo \"ERROR: missing image localhost/$img:latest — run the podman-build targets first\"; exit 1; }; done",
-          "if podman machine inspect >/dev/null 2>&1; then podman machine ssh 'sudo mkdir -p /var/log/traefik /var/log/nginx && sudo chmod 777 /var/log/traefik /var/log/nginx'; else sudo mkdir -p /var/log/traefik /var/log/nginx && sudo chmod 777 /var/log/traefik /var/log/nginx; fi",
+          "if podman machine inspect >/dev/null 2>&1; then podman machine ssh 'sudo mkdir -p /var/log/traefik /var/log/nginx && sudo chmod 777 /var/log/traefik /var/log/nginx && sudo chcon -Rt container_file_t /var/log/traefik /var/log/nginx'; else sudo mkdir -p /var/log/traefik /var/log/nginx && sudo chmod 777 /var/log/traefik /var/log/nginx && (command -v chcon >/dev/null && sudo chcon -Rt container_file_t /var/log/traefik /var/log/nginx || true); fi",
           "podman play kube k8s/postgres-pod.yaml",
           "i=0; until podman run --rm localhost/postgres:latest pg_isready -h host.containers.internal -p 5432 -U appuser; do i=$((i+1)); [ $i -ge 30 ] && echo 'ERROR: postgres unreachable via host.containers.internal' && exit 1; echo 'waiting for postgres via host.containers.internal'; sleep 2; done",
           "podman play kube k8s/ory-kratos-pod.yaml",

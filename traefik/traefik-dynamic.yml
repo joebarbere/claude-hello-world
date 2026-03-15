@@ -54,7 +54,6 @@ http:
       priority: 25
       middlewares:
         - grafana-auth
-        - strip-grafana-prefix
       tls: {}
 
     # Angular apps — catch-all to nginx (static files)

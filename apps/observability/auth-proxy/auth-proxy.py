@@ -8,7 +8,7 @@ Traefik sends every Grafana request here first.
 import json
 import ssl
 import urllib.request
-from http.server import BaseHTTPRequestHandler, HTTPServer
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 KRATOS_WHOAMI = "http://host.containers.internal:4433/sessions/whoami"
 LOGIN_URL = "https://localhost:8443/.ory/kratos/public/self-service/login/browser"
@@ -56,6 +56,6 @@ class Handler(BaseHTTPRequestHandler):
 
 
 if __name__ == "__main__":
-    server = HTTPServer(("0.0.0.0", 4180), Handler)
+    server = ThreadingHTTPServer(("0.0.0.0", 4180), Handler)
     print("auth-proxy listening on :4180", flush=True)
     server.serve_forever()

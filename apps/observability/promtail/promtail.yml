@@ -57,7 +57,7 @@ scrape_configs:
             method: RequestMethod
             path: RequestPath
             client_ip: ClientHost
-            user_agent: 'request_User-Agent'
+            user_agent: '"request_User-Agent"'
             duration: Duration
             service: ServiceName
             router: RouterName
