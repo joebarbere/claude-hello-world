@@ -2795,3 +2795,24 @@ Added a new Angular micro-frontend application (`admin-app`) that displays admin
 - `k8s/observability-pod.yaml` — added `auth-proxy` container (port 4180), Grafana env vars for `auth.proxy` + sub-path serving
 - `apps/observability/project.json` — added `podman-build-auth-proxy` target and dependency
 - `apps/ory/kratos.yml` — added `https://localhost:8443/grafana` to `allowed_return_urls`
+
+---
+
+## Step 101: Fix — Resolve kube-up failures from missing host volumes and corrupted container images
+
+**Root cause:** `podman play kube` fails with "no such file or directory" when hostPath volumes (`/var/log/traefik`, `/var/log/nginx`) don't exist inside the Podman VM. Separately, CI builds fail when Podman's local image store has corrupted base images (e.g. `node:20-alpine` with missing layer blobs).
+
+**Fix:**
+1. Added `podman machine ssh 'sudo mkdir -p /var/log/traefik /var/log/nginx'` as the first command in the `kube-up` target so required host directories are always created before pod startup.
+2. Added a `.containerignore` file to exclude `node_modules`, `dist`, `.git`, `.nx`, and `tmp` from container builds — prevents OOM errors during `COPY . .` in `Containerfile.nginx`.
+3. Added a "Remove potentially corrupted base images" step to both CI workflows that force-removes base images before builds, ensuring clean re-pulls.
+4. Added Traefik health e2e tests to `shell-e2e` that verify the Traefik dashboard API and router configuration are operational.
+
+**Files created:**
+- `.containerignore` — excludes heavy/unnecessary directories from container build context
+
+**Files changed:**
+- `apps/shell/project.json` — `kube-up` target now creates hostPath directories inside Podman VM before starting pods
+- `apps/shell-e2e/src/eks.spec.ts` — added "Traefik reverse proxy – health" test suite (dashboard API + routers)
+- `.github/workflows/eks-e2e.yml` — added pre-build step to remove potentially corrupted base images
+- `.github/workflows/eks-e2e-full.yml` — same pre-build step added

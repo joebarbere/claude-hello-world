@@ -63,6 +63,12 @@ jobs:
         run: npx playwright install-deps chromium
 
       # ── Build container images ───────────────────────────────────────────────
+      # Podman's local image store can become corrupted across CI runs (e.g.
+      # layer blobs missing after cache eviction). Remove known base images so
+      # they are cleanly re-pulled during the build steps.
+      - name: Remove potentially corrupted base images
+        run: podman image rm -f node:20-alpine mcr.microsoft.com/dotnet/aspnet:9.0-alpine mcr.microsoft.com/dotnet/sdk:9.0-alpine 2>/dev/null || true
+
       # shell:podman-build depends on build-all, which builds all 3 Angular MFEs
       # then packages them into the nginx container image (static files only).
       - name: Build Angular MFEs + nginx container image

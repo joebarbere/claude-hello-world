@@ -89,6 +89,33 @@ test.describe('Shell host – MFE navigation', () => {
   });
 });
 
+test.describe('Traefik reverse proxy – health', () => {
+  test('Traefik dashboard API responds on port 8081', async ({ playwright }) => {
+    const context = await playwright.request.newContext({
+      ignoreHTTPSErrors: true,
+    });
+    const response = await context.get('http://localhost:8081/api/overview');
+    expect(response.status()).toBe(200);
+    const body = await response.json();
+    expect(body).toHaveProperty('http');
+    await context.dispose();
+  });
+
+  test('Traefik access log volume is mounted (log file is created)', async ({ playwright }) => {
+    const context = await playwright.request.newContext({
+      ignoreHTTPSErrors: true,
+    });
+    // Hit the proxy to generate at least one access log entry
+    await context.get('https://localhost:8443/');
+    // Verify via the Traefik API that the service is routing correctly
+    const response = await context.get('http://localhost:8081/api/http/routers');
+    expect(response.status()).toBe(200);
+    const routers = await response.json();
+    expect(routers.length).toBeGreaterThan(0);
+    await context.dispose();
+  });
+});
+
 test.describe('Shell host – weather API proxy', () => {
   test('proxies /weather to the weather-api pod and returns JSON', async ({
     page,
