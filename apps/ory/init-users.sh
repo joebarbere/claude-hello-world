@@ -59,4 +59,5 @@ wait_for_kratos
 create_identity "admin@example.com" "Admin1234!" "admin"
 create_identity "weatheradmin@example.com" "WeatherAdmin1234!" "weather_admin"
 
-echo "User initialization complete."
+echo "User initialization complete. Sleeping to keep container alive."
+exec sleep infinity

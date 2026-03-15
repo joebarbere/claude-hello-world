@@ -2565,3 +2565,14 @@ Added a new Angular micro-frontend application (`admin-app`) that displays admin
 - `apps/shell/project.json` — build-all command
 - `tsconfig.base.json` — path alias
 - `Containerfile.nginx` — build projects list
+
+---
+
+## Step 88: Fix — ory-kratos-init container restart loop
+
+**Root cause:** The `ory-kratos-init` container runs as a sidecar (not a Kubernetes init container) because it needs Kratos to be serving before it can seed users via the admin API. Once `init-users.sh` finishes creating identities, the container exits with code 0. Podman's pod-level restart policy then restarts the exited container, causing a restart loop.
+
+**Fix:** Added `exec sleep infinity` at the end of `init-users.sh` so the container stays alive after seeding completes.
+
+**Files changed:**
+- `apps/ory/init-users.sh` — added `exec sleep infinity` after user creation
