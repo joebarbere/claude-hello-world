@@ -57,11 +57,7 @@
     "kube-down": {
       "executor": "nx:run-commands",
       "options": {
-        "commands": [
-          "podman play kube k8s/observability-pod.yaml --down || true",
-          "podman image prune -a -f || true"
-        ],
-        "parallel": false,
+        "command": "podman play kube k8s/observability-pod.yaml --down || true",
         "cwd": "{workspaceRoot}"
       }
     }

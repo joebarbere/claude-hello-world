@@ -2576,13 +2576,3 @@ Added a new Angular micro-frontend application (`admin-app`) that displays admin
 
 **Files changed:**
 - `apps/ory/init-users.sh` — added `exec sleep infinity` after user creation
-
----
-
-## Step 89: Add image prune to kube-down targets
-
-Added `podman image prune -a -f` as the final step in both `kube-down` targets to keep disk usage low on the Podman VM by removing unused images after pods are torn down.
-
-**Files changed:**
-- `apps/shell/project.json` — added `podman image prune -a -f` to kube-down commands
-- `apps/observability/project.json` — added `podman image prune -a -f` to kube-down commands
