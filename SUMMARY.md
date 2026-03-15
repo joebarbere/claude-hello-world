@@ -2679,8 +2679,33 @@ Added a new Angular micro-frontend application (`admin-app`) that displays admin
 - `apps/shell/project.json` — added `-f` flag to `podman image prune -a` to prevent interactive prompt hang
 - `README.md` — added admin-app to architecture diagram, Traefik routes, nginx routes, and service URL table
 
+---
+
+## Step 95: Fix — CORS error on admin dashboard health badge
+
+**Root cause:** The admin dashboard entry component (`remote-entry/entry.ts`) had the Kratos health badge endpoint hardcoded to `http://localhost:4434/health/alive`. Since the page is served from `https://localhost:8443`, the browser blocked this cross-origin request. The Traefik proxy at `/.ory/kratos/admin/` was already available but not being used here.
+
+**Fix:** Changed the health badge endpoint from the direct `http://localhost:4434/health/alive` URL to the proxied `/.ory/kratos/admin/health/alive` path, matching how the `KratosAdminService` already makes its calls. Also fixed the test files whose `ADMIN_URL` constants still referenced the old `http://localhost:4434` URL.
+
+**Files changed:**
+- `apps/admin-app/src/app/remote-entry/entry.ts` — health badge endpoint now uses proxied path
+- `apps/admin-app/src/app/kratos-admin/kratos-admin.service.spec.ts` — updated `ADMIN_URL` constant to `/.ory/kratos/admin`
+- `apps/admin-app/src/app/kratos-admin/kratos-admin.component.spec.ts` — updated `ADMIN_URL` constant to `/.ory/kratos/admin`
+
 **Files changed:**
 - `traefik/traefik-dynamic.yml`
 - `apps/admin-app/src/app/kratos-admin/kratos-admin.service.ts`
 - `apps/shell/project.json`
 - `README.md`
+
+---
+
+## Step 96: Fix — Identities section stuck on Loading in Module Federation
+
+**Root cause:** The `KratosAdminComponent` used plain class properties (`loading = false`, `identities: KratosIdentity[] = []`, etc.) for template-bound state. In the Module Federation setup, HTTP subscribe callbacks can run outside Angular's zone, so zone-based change detection never triggers — the template stays stale even after data arrives. The working `weather-app` remote avoided this by using Angular signals.
+
+**Fix:** Converted all template-bound reactive properties in `KratosAdminComponent` to Angular `signal()` values with `.set()` updates. Signals push change notifications directly, bypassing zone.js. Form-model properties (`newEmail`, `newPassword`, `newRole`, `editRole`) remain plain properties since they're bound via `ngModel`. Updated the component spec to read signal values as function calls.
+
+**Files changed:**
+- `apps/admin-app/src/app/kratos-admin/kratos-admin.component.ts` — properties → signals, template → signal reads
+- `apps/admin-app/src/app/kratos-admin/kratos-admin.component.spec.ts` — assertions updated for signal accessors

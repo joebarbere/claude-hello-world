@@ -1,4 +1,4 @@
-import { Component, inject, OnInit } from '@angular/core';
+import { Component, inject, OnInit, signal } from '@angular/core';
 import { NgClass } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { RouterLink } from '@angular/router';
@@ -25,7 +25,7 @@ import {
             <h1>Identity Management</h1>
           </div>
           <div class="header-actions">
-            <span class="status-badge" [ngClass]="healthState">{{ healthLabel }}</span>
+            <span class="status-badge" [ngClass]="healthState()">{{ healthLabel() }}</span>
             <a routerLink="/admin-app" class="back-link">Back to Dashboard</a>
           </div>
         </div>
@@ -57,15 +57,15 @@ import {
             <option value="admin">admin</option>
             <option value="weather_admin">weather_admin</option>
           </select>
-          <button type="submit" class="btn btn-primary" [disabled]="creating">
-            {{ creating ? 'Creating...' : 'Create' }}
+          <button type="submit" class="btn btn-primary" [disabled]="creating()">
+            {{ creating() ? 'Creating...' : 'Create' }}
           </button>
         </form>
-        @if (createError) {
-          <div class="msg msg-error">{{ createError }}</div>
+        @if (createError()) {
+          <div class="msg msg-error">{{ createError() }}</div>
         }
-        @if (createSuccess) {
-          <div class="msg msg-success">{{ createSuccess }}</div>
+        @if (createSuccess()) {
+          <div class="msg msg-success">{{ createSuccess() }}</div>
         }
       </section>
 
@@ -73,20 +73,20 @@ import {
       <section class="table-section">
         <div class="section-header">
           <h2 class="section-title">Identities</h2>
-          <button class="btn btn-secondary" (click)="loadIdentities()" [disabled]="loading">
-            {{ loading ? 'Loading...' : 'Refresh' }}
+          <button class="btn btn-secondary" (click)="loadIdentities()" [disabled]="loading()">
+            {{ loading() ? 'Loading...' : 'Refresh' }}
           </button>
         </div>
 
-        @if (loadError) {
-          <div class="msg msg-error">{{ loadError }}</div>
+        @if (loadError()) {
+          <div class="msg msg-error">{{ loadError() }}</div>
         }
 
-        @if (!loading && identities.length === 0 && !loadError) {
+        @if (!loading() && identities().length === 0 && !loadError()) {
           <p class="empty">No identities found.</p>
         }
 
-        @if (identities.length > 0) {
+        @if (identities().length > 0) {
           <div class="table-wrapper">
             <table class="identity-table">
               <thead>
@@ -99,11 +99,11 @@ import {
                 </tr>
               </thead>
               <tbody>
-                @for (identity of identities; track identity.id) {
+                @for (identity of identities(); track identity.id) {
                   <tr>
                     <td>{{ identity.traits.email }}</td>
                     <td>
-                      @if (editingId === identity.id) {
+                      @if (editingId() === identity.id) {
                         <select [(ngModel)]="editRole" class="form-input form-input-sm">
                           <option value="">No role</option>
                           <option value="admin">admin</option>
@@ -120,12 +120,12 @@ import {
                     </td>
                     <td>{{ formatDate(identity.created_at) }}</td>
                     <td class="actions">
-                      @if (editingId === identity.id) {
-                        <button class="btn btn-sm btn-primary" (click)="saveRole(identity)" [disabled]="saving">Save</button>
+                      @if (editingId() === identity.id) {
+                        <button class="btn btn-sm btn-primary" (click)="saveRole(identity)" [disabled]="saving()">Save</button>
                         <button class="btn btn-sm btn-secondary" (click)="cancelEdit()">Cancel</button>
                       } @else {
                         <button class="btn btn-sm btn-secondary" (click)="startEdit(identity)">Edit Role</button>
-                        <button class="btn btn-sm btn-danger" (click)="deleteIdentity(identity)" [disabled]="deletingId === identity.id">Delete</button>
+                        <button class="btn btn-sm btn-danger" (click)="deleteIdentity(identity)" [disabled]="deletingId() === identity.id">Delete</button>
                       }
                     </td>
                   </tr>
@@ -289,29 +289,29 @@ import {
 export class KratosAdminComponent implements OnInit {
   private readonly kratosService = inject(KratosAdminService);
 
-  identities: KratosIdentity[] = [];
-  loading = false;
-  loadError = '';
+  identities = signal<KratosIdentity[]>([]);
+  loading = signal(false);
+  loadError = signal('');
 
   // Health
-  healthState = 'pending';
-  healthLabel = 'Checking...';
+  healthState = signal('pending');
+  healthLabel = signal('Checking...');
 
   // Create form
   newEmail = '';
   newPassword = '';
   newRole = '';
-  creating = false;
-  createError = '';
-  createSuccess = '';
+  creating = signal(false);
+  createError = signal('');
+  createSuccess = signal('');
 
   // Edit
-  editingId: string | null = null;
+  editingId = signal<string | null>(null);
   editRole = '';
-  saving = false;
+  saving = signal(false);
 
   // Delete
-  deletingId: string | null = null;
+  deletingId = signal<string | null>(null);
 
   ngOnInit(): void {
     this.checkHealth();
@@ -319,24 +319,24 @@ export class KratosAdminComponent implements OnInit {
   }
 
   loadIdentities(): void {
-    this.loading = true;
-    this.loadError = '';
+    this.loading.set(true);
+    this.loadError.set('');
     this.kratosService.listIdentities().subscribe({
       next: (ids) => {
-        this.identities = ids;
-        this.loading = false;
+        this.identities.set(ids);
+        this.loading.set(false);
       },
       error: (err) => {
-        this.loadError = `Failed to load identities: ${err.message}`;
-        this.loading = false;
+        this.loadError.set(`Failed to load identities: ${err.message}`);
+        this.loading.set(false);
       },
     });
   }
 
   createIdentity(): void {
-    this.creating = true;
-    this.createError = '';
-    this.createSuccess = '';
+    this.creating.set(true);
+    this.createError.set('');
+    this.createSuccess.set('');
     this.kratosService.createIdentity({
       schema_id: 'default',
       traits: {
@@ -348,57 +348,57 @@ export class KratosAdminComponent implements OnInit {
       },
     }).subscribe({
       next: (created) => {
-        this.createSuccess = `Created identity for ${created.traits.email}`;
+        this.createSuccess.set(`Created identity for ${created.traits.email}`);
         this.newEmail = '';
         this.newPassword = '';
         this.newRole = '';
-        this.creating = false;
+        this.creating.set(false);
         this.loadIdentities();
       },
       error: (err) => {
-        this.createError = `Failed to create identity: ${err.message}`;
-        this.creating = false;
+        this.createError.set(`Failed to create identity: ${err.message}`);
+        this.creating.set(false);
       },
     });
   }
 
   startEdit(identity: KratosIdentity): void {
-    this.editingId = identity.id;
+    this.editingId.set(identity.id);
     this.editRole = identity.traits.role || '';
   }
 
   cancelEdit(): void {
-    this.editingId = null;
+    this.editingId.set(null);
     this.editRole = '';
   }
 
   saveRole(identity: KratosIdentity): void {
-    this.saving = true;
+    this.saving.set(true);
     const traits = {
       email: identity.traits.email,
       ...(this.editRole ? { role: this.editRole } : {}),
     };
     this.kratosService.updateIdentityTraits(identity.id, traits).subscribe({
       next: () => {
-        this.saving = false;
-        this.editingId = null;
+        this.saving.set(false);
+        this.editingId.set(null);
         this.loadIdentities();
       },
       error: () => {
-        this.saving = false;
+        this.saving.set(false);
       },
     });
   }
 
   deleteIdentity(identity: KratosIdentity): void {
-    this.deletingId = identity.id;
+    this.deletingId.set(identity.id);
     this.kratosService.deleteIdentity(identity.id).subscribe({
       next: () => {
-        this.deletingId = null;
+        this.deletingId.set(null);
         this.loadIdentities();
       },
       error: () => {
-        this.deletingId = null;
+        this.deletingId.set(null);
       },
     });
   }
@@ -410,12 +410,12 @@ export class KratosAdminComponent implements OnInit {
   private checkHealth(): void {
     this.kratosService.checkHealth().subscribe({
       next: () => {
-        this.healthState = 'up';
-        this.healthLabel = 'Healthy';
+        this.healthState.set('up');
+        this.healthLabel.set('Healthy');
       },
       error: () => {
-        this.healthState = 'down';
-        this.healthLabel = 'Down';
+        this.healthState.set('down');
+        this.healthLabel.set('Down');
       },
     });
   }

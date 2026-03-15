@@ -5,7 +5,7 @@ import { HttpTestingController, provideHttpClientTesting } from '@angular/common
 import { ɵresolveComponentResources as resolveComponentResources } from '@angular/core';
 import { KratosAdminService, KratosIdentity } from './kratos-admin.service';
 
-const ADMIN_URL = 'http://localhost:4434';
+const ADMIN_URL = '/.ory/kratos/admin';
 
 function makeIdentity(overrides?: Partial<KratosIdentity>): KratosIdentity {
   return {

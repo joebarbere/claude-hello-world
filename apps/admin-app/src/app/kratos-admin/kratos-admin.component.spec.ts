@@ -7,7 +7,7 @@ import { ɵresolveComponentResources as resolveComponentResources } from '@angul
 import { KratosAdminComponent } from './kratos-admin.component';
 import { KratosIdentity } from './kratos-admin.service';
 
-const ADMIN_URL = 'http://localhost:4434';
+const ADMIN_URL = '/.ory/kratos/admin';
 
 function makeIdentity(overrides?: Partial<KratosIdentity>): KratosIdentity {
   return {
@@ -63,15 +63,15 @@ describe('KratosAdminComponent', () => {
     const { component } = createComponent();
     const identities = [makeIdentity(), makeIdentity({ id: 'id-2', traits: { email: 'b@b.com' } })];
     flushInit(identities);
-    expect(component.identities).toEqual(identities);
-    expect(component.loading).toBe(false);
+    expect(component.identities()).toEqual(identities);
+    expect(component.loading()).toBe(false);
   });
 
   it('should set health status on init', () => {
     const { component } = createComponent();
     flushInit();
-    expect(component.healthState).toBe('up');
-    expect(component.healthLabel).toBe('Healthy');
+    expect(component.healthState()).toBe('up');
+    expect(component.healthLabel()).toBe('Healthy');
   });
 
   it('should set health status to down on error', () => {
@@ -80,8 +80,8 @@ describe('KratosAdminComponent', () => {
     healthReq.flush(null, { status: 503, statusText: 'Unavailable' });
     const listReq = httpTesting.expectOne(`${ADMIN_URL}/admin/identities`);
     listReq.flush([]);
-    expect(component.healthState).toBe('down');
-    expect(component.healthLabel).toBe('Down');
+    expect(component.healthState()).toBe('down');
+    expect(component.healthLabel()).toBe('Down');
   });
 
   it('should handle load error', () => {
@@ -90,8 +90,8 @@ describe('KratosAdminComponent', () => {
     healthReq.flush({ status: 'ok' });
     const listReq = httpTesting.expectOne(`${ADMIN_URL}/admin/identities`);
     listReq.flush(null, { status: 500, statusText: 'Server Error' });
-    expect(component.loadError).toContain('Failed to load identities');
-    expect(component.loading).toBe(false);
+    expect(component.loadError()).toContain('Failed to load identities');
+    expect(component.loading()).toBe(false);
   });
 
   it('should create identity and reload', () => {
@@ -108,9 +108,9 @@ describe('KratosAdminComponent', () => {
     expect(createReq.request.body.traits.email).toBe('new@example.com');
     createReq.flush(makeIdentity({ id: 'id-new', traits: { email: 'new@example.com', role: 'weather_admin' } }));
 
-    expect(component.createSuccess).toContain('new@example.com');
+    expect(component.createSuccess()).toContain('new@example.com');
     expect(component.newEmail).toBe('');
-    expect(component.creating).toBe(false);
+    expect(component.creating()).toBe(false);
 
     // Reload triggered
     const reloadReq = httpTesting.expectOne(`${ADMIN_URL}/admin/identities`);
@@ -128,8 +128,8 @@ describe('KratosAdminComponent', () => {
     const createReq = httpTesting.expectOne(`${ADMIN_URL}/admin/identities`);
     createReq.flush(null, { status: 400, statusText: 'Bad Request' });
 
-    expect(component.createError).toContain('Failed to create identity');
-    expect(component.creating).toBe(false);
+    expect(component.createError()).toContain('Failed to create identity');
+    expect(component.creating()).toBe(false);
   });
 
   it('should start and cancel edit', () => {
@@ -138,11 +138,11 @@ describe('KratosAdminComponent', () => {
     flushInit([identity]);
 
     component.startEdit(identity);
-    expect(component.editingId).toBe('id-1');
+    expect(component.editingId()).toBe('id-1');
     expect(component.editRole).toBe('admin');
 
     component.cancelEdit();
-    expect(component.editingId).toBeNull();
+    expect(component.editingId()).toBeNull();
     expect(component.editRole).toBe('');
   });
 
@@ -160,8 +160,8 @@ describe('KratosAdminComponent', () => {
     expect(updateReq.request.body.traits.role).toBe('weather_admin');
     updateReq.flush(makeIdentity({ traits: { email: 'test@example.com', role: 'weather_admin' } }));
 
-    expect(component.saving).toBe(false);
-    expect(component.editingId).toBeNull();
+    expect(component.saving()).toBe(false);
+    expect(component.editingId()).toBeNull();
 
     // Reload triggered
     const reloadReq = httpTesting.expectOne(`${ADMIN_URL}/admin/identities`);
@@ -180,7 +180,7 @@ describe('KratosAdminComponent', () => {
     const updateReq = httpTesting.expectOne(`${ADMIN_URL}/admin/identities/id-1`);
     updateReq.flush(null, { status: 500, statusText: 'Error' });
 
-    expect(component.saving).toBe(false);
+    expect(component.saving()).toBe(false);
   });
 
   it('should delete identity and reload', () => {
@@ -189,13 +189,13 @@ describe('KratosAdminComponent', () => {
     flushInit([identity]);
 
     component.deleteIdentity(identity);
-    expect(component.deletingId).toBe('id-1');
+    expect(component.deletingId()).toBe('id-1');
 
     const deleteReq = httpTesting.expectOne(`${ADMIN_URL}/admin/identities/id-1`);
     expect(deleteReq.request.method).toBe('DELETE');
     deleteReq.flush(null);
 
-    expect(component.deletingId).toBeNull();
+    expect(component.deletingId()).toBeNull();
 
     // Reload triggered
     const reloadReq = httpTesting.expectOne(`${ADMIN_URL}/admin/identities`);
@@ -211,7 +211,7 @@ describe('KratosAdminComponent', () => {
     const deleteReq = httpTesting.expectOne(`${ADMIN_URL}/admin/identities/id-1`);
     deleteReq.flush(null, { status: 500, statusText: 'Error' });
 
-    expect(component.deletingId).toBeNull();
+    expect(component.deletingId()).toBeNull();
   });
 
   it('should format date', () => {
@@ -224,7 +224,6 @@ describe('KratosAdminComponent', () => {
   it('should render heading', () => {
     const { fixture } = createComponent();
     flushInit();
-    // Use detectChanges with checkNoChanges disabled via a fresh CD cycle
     fixture.changeDetectorRef.detectChanges();
     const heading = (fixture.nativeElement as HTMLElement).querySelector('h1');
     expect(heading?.textContent).toContain('Identity Management');

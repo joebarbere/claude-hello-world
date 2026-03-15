@@ -25,7 +25,7 @@ const ADMIN_LINKS: AdminLink[] = [
     routerLink: '/admin-app/kratos',
     description: 'Manage user identities, roles, and authentication.',
     category: 'Identity',
-    badge: { type: 'health', endpoint: 'http://localhost:4434/health/alive' },
+    badge: { type: 'health', endpoint: '/.ory/kratos/admin/health/alive' },
   },
   {
     name: 'Grafana Dashboard',
