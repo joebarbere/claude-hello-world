@@ -2912,3 +2912,14 @@ Added a new Angular micro-frontend application (`admin-app`) that displays admin
 **Files changed:**
 - `apps/observability/grafana/provisioning/datasources/prometheus.yml` — added `uid: prometheus`
 - `apps/observability/grafana/provisioning/datasources/loki.yml` — added `uid: loki`
+
+---
+
+## Step 110: Fix — Recursive chmod on host log dirs to fix nginx crash in CI
+
+**Root cause:** The GitHub Actions e2e smoke tests timed out (exit 124) because the `claude-hello-world-nginx` container crashed immediately on startup with `open() "/var/log/nginx/access.log" failed (13: Permission denied)`. Ubuntu runners have nginx pre-installed, so `/var/log/nginx/` already contains `access.log` and `error.log` owned by `root:adm` (mode 640). The kube-up command ran `sudo chmod 777 /var/log/nginx` which set the **directory** permissions, but the pre-existing **files** inside remained root-owned and unwritable. When podman mounted this hostPath volume into the container, the nginx process (uid 101) couldn't open the log files. With nginx dead, Traefik's backend returned 502 Bad Gateway, and the health-check loop timed out.
+
+**Fix:** Changed `chmod 777` to `chmod -R 777` (recursive) in both the podman-machine and bare-metal branches of the kube-up target so pre-existing log files inside the directories are also made writable.
+
+**Files changed:**
+- `apps/shell/project.json` — added `-R` flag to both `chmod 777` commands in the kube-up target
