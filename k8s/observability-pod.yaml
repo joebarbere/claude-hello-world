@@ -51,6 +51,15 @@ spec:
         - containerPort: 4180
           hostPort: 4180
 
+    - name: postgres-exporter
+      image: prometheuscommunity/postgres-exporter:latest
+      ports:
+        - containerPort: 9187
+          hostPort: 9187
+      env:
+        - name: DATA_SOURCE_NAME
+          value: "postgresql://appuser:apppassword@host.containers.internal:5432/appdb?sslmode=disable"
+
     - name: promtail
       image: localhost/promtail:latest
       volumeMounts:

@@ -106,12 +106,21 @@ Ory Kratos (identity, :4433 public / :4434 admin)
   └── PostgreSQL-backed user store with role-based access (seeded on start by ory-kratos-init)
 
 PostgreSQL 17 (:5432)
+
 Observability (separate pod, not started by kube-up shell)
   ├── Prometheus (:9090) — metrics scraping and storage
   ├── Loki (:3100) — log aggregation (tsdb/filesystem backend)
   ├── Promtail — log collection from pod/container logs, traefik & nginx access logs
   ├── Grafana (:3000 / https://localhost:8443/grafana/) — dashboards, SSO via Kratos
-  └── auth-proxy (:4180) — Kratos session validation for Grafana forwardAuth
+  ├── auth-proxy (:4180) — Kratos session validation for Grafana forwardAuth
+  └── postgres-exporter (:9187) — scrapes pg_replication_slots metrics from PostgreSQL
+
+Kafka CDC (separate pod, not started by kube-up shell)
+  ├── Kafka (:9092) — KRaft single-node broker (no Zookeeper)
+  ├── Schema Registry (:8081 / :8085 host) — Confluent Avro schema storage
+  ├── Debezium Connect (:8083) — CDC from PostgreSQL → Kafka topics (Avro-encoded)
+  ├── Kafka UI (:8090 / https://localhost:8443/kafka-ui/) — topic, connector, and schema browser
+  └── slot-guard — replication slot lag monitor; drops stale slots >5 GB as a safety net
 ```
 
 ## Observability
@@ -122,17 +131,20 @@ The observability stack runs as a **separate pod** and is never started by `kube
 
 | Component | Port | Purpose |
 |-----------|------|---------|
-| Prometheus | 9090 | Scrapes metrics from weather-api, nginx-exporter, traefik, and itself |
+| Prometheus | 9090 | Scrapes metrics from weather-api, nginx-exporter, traefik, postgres-exporter, Debezium, and itself |
 | Loki | 3100 | Log storage (single-instance, filesystem backend) |
 | Promtail | — | Collects CRI pod logs, Podman container logs, and Traefik/nginx access logs; ships to Loki |
 | Grafana | 3000 | Dashboards and log exploration; served at `https://localhost:8443/grafana/` via Traefik |
 | auth-proxy | 4180 | Validates Kratos sessions for Grafana SSO (Traefik forwardAuth middleware) |
+| postgres-exporter | 9187 | Scrapes `pg_replication_slots` metrics from PostgreSQL for CDC lag visibility |
 
 ### Metrics scraped by Prometheus
 
 - `weather-api` — ASP.NET Core HTTP metrics via `prometheus-net` at `host.containers.internal:5221/metrics`
 - `nginx` — connection stats via the `nginx-prometheus-exporter` sidecar at `host.containers.internal:9113`
 - `traefik` — request counts, error rates, latency histograms at `host.containers.internal:8081/metrics`
+- `postgres` — replication slot lag and status via `postgres-exporter` at `localhost:9187`
+- `debezium` — CDC consumer lag and throughput via Debezium JMX Prometheus agent at `host.containers.internal:9404`
 - `prometheus` — self-scrape at `localhost:9090`
 
 ### Logs collected by Promtail
@@ -144,10 +156,11 @@ The observability stack runs as a **separate pod** and is never started by `kube
 
 ### Grafana dashboards
 
-Two pre-provisioned dashboards are available:
+Three pre-provisioned dashboards are available:
 
 - **Weather API** — HTTP request rate, p99 latency, in-flight requests, process memory, nginx active connections
 - **System Health** — system health %, running pods, container health table, HTTP request/error rates by service, top IP + User-Agent, recent error logs (status >= 400)
+- **Kafka & CDC** — replication slot lag (bytes), slot active status, Debezium time-behind-source, events processed rate, queue capacity, connector task status (requires kafka pod)
 
 ### Grafana SSO via Ory Kratos
 
@@ -160,6 +173,43 @@ Grafana is accessible at `https://localhost:8443/grafana/` with automatic SSO th
 5. Grafana's `auth.proxy` trusts the `X-Webauth-User` header and auto-signs-up/logs in the user
 
 > **macOS note:** Podman containers run inside a Linux VM. The `hostPath` volume mounts (`/var/log`, `/var/lib/containers`) refer to paths inside that VM, not the macOS host filesystem. Log collection works automatically when `kube-up shell` and `kube-up observability` are both running inside the same Podman Machine.
+
+## Kafka & CDC
+
+The Kafka pod runs as a **separate pod** and is never started by `kube-up shell`. It captures every row-level change from PostgreSQL (via Debezium logical replication) and publishes them to Kafka topics, enabling event-driven consumers to react to database mutations without polling.
+
+### Components
+
+| Container | Image | Port | Purpose |
+|-----------|-------|------|---------|
+| kafka | `apache/kafka:3.9` | 9092 | KRaft single-node broker (no Zookeeper) |
+| schema-registry | `confluentinc/cp-schema-registry:7.7.1` | 8081 (container), 8085 (host) | Confluent Schema Registry for Avro schema storage and evolution |
+| debezium-connect | `localhost/debezium-connect:latest` | 8083 (REST), 9404 (JMX metrics) | CDC connector; reads Postgres WAL, Avro-encodes, and publishes to Kafka |
+| debezium-init | `localhost/debezium-init:latest` | — | One-shot sidecar that registers the Postgres connector via REST |
+| kafka-ui | `kafbat/kafka-ui:latest` | 8090 | Web UI for topics, connectors, and Avro schemas |
+| slot-guard | `localhost/slot-guard:latest` | — | Periodically checks `pg_replication_slots`; drops inactive Debezium slots exceeding 5 GB lag |
+
+### CDC flow
+
+PostgreSQL has logical replication enabled (`wal_level=logical`). Debezium creates the `debezium_weather` replication slot and `dbz_publication` publication on the `appdb` database, then streams changes from all `public` schema tables. Topics are named with the prefix `weather` (e.g., `weather.public.WeatherForecasts`). Messages are Avro-encoded using Confluent Schema Registry — schemas are auto-registered on first write and can be browsed in Kafka UI.
+
+### Monitoring — three layers
+
+| Layer | Source | What it measures |
+|-------|--------|-----------------|
+| `postgres_exporter` → Prometheus → Grafana | `pg_replication_slots` view | Byte lag accumulating in the WAL on the producer side |
+| Debezium JMX → Prometheus → Grafana | Debezium JMX exporter (port 9404) | Time-behind-source lag on the consumer side |
+| slot-guard | `pg_replication_slots` via `psql` | Last-resort automated cleanup — drops inactive slots >5 GB to prevent WAL disk exhaustion |
+
+### Alerting thresholds
+
+| Severity | Condition |
+|----------|-----------|
+| Warning | Slot lag >500 MB or slot inactive >10 min |
+| Critical | Slot lag >2 GB or slot inactive >30 min |
+| Emergency (slot-guard triggers) | Slot lag >5 GB (slot is dropped automatically) |
+
+> **macOS note:** The kafka pod uses `host.containers.internal` to reach the apps pod (Postgres). Both pods must be running inside the same Podman Machine.
 
 ## Authentication
 
@@ -304,6 +354,7 @@ npx nx podman-build traefik        # Traefik reverse proxy + SSL termination
 npx nx podman-build weather-api    # .NET API image
 npx nx podman-build postgres       # PostgreSQL image
 npx nx podman-build ory            # Ory Kratos image + init image
+npx nx run kafka:podman-build      # Kafka CDC images (debezium-connect, debezium-init, slot-guard)
 ```
 
 ## Run (containers)
@@ -336,6 +387,11 @@ npx nx kube-down shell
 | https://localhost:8443/grafana/ | Grafana (SSO via Kratos, requires observability pod) |
 | http://localhost:9090 | Prometheus (requires observability pod) |
 | http://localhost:3100 | Loki (requires observability pod) |
+| https://localhost:8443/kafka-ui/ | Kafka UI (requires kafka pod) |
+| http://localhost:8090 | Kafka UI direct (requires kafka pod) |
+| http://localhost:9092 | Kafka broker (requires kafka pod) |
+| http://localhost:8083 | Debezium Connect REST API (requires kafka pod) |
+| http://localhost:8085 | Schema Registry (requires kafka pod) |
 
 ### Individual containers
 

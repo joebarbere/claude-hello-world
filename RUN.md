@@ -347,6 +347,78 @@ npx nx run observability:kube-down
 
 ---
 
+## Kafka & CDC (Change Data Capture)
+
+The Kafka pod runs as a separate pod — it is **not** started by `kube-up shell`. It captures row-level changes from PostgreSQL via Debezium and publishes them to Kafka topics.
+
+### Build Kafka images
+
+```bash
+npx nx run kafka:podman-build
+```
+
+Builds three images in parallel:
+
+| Image | Purpose |
+|-------|---------|
+| `localhost/debezium-connect:latest` | Debezium Connect extended with Prometheus JMX exporter agent (metrics on port 9404) |
+| `localhost/debezium-init:latest` | One-shot container that registers the Postgres CDC connector via the Connect REST API |
+| `localhost/slot-guard:latest` | Periodic monitor that drops inactive Debezium replication slots exceeding 5 GB lag |
+
+### Start the Kafka pod
+
+```bash
+npx nx run kafka:kube-up
+```
+
+> **Prerequisite:** The apps pod (`kube-up shell`) must be running first — Debezium connects to the PostgreSQL instance in that pod.
+
+On startup, `debezium-init` waits for the Connect REST API on port 8083, then registers the Postgres connector. The connector creates the `debezium_weather` replication slot and `dbz_publication` publication on the `appdb` database if they do not already exist.
+
+### What gets captured
+
+The connector captures all tables in the `public` schema of the `appdb` database. Topics follow the naming pattern `weather.<schema>.<table>` (e.g., `weather.public.WeatherForecasts`). The Postgres instance must be running with `wal_level=logical` (this is set in the PostgreSQL image's default command).
+
+### Service URLs
+
+| Service | URL | Purpose |
+|---------|-----|---------|
+| Kafka UI | https://localhost:8443/kafka-ui/ | Topic and connector browser (via Traefik) |
+| Kafka UI (direct) | http://localhost:8090 | Direct access (bypasses Traefik) |
+| Kafka broker | http://localhost:9092 | Kafka broker |
+| Debezium Connect REST | http://localhost:8083 | Connect REST API for connector management |
+| Debezium JMX metrics | http://localhost:9404/metrics | Prometheus-format CDC metrics |
+
+### Monitoring
+
+Three layers of CDC monitoring are active when both the apps pod and kafka pod are running:
+
+**1. postgres-exporter → Prometheus → Grafana** — scrapes `pg_replication_slots` from PostgreSQL (port 9187 in the observability pod). Shows byte lag accumulating in the WAL on the producer side.
+
+**2. Debezium JMX → Prometheus → Grafana** — the `debezium-connect` container runs a Prometheus JMX exporter agent on port 9404. Shows time-behind-source lag and event throughput on the consumer side.
+
+**3. slot-guard automated cleanup** — periodically checks `pg_replication_slots` and drops any inactive Debezium slot whose lag exceeds 5 GB. This is a last-resort safety net against WAL disk exhaustion.
+
+The **Kafka & CDC** Grafana dashboard (in the observability pod) visualizes all three layers: slot lag in bytes, slot active status, Debezium time-behind-source, events processed rate, queue capacity, and connector task status.
+
+### Alerting thresholds
+
+| Severity | Condition |
+|----------|-----------|
+| Warning | Slot lag >500 MB or slot inactive >10 min |
+| Critical | Slot lag >2 GB or slot inactive >30 min |
+| Emergency (slot-guard triggers) | Slot lag >5 GB (slot is dropped automatically) |
+
+### Stop the Kafka pod
+
+```bash
+npx nx run kafka:kube-down
+```
+
+> **Note:** Stopping the kafka pod does not remove the replication slot or publication from PostgreSQL. On the next `kube-up`, the connector re-uses the existing slot and resumes from its last committed offset.
+
+---
+
 ## Weather API (.NET)
 
 ### Build the API

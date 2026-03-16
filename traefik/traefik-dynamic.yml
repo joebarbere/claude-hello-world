@@ -56,6 +56,15 @@ http:
         - grafana-auth
       tls: {}
 
+    # Kafka UI — topic browser and Kafka Connect management
+    kafka-ui-router:
+      rule: "PathPrefix(`/kafka-ui`)"
+      entryPoints:
+        - websecure
+      service: kafka-ui
+      priority: 22
+      tls: {}
+
     # Angular apps — catch-all to nginx (static files)
     nginx-router:
       rule: "PathPrefix(`/`)"
@@ -89,6 +98,12 @@ http:
       loadBalancer:
         servers:
           - url: "http://host.containers.internal:4434"
+
+    # Kafka UI in kafka pod
+    kafka-ui:
+      loadBalancer:
+        servers:
+          - url: "http://host.containers.internal:8090"
 
     # Grafana in observability pod
     grafana:

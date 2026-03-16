@@ -1,0 +1,57 @@
+{
+  "name": "kafka",
+  "$schema": "../../node_modules/nx/schemas/project-schema.json",
+  "projectType": "application",
+  "sourceRoot": "apps/kafka",
+  "tags": [],
+  "targets": {
+    "podman-build-debezium": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "podman build -t debezium-connect -f apps/kafka/debezium/Containerfile apps/kafka/debezium",
+        "cwd": "{workspaceRoot}"
+      }
+    },
+    "podman-build-debezium-init": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "podman build -t debezium-init -f apps/kafka/debezium-init/Containerfile apps/kafka/debezium-init",
+        "cwd": "{workspaceRoot}"
+      }
+    },
+    "podman-build-slot-guard": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "podman build -t slot-guard -f apps/kafka/slot-guard/Containerfile apps/kafka/slot-guard",
+        "cwd": "{workspaceRoot}"
+      }
+    },
+    "podman-build": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "echo 'Kafka images built'",
+        "cwd": "{workspaceRoot}"
+      },
+      "dependsOn": [
+        "podman-build-debezium",
+        "podman-build-debezium-init",
+        "podman-build-slot-guard"
+      ]
+    },
+    "kube-up": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "podman play kube k8s/kafka-pod.yaml",
+        "cwd": "{workspaceRoot}"
+      },
+      "dependsOn": ["podman-build"]
+    },
+    "kube-down": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "podman play kube k8s/kafka-pod.yaml --down || true",
+        "cwd": "{workspaceRoot}"
+      }
+    }
+  }
+}

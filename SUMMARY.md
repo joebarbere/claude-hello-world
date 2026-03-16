@@ -2937,3 +2937,139 @@ Added a new Angular micro-frontend application (`admin-app`) that displays admin
 **Files changed:**
 - `README.md`
 - `RUN.md`
+
+---
+
+## Step 112: Feature — Add Kafka CDC pod with Debezium, Kafka UI, and slot-guard
+
+**What:** Added a lightweight Kafka pod for Change Data Capture (CDC) on the weather-api PostgreSQL database. Kafka runs in KRaft mode (no Zookeeper). Debezium Connect captures row-level changes from Postgres and publishes to Kafka topics. Kafka UI provides a web interface for browsing topics and managing connectors. A slot-guard sidecar monitors replication slot lag and drops stale slots as a safety net against WAL disk exhaustion.
+
+**Changes:**
+- Enabled logical replication in Postgres (`wal_level=logical`, `max_replication_slots=4`, `max_wal_senders=4`)
+- Created `apps/kafka/` project with Nx build targets for debezium-connect, debezium-init, and slot-guard images
+- Debezium Connect image extends `quay.io/debezium/connect:2.7` with Prometheus JMX exporter agent for metrics on port 9404
+- debezium-init sidecar waits for Connect REST API, then registers the Postgres CDC connector targeting `public.*` tables
+- slot-guard sidecar periodically checks `pg_replication_slots` and drops inactive Debezium slots exceeding a 5 GB lag threshold
+- Kafka UI (`provectus/kafka-ui`) configured with Kafka Connect integration for connector management
+- Added Traefik route `/kafka-ui` → Kafka UI at `host.containers.internal:8090`
+- Kafka pod runs independently (like observability): `npx nx run kafka:kube-up` / `npx nx run kafka:kube-down`
+
+**Files changed:**
+- `apps/postgres/Containerfile` — added CMD with `wal_level=logical`
+- `apps/kafka/project.json` (new)
+- `apps/kafka/debezium/Containerfile` (new)
+- `apps/kafka/debezium/jmx-exporter-config.yml` (new)
+- `apps/kafka/debezium-init/Containerfile` (new)
+- `apps/kafka/debezium-init/register-connector.sh` (new)
+- `apps/kafka/slot-guard/Containerfile` (new)
+- `apps/kafka/slot-guard/slot-guard.sh` (new)
+- `k8s/kafka-pod.yaml` (new)
+- `traefik/traefik-dynamic.yml` — added kafka-ui router and service
+
+---
+
+## Step 113: Feature — Add Kafka/CDC observability (postgres-exporter, Debezium scrape, dashboard)
+
+**What:** Extended the observability stack to monitor the Kafka CDC pipeline. postgres-exporter scrapes replication slot metrics from Postgres. Debezium JMX metrics are scraped from the kafka pod. A new Grafana dashboard visualizes replication slot lag, Debezium time lag, event throughput, queue capacity, and connector task status.
+
+**Changes:**
+- Added `postgres-exporter` container (port 9187) to the observability pod
+- Added `postgres` and `debezium` scrape jobs to Prometheus config
+- Created `kafka-cdc.json` Grafana dashboard with PostgreSQL Replication, Debezium CDC, and Kafka Connect panels
+
+**Files changed:**
+- `k8s/observability-pod.yaml`
+- `apps/observability/prometheus/prometheus.yml`
+- `apps/observability/grafana/provisioning/dashboards/kafka-cdc.json` (new)
+
+---
+
+## Step 114: Docs — Update README.md and RUN.md with Kafka CDC infrastructure
+
+**Root cause:** Steps 112 and 113 added the Kafka pod and CDC observability but left README.md and RUN.md without any documentation of the new infrastructure.
+
+**Fix:** Updated both docs to cover the Kafka pod and its components, the three-layer monitoring strategy, alerting thresholds, and all new service URLs.
+
+**Files changed:**
+- `README.md` — added Kafka CDC entry to architecture diagram, postgres-exporter to observability components table, new `postgres` and `debezium` Prometheus scrape targets, "Kafka & CDC" Grafana dashboard to dashboards list, new "Kafka & CDC" section (components, CDC flow, monitoring, alerting), kafka build command in Build section, and four new service URL entries
+- `RUN.md` — added "Kafka & CDC" section with build instructions, startup prerequisites, what gets captured, service URLs, three-layer monitoring explanation, alerting thresholds, and stop/resume behavior
+
+---
+
+## Step 115: Feature — Add Kafka UI link to admin dashboard
+
+**What:** Added a Kafka UI tile to the admin-app dashboard so admins can navigate to the Kafka topic browser and Debezium connector management directly from the admin page.
+
+**Files changed:**
+- `apps/admin-app/src/app/remote-entry/entry.ts` — added Kafka UI entry to ADMIN_LINKS under the Infrastructure category
+
+---
+
+## Step 116: Feature — Add Confluent Schema Registry and Avro serialization
+
+**What:** Replaced Debezium's default JSON converter with Avro serialization backed by Confluent Schema Registry. CDC events on Kafka topics are now Avro-encoded with schemas stored in the registry, enabling schema evolution and compact wire format.
+
+**Changes:**
+- Added `confluentinc/cp-schema-registry:7.7.1` container to the kafka pod (container port 8081, host port 8085 to avoid conflict with Traefik admin on 8081)
+- Extended Debezium Containerfile with a multi-stage build that copies the Confluent Avro converter JARs from `confluentinc/cp-kafka-connect:7.7.1` into `/kafka/connect/avro-converter/`
+- Configured Debezium Connect to use `AvroConverter` for both key and value serialization, pointing at the co-located Schema Registry (`http://localhost:8081`)
+- Added `KAFKA_CLUSTERS_0_SCHEMAREGISTRY` to Kafka UI so it can browse registered Avro schemas
+
+**Files changed:**
+- `apps/kafka/debezium/Containerfile` — added multi-stage build with Confluent Avro converter
+- `k8s/kafka-pod.yaml` — added schema-registry container; added Avro converter env vars to debezium-connect; added schema registry URL to kafka-ui
+
+---
+
+## Step 117: Fix — Correct Avro converter path, Kafka image tag, and Kafka UI image
+
+**Root cause:** Three issues prevented `kube-up kafka` from starting:
+1. The Debezium Containerfile copied Avro converter JARs from `/usr/share/java/kafka-connect-avro-converter/` which doesn't exist in the Confluent image — the actual path is `/usr/share/java/kafka-serde-tools/`
+2. The Kafka image tag `apache/kafka:3.9` doesn't exist — the correct tag is `apache/kafka:3.9.0`
+3. The `provectus/kafka-ui:latest` image was deprecated and returns "access denied" — the actively maintained fork is `kafbat/kafka-ui:latest`
+
+**Fix:**
+- Changed COPY source path to `/usr/share/java/kafka-serde-tools/`
+- Changed Kafka image tag to `3.9.0`
+- Replaced `provectus/kafka-ui` with `kafbat/kafka-ui` in pod manifest and README
+
+**Files changed:**
+- `apps/kafka/debezium/Containerfile` — fixed COPY source path
+- `k8s/kafka-pod.yaml` — fixed Kafka image tag and Kafka UI image
+- `README.md` — updated Kafka UI image references
+
+---
+
+## Step 118: Fix — Add JVM heap limits to Kafka pod containers
+
+**Root cause:** The four JVM containers in the kafka pod (Kafka, Schema Registry, Debezium Connect, Kafka UI) each default to grabbing ~25% of available memory, starving the existing services (Traefik, nginx, weather-api) and causing slow responses.
+
+**Fix:** Added explicit heap limits: Kafka 256m, Schema Registry 128m, Debezium Connect 256m, Kafka UI 128m — capping total JVM usage at ~768 MB.
+
+**Files changed:**
+- `k8s/kafka-pod.yaml` — added KAFKA_HEAP_OPTS, SCHEMA_REGISTRY_HEAP_OPTS, HEAP_OPTS, JAVA_OPTS
+
+---
+
+## Step 119: Fix — Add schema.registry.url to connector config for Avro serialization
+
+**Root cause:** Debezium connector task failed with `ConfigException: Missing required configuration "schema.registry.url"`. The Avro converter was configured at the Connect worker level but the connector-level config also requires the Schema Registry URL.
+
+**Fix:** Added `key.converter`, `key.converter.schema.registry.url`, `value.converter`, and `value.converter.schema.registry.url` to the connector registration payload.
+
+**Files changed:**
+- `apps/kafka/debezium-init/register-connector.sh` — added Avro converter and schema registry URL to connector config
+
+---
+
+## Step 120: Fix — Correct Grafana dashboard metrics to match actual JMX exporter output
+
+**Root cause:** The Kafka & CDC Grafana dashboard used metric names (`debezium_metrics_millisecondsbehindsource`, `kafka_connect_connector_status`) that don't exist. The JMX exporter's regex rules were too restrictive and didn't match Debezium's actual MBean names. With a catch-all rule, the real metrics are under `kafka_connect_source_task_metrics_*` and `kafka_connect_connector_task_metrics_*`.
+
+**Fix:**
+- Simplified JMX exporter config to a catch-all pattern so all MBeans are exported
+- Rewrote the dashboard to use actual metric names: `source_record_write_total` (rate), `poll_batch_avg_time_ms`, `source_record_active_count`, `running_ratio`, `connector_count`, `connector_failed_task_count`
+
+**Files changed:**
+- `apps/kafka/debezium/jmx-exporter-config.yml` — replaced restrictive regex rules with catch-all
+- `apps/observability/grafana/provisioning/dashboards/kafka-cdc.json` — rewrote all Debezium CDC and Kafka Connect panels with correct metric names

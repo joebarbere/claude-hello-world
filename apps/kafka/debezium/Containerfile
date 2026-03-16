@@ -1,0 +1,20 @@
+FROM confluentinc/cp-kafka-connect:7.7.1 AS confluent
+
+FROM quay.io/debezium/connect:2.7
+
+USER root
+
+# Copy Confluent Avro converter and Schema Registry client JARs
+COPY --from=confluent /usr/share/java/kafka-serde-tools/ /kafka/connect/avro-converter/
+
+# Add Prometheus JMX exporter for Debezium metrics scraping
+RUN mkdir -p /opt/jmx-exporter
+ADD https://repo1.maven.org/maven2/io/prometheus/jmx/jmx_prometheus_javaagent/0.20.0/jmx_prometheus_javaagent-0.20.0.jar /opt/jmx-exporter/jmx_prometheus_javaagent.jar
+RUN chmod 644 /opt/jmx-exporter/jmx_prometheus_javaagent.jar
+COPY jmx-exporter-config.yml /opt/jmx-exporter/config.yml
+USER kafka
+
+ENV EXTRA_ARGS="-javaagent:/opt/jmx-exporter/jmx_prometheus_javaagent.jar=9404:/opt/jmx-exporter/config.yml"
+
+EXPOSE 8083
+EXPOSE 9404

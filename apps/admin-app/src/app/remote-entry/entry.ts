@@ -35,6 +35,12 @@ const ADMIN_LINKS: AdminLink[] = [
     credentials: { username: 'admin', password: 'admin' },
   },
   {
+    name: 'Kafka UI',
+    url: '/kafka-ui',
+    description: 'Browse Kafka topics, inspect CDC events, and manage Debezium connectors.',
+    category: 'Infrastructure',
+  },
+  {
     name: 'Traefik Dashboard',
     url: 'http://localhost:8081',
     description: 'Reverse proxy routing, middleware, and TLS configuration.',
