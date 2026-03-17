@@ -14,6 +14,21 @@
     },
     {
       "path": "./apps/admin-app-e2e"
+    },
+    {
+      "path": "./apps/weatheredit-app"
+    },
+    {
+      "path": "./apps/weather-app"
+    },
+    {
+      "path": "./apps/admin-app"
+    },
+    {
+      "path": "./libs/shared/ui"
+    },
+    {
+      "path": "./apps/shell"
     }
   ]
 }

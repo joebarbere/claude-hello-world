@@ -123,6 +123,46 @@ Kafka CDC (separate pod, not started by kube-up shell)
   └── slot-guard — replication slot lag monitor; drops stale slots >5 GB as a safety net
 ```
 
+## Shared UI Library
+
+All Angular applications share a common design system provided by the `@org/ui` library at `libs/shared/ui/`. It uses [PrimeNG](https://primeng.org/) with the Aura theme preset for a professional, minimal look.
+
+### Components
+
+| Component | Selector | Purpose |
+|-----------|----------|---------|
+| `LayoutComponent` | `<ui-layout>` | App shell with collapsible sidebar navigation and router outlet |
+| `PageHeaderComponent` | `<ui-page-header>` | Page title, optional subtitle, and action slot |
+| `CardComponent` | `<ui-card>` | Content card with subtle border and shadow |
+| `StatusBadgeComponent` | `<ui-status-badge>` | Color-coded badges (cold/cool/mild/warm/hot, success/danger/neutral) |
+
+### Usage
+
+Import components from `@org/ui` in any Angular standalone component:
+
+```typescript
+import { PageHeaderComponent, CardComponent } from '@org/ui';
+
+@Component({
+  imports: [PageHeaderComponent, CardComponent],
+  template: `
+    <ui-page-header title="My Page" subtitle="Description"></ui-page-header>
+    <ui-card>Content here</ui-card>
+  `,
+})
+export class MyComponent {}
+```
+
+Add `provideSharedUI()` to the app config for PrimeNG theme and animations:
+
+```typescript
+import { provideSharedUI } from '@org/ui';
+
+export const appConfig: ApplicationConfig = {
+  providers: [...provideSharedUI()],
+};
+```
+
 ## Observability
 
 The observability stack runs as a **separate pod** and is never started by `kube-up shell` or during e2e tests. It provides metrics, log aggregation, and dashboards for local development.

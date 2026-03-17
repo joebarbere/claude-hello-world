@@ -25,7 +25,10 @@
       "weatheredit-app/Routes": [
         "apps/weatheredit-app/src/app/remote-entry/entry.routes.ts"
       ],
-      "admin-app/Routes": ["apps/admin-app/src/app/remote-entry/entry.routes.ts"]
+      "admin-app/Routes": [
+        "apps/admin-app/src/app/remote-entry/entry.routes.ts"
+      ],
+      "@org/ui": ["libs/shared/ui/src/index.ts"]
     }
   }
 }
