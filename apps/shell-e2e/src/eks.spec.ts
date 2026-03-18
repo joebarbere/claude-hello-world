@@ -15,16 +15,15 @@ import { test, expect } from '@playwright/test';
  */
 
 test.describe('Shell host – home page', () => {
-  test('loads and displays the welcome heading', async ({ page }) => {
+  test('loads and displays the dashboard heading', async ({ page }) => {
     await page.goto('/');
-    await expect(page.locator('#welcome h1')).toContainText('Welcome shell');
+    await expect(page.locator('h1')).toContainText('Dashboard');
   });
 
-  test('shows the hero "You\'re up and running" banner', async ({ page }) => {
+  test('shows the welcome subtitle', async ({ page }) => {
     await page.goto('/');
-    await expect(page.locator('#hero')).toBeVisible();
-    await expect(page.locator('#hero .text-container h2 span')).toContainText(
-      "You're up and running"
+    await expect(page.locator('.page-subtitle')).toContainText(
+      'Welcome to the NxWeather application.'
     );
   });
 

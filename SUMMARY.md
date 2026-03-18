@@ -3171,3 +3171,16 @@ Created a shared Angular UI library (`@org/ui`) at `libs/shared/ui/` using Prime
 **Files changed:**
 - `.github/workflows/ci.yml` — upgraded `actions/setup-dotnet` from v4 to v5
 - `apps/shell/src/app/home/home.component.ts` — replaced `(click)` with `[routerLink]`, removed unused `Router` import/injection
+
+
+---
+
+## Step 125: Fix — e2e tests to match current Dashboard UI
+
+**Root cause:** The e2e tests in `example.spec.ts` and `eks.spec.ts` were written for the original Nx welcome page (expecting `#welcome h1` with "Welcome shell" text and a `#hero` banner). The home page was redesigned to use a `PageHeaderComponent` with a "Dashboard" heading and "Welcome to the NxWeather application." subtitle, so these selectors and assertions no longer matched.
+
+**Fix:** Updated `example.spec.ts` to assert `h1` contains "Dashboard" instead of "Welcome". Updated `eks.spec.ts` home page tests to check for the `h1` "Dashboard" heading and `.page-subtitle` containing the welcome message, replacing the obsolete `#welcome` and `#hero` selectors.
+
+**Files changed:**
+- `apps/shell-e2e/src/example.spec.ts` — updated h1 assertion from "Welcome" to "Dashboard"
+- `apps/shell-e2e/src/eks.spec.ts` — rewrote home page tests to match Dashboard UI selectors
