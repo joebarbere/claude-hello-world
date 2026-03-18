@@ -74,6 +74,32 @@
 
 An Nx monorepo demonstrating Angular Module Federation micro-frontends with a .NET 9 Weather API backend and PostgreSQL, all containerized with Podman and orchestrated via `podman play kube`. Traefik handles SSL termination and reverse proxying, while nginx serves the Angular static files. Authentication is handled by [Ory Kratos](https://www.ory.sh/kratos/).
 
+## Demo
+
+### Shell — Home Dashboard
+
+The shell app is the Module Federation host. It provides the sidebar layout, navigation, and session-aware greeting banner.
+
+![Shell Home Dashboard](docs/screenshots/shell-home.png)
+
+### Weather Forecast (read-only)
+
+Displays weather data from the .NET API in a clean table with color-coded summary badges.
+
+![Weather Forecast App](docs/screenshots/weather-app.png)
+
+### Manage Forecasts (CRUD)
+
+Full create, edit, and delete workflow for weather forecasts. Requires authentication.
+
+![Manage Forecasts App](docs/screenshots/weatheredit-app.png)
+
+### Admin Dashboard
+
+Quick links to infrastructure and admin services — API docs, Kratos identity management, Grafana, Kafka UI, and Traefik.
+
+![Admin Dashboard](docs/screenshots/admin-app.png)
+
 ## Architecture
 
 ```

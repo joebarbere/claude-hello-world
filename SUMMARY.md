@@ -3141,3 +3141,20 @@ Created a shared Angular UI library (`@org/ui`) at `libs/shared/ui/` using Prime
 - `apps/weather-app/src/app/remote-entry/entry.spec.ts` — added overrideComponent, fixed assertions
 - `apps/weatheredit-app/src/app/remote-entry/entry.spec.ts` — added overrideComponent, fixed tempClass expectations
 - `apps/weatheredit-app/src/app/remote-entry/entry.ts` — converted styleUrl to inline styles
+
+
+---
+
+## Step 123: Add — demo screenshots to README.md
+
+**What:** Added a "Demo" section to the README with screenshots of all four Angular apps: shell home dashboard, weather forecast table, forecast management CRUD, and admin dashboard.
+
+**How:** Created a Playwright-based screenshot script (`scripts/take-screenshots.mjs`) that builds and serves each Angular app with mocked API data, then captures 2x retina screenshots. The script handles Module Federation base href routing and mocks the weather API, Kratos session, and Kratos admin endpoints.
+
+**Files changed:**
+- `README.md` — added Demo section with four inline screenshot images
+- `docs/screenshots/shell-home.png` — shell app home dashboard screenshot
+- `docs/screenshots/weather-app.png` — weather forecast table screenshot
+- `docs/screenshots/weatheredit-app.png` — forecast CRUD management screenshot
+- `docs/screenshots/admin-app.png` — admin dashboard screenshot
+- `scripts/take-screenshots.mjs` — Playwright screenshot capture script
