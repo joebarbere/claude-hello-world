@@ -71,6 +71,11 @@
           "env": "NX_MF_DEV_REMOTES"
         }
       ]
+    },
+    "@angular/build:application": {
+      "cache": true,
+      "dependsOn": ["^build"],
+      "inputs": ["production", "^production"]
     }
   },
   "generators": {

@@ -277,6 +277,37 @@ PostgreSQL has logical replication enabled (`wal_level=logical`). Debezium creat
 
 > **macOS note:** The kafka pod uses `host.containers.internal` to reach the apps pod (Postgres). Both pods must be running inside the same Podman Machine.
 
+## WeatherStream App (`weatherstream-app`)
+
+Angular application that displays a real-time weather event streaming dashboard. Features:
+
+- Live weather event cards showing temperature, humidity, wind speed, and conditions for cities worldwide
+- Dark-themed responsive UI with animated event cards
+- Kafka consumer integration via Electron IPC when running inside `lightning-app`
+- Falls back to simulated weather events when running standalone in the browser
+- Port: 4203 (dev server)
+
+**Serve standalone:** `npx nx serve weatherstream-app`
+
+## Lightning App (`lightning-app`)
+
+Electron desktop application that hosts `weatherstream-app` and provides native Kafka connectivity. Architecture:
+
+- **Main process** — Connects to Kafka via `kafkajs`, consumes from `weather-events` topic
+- **Preload script** — Exposes `electronKafka` API via `contextBridge` (context isolation enabled)
+- **Renderer** — Loads `weatherstream-app` Angular build, receives weather events over IPC
+
+**Serve (dev mode):** `npx nx serve-dev lightning-app`
+**Serve (production build):** `npx nx serve lightning-app`
+
+### Environment Variables
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `KAFKA_BROKERS` | `localhost:9092` | Comma-separated Kafka broker addresses |
+| `KAFKA_TOPIC` | `weather-events` | Kafka topic to consume |
+| `KAFKA_GROUP_ID` | `lightning-app-group` | Consumer group ID |
+
 ## Authentication
 
 Access to the **weatheredit-app** and all **write operations** on the weather-api is restricted to users with `admin` or `weather_admin` roles, enforced by [Ory Kratos](https://www.ory.sh/kratos/).
