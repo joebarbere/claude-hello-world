@@ -1,0 +1,57 @@
+<div class="dashboard">
+  <header class="dashboard-header">
+    <h1>⚡ WeatherStream</h1>
+    <div class="status-bar">
+      <span class="status-indicator" [class.connected]="stream.connected()">
+        {{ stream.connected() ? 'Connected' : 'Disconnected' }}
+      </span>
+      @if (stream.isElectron()) {
+        <span class="badge electron">Electron + Kafka</span>
+      } @else {
+        <span class="badge simulated">Simulated</span>
+      }
+      <span class="event-count">{{ stream.eventCount() }} events</span>
+      <button class="btn btn-clear" (click)="stream.clearEvents()">Clear</button>
+      @if (stream.isElectron() && !stream.connected()) {
+        <button class="btn btn-reconnect" (click)="stream.reconnect()">Reconnect</button>
+      }
+    </div>
+  </header>
+
+  @if (stream.lastError(); as error) {
+    <div class="error-banner">{{ error }}</div>
+  }
+
+  <div class="event-grid">
+    @for (event of stream.events(); track event.timestamp + event.location) {
+      <div class="event-card">
+        <div class="event-header">
+          <span class="condition-icon">{{ conditionIcon(event.condition) }}</span>
+          <span class="location">{{ event.location }}</span>
+          <span class="condition">{{ event.condition }}</span>
+        </div>
+        <div class="event-metrics">
+          <div class="metric">
+            <span class="metric-label">Temp</span>
+            <span class="metric-value" [style.color]="tempColor(event.temperature)">
+              {{ event.temperature | number:'1.1-1' }}°C
+            </span>
+          </div>
+          <div class="metric">
+            <span class="metric-label">Humidity</span>
+            <span class="metric-value">{{ event.humidity }}%</span>
+          </div>
+          <div class="metric">
+            <span class="metric-label">Wind</span>
+            <span class="metric-value">{{ event.windSpeed | number:'1.1-1' }} km/h</span>
+          </div>
+        </div>
+        <div class="event-time">{{ event.timestamp | date:'HH:mm:ss.SSS' }}</div>
+      </div>
+    } @empty {
+      <div class="empty-state">
+        <p>Waiting for weather events...</p>
+      </div>
+    }
+  </div>
+</div>

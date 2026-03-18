@@ -481,6 +481,46 @@ Runs `podman rm -f weather-api`, forcibly stopping and removing the container. T
 
 ---
 
+## WeatherStream + Lightning (Electron)
+
+### Serve weatherstream-app standalone (browser)
+
+```bash
+npx nx serve weatherstream-app
+```
+
+Opens at http://localhost:4203 with simulated weather events.
+
+### Serve lightning-app (Electron, dev mode)
+
+```bash
+npx nx serve-dev lightning-app
+```
+
+Starts Angular dev server + Electron window with hot reload.
+
+### Serve lightning-app (Electron, production build)
+
+```bash
+npx nx serve lightning-app
+```
+
+Builds Angular app first, then opens Electron with the production bundle.
+
+### Build weatherstream-app
+
+```bash
+npx nx build weatherstream-app
+```
+
+### Kafka configuration (optional)
+
+```bash
+KAFKA_BROKERS=broker1:9092,broker2:9092 KAFKA_TOPIC=weather-events npx nx serve lightning-app
+```
+
+---
+
 ## Nx Workspace Utilities
 
 ### View all targets for a project

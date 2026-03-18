@@ -3196,3 +3196,39 @@ Created a shared Angular UI library (`@org/ui`) at `libs/shared/ui/` using Prime
 
 **Files changed:**
 - `apps/shell-e2e/src/eks.spec.ts` — updated heading locator from `h2` to `h1`
+
+## Step 127: Add — WeatherStream Angular app and Lightning Electron host
+
+Added two new applications to the workspace:
+
+**Root cause / motivation:** Need a real-time weather event streaming dashboard with native Kafka integration, leveraging Electron's Node.js runtime for direct Kafka consumer access.
+
+**What was built:**
+
+1. **weatherstream-app** (Angular) — Real-time weather event streaming dashboard
+   - Weather dashboard component with live event cards (temperature, humidity, wind, conditions)
+   - `KafkaStreamService` using Angular signals for reactive state management
+   - Electron IPC bridge integration — receives Kafka events from the main process
+   - Simulated event fallback when running standalone in the browser
+   - Dark-themed responsive UI with animated card grid
+   - Dev server on port 4203
+
+2. **lightning-app** (Electron) — Desktop host for weatherstream-app with native Kafka
+   - Main process: Kafka consumer via `kafkajs`, connects to configurable brokers/topic
+   - Preload script: `contextBridge`-based IPC API (`electronKafka`) with context isolation
+   - Loads weatherstream-app (dev server or production build)
+   - Environment-variable-driven configuration (KAFKA_BROKERS, KAFKA_TOPIC, KAFKA_GROUP_ID)
+   - Nx targets: `serve` (prod build), `serve-dev` (hot reload), `build-angular`, `package`
+
+**Dependencies added:** `electron`, `kafkajs`
+
+**Files changed:**
+- `apps/weatherstream-app/` — new Angular app (generated via `@nx/angular:application`)
+- `apps/weatherstream-app/src/app/services/kafka-stream.service.ts` — Kafka stream service with signals
+- `apps/weatherstream-app/src/app/weather-dashboard/` — dashboard component (ts, html, css)
+- `apps/lightning-app/project.json` — Nx project config with serve/serve-dev/package targets
+- `apps/lightning-app/src/main.js` — Electron main process with Kafka consumer
+- `apps/lightning-app/src/preload.js` — context-isolated IPC bridge
+- `apps/lightning-app/src/kafka-consumer.js` — KafkaWeatherConsumer EventEmitter wrapper
+- `package.json` — added electron and kafkajs dependencies
+- `README.md`, `RUN.md`, `SUMMARY.md` — updated documentation
