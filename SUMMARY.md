@@ -3184,3 +3184,15 @@ Created a shared Angular UI library (`@org/ui`) at `libs/shared/ui/` using Prime
 **Files changed:**
 - `apps/shell-e2e/src/example.spec.ts` — updated h1 assertion from "Welcome" to "Dashboard"
 - `apps/shell-e2e/src/eks.spec.ts` — rewrote home page tests to match Dashboard UI selectors
+
+
+---
+
+## Step 126: Fix — e2e test selector for weather-app heading
+
+**Root cause:** The `eks.spec.ts` e2e test for the weather-app MFE navigation used `page.locator('h2')` to find the "Weather Forecast" heading. However, the `PageHeaderComponent` renders the title in an `<h1>` element, not `<h2>`, causing the test to time out.
+
+**Fix:** Changed the locator from `h2` to `h1` in the weather-app navigation test.
+
+**Files changed:**
+- `apps/shell-e2e/src/eks.spec.ts` — updated heading locator from `h2` to `h1`
