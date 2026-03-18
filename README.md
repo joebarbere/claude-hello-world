@@ -279,6 +279,8 @@ PostgreSQL has logical replication enabled (`wal_level=logical`). Debezium creat
 
 ## WeatherStream App (`weatherstream-app`)
 
+![WeatherStream Demo](docs/weatherstream-demo.png)
+
 Angular application that displays a real-time weather event streaming dashboard. Features:
 
 - Live weather event cards showing temperature, humidity, wind speed, and conditions for cities worldwide
