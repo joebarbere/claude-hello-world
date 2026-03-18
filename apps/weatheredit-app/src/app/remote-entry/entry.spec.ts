@@ -1,12 +1,17 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { TestBed } from '@angular/core/testing';
-import { ɵresolveComponentResources as resolveComponentResources } from '@angular/core';
+import { CUSTOM_ELEMENTS_SCHEMA } from '@angular/core';
 import { provideHttpClient } from '@angular/common/http';
 import {
   provideHttpClientTesting,
   HttpTestingController,
 } from '@angular/common/http/testing';
 import { RemoteEntry } from './entry';
+import {
+  PageHeaderComponent,
+  CardComponent,
+  StatusBadgeComponent,
+} from '@org/ui';
 
 interface WeatherForecast {
   id: number;
@@ -26,13 +31,17 @@ describe('RemoteEntry (weatheredit-app)', () => {
   let httpMock: HttpTestingController;
 
   beforeEach(async () => {
-    await resolveComponentResources(() =>
-      Promise.resolve({ text: () => Promise.resolve('') } as Response)
-    );
     await TestBed.configureTestingModule({
       imports: [RemoteEntry],
       providers: [provideHttpClient(), provideHttpClientTesting()],
-    }).compileComponents();
+    })
+      .overrideComponent(RemoteEntry, {
+        remove: {
+          imports: [PageHeaderComponent, CardComponent, StatusBadgeComponent],
+        },
+        add: { schemas: [CUSTOM_ELEMENTS_SCHEMA] },
+      })
+      .compileComponents();
     httpMock = TestBed.inject(HttpTestingController);
   });
 
@@ -109,36 +118,36 @@ describe('RemoteEntry (weatheredit-app)', () => {
   it('tempClass() returns badge-cold for temp < 0', () => {
     const fixture = createAndInit();
     httpMock.expectOne('/weather').flush([]);
-    expect(fixture.componentInstance.tempClass(-1)).toBe('badge-cold');
-    expect(fixture.componentInstance.tempClass(-20)).toBe('badge-cold');
+    expect(fixture.componentInstance.tempClass(-1)).toBe('cold');
+    expect(fixture.componentInstance.tempClass(-20)).toBe('cold');
   });
 
   it('tempClass() returns badge-cool for 0 <= temp < 15', () => {
     const fixture = createAndInit();
     httpMock.expectOne('/weather').flush([]);
-    expect(fixture.componentInstance.tempClass(0)).toBe('badge-cool');
-    expect(fixture.componentInstance.tempClass(14)).toBe('badge-cool');
+    expect(fixture.componentInstance.tempClass(0)).toBe('cool');
+    expect(fixture.componentInstance.tempClass(14)).toBe('cool');
   });
 
   it('tempClass() returns badge-mild for 15 <= temp < 25', () => {
     const fixture = createAndInit();
     httpMock.expectOne('/weather').flush([]);
-    expect(fixture.componentInstance.tempClass(15)).toBe('badge-mild');
-    expect(fixture.componentInstance.tempClass(24)).toBe('badge-mild');
+    expect(fixture.componentInstance.tempClass(15)).toBe('mild');
+    expect(fixture.componentInstance.tempClass(24)).toBe('mild');
   });
 
   it('tempClass() returns badge-warm for 25 <= temp < 35', () => {
     const fixture = createAndInit();
     httpMock.expectOne('/weather').flush([]);
-    expect(fixture.componentInstance.tempClass(25)).toBe('badge-warm');
-    expect(fixture.componentInstance.tempClass(34)).toBe('badge-warm');
+    expect(fixture.componentInstance.tempClass(25)).toBe('warm');
+    expect(fixture.componentInstance.tempClass(34)).toBe('warm');
   });
 
   it('tempClass() returns badge-hot for temp >= 35', () => {
     const fixture = createAndInit();
     httpMock.expectOne('/weather').flush([]);
-    expect(fixture.componentInstance.tempClass(35)).toBe('badge-hot');
-    expect(fixture.componentInstance.tempClass(100)).toBe('badge-hot');
+    expect(fixture.componentInstance.tempClass(35)).toBe('hot');
+    expect(fixture.componentInstance.tempClass(100)).toBe('hot');
   });
 
   // --- Form state ---
