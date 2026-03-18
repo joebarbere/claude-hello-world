@@ -1,7 +1,7 @@
 import { Component, inject, OnInit } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
-import { NgClass } from '@angular/common';
 import { RouterLink } from '@angular/router';
+import { PageHeaderComponent, CardComponent, StatusBadgeComponent } from '@org/ui';
 
 export interface AdminLink {
   name: string;
@@ -51,188 +51,147 @@ const ADMIN_LINKS: AdminLink[] = [
 @Component({
   selector: 'app-admin-app-entry',
   standalone: true,
-  imports: [NgClass, RouterLink],
+  imports: [RouterLink, PageHeaderComponent, CardComponent, StatusBadgeComponent],
   template: `
-    <div class="page">
-      <header class="page-header">
-        <div class="header-title">
-          <svg class="header-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <path d="M12 15v2m-6 4h12a2 2 0 0 0 2-2v-6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v6a2 2 0 0 0 2 2zm10-10V7a4 4 0 0 0-8 0v4h8z"/>
-          </svg>
-          <h1>Admin Dashboard</h1>
-        </div>
-        <p class="header-sub">Quick links to infrastructure and admin services.</p>
-      </header>
+    <div class="page-container">
+      <ui-page-header
+        title="Admin Dashboard"
+        subtitle="Quick links to infrastructure and admin services."
+      ></ui-page-header>
 
       @for (category of categories; track category) {
         <section class="link-section">
           <h2 class="section-title">{{ category }}</h2>
           <div class="link-grid">
             @for (link of linksByCategory(category); track link.name) {
-              @if (link.routerLink) {
-                <a [routerLink]="link.routerLink" class="link-card">
-                  <div class="link-header">
-                    <div class="link-name">{{ link.name }}</div>
-                    @if (link.badge) {
-                      <span class="status-badge" [ngClass]="healthStatus[link.badge.endpoint] || 'pending'">
-                        {{ healthLabels[healthStatus[link.badge.endpoint] || 'pending'] }}
-                      </span>
-                    }
-                  </div>
-                  <div class="link-desc">{{ link.description }}</div>
-                  <div class="link-url">{{ link.routerLink }}</div>
-                </a>
-              } @else {
-                <a [href]="link.url" target="_blank" rel="noopener noreferrer" class="link-card">
-                  <div class="link-header">
-                    <div class="link-name">{{ link.name }}</div>
-                    @if (link.badge) {
-                      <span class="status-badge" [ngClass]="healthStatus[link.badge.endpoint] || 'pending'">
-                        {{ healthLabels[healthStatus[link.badge.endpoint] || 'pending'] }}
-                      </span>
-                    }
-                  </div>
-                  <div class="link-desc">{{ link.description }}</div>
-                  @if (link.credentials) {
-                    <div class="credentials">
-                      <span class="cred-label">Login:</span>
-                      <code>{{ link.credentials.username }}</code> / <code>{{ link.credentials.password }}</code>
+              <ui-card>
+                @if (link.routerLink) {
+                  <a [routerLink]="link.routerLink" class="link-card-inner">
+                    <div class="link-header">
+                      <div class="link-name">{{ link.name }}</div>
+                      @if (link.badge) {
+                        <ui-status-badge
+                          [variant]="healthVariant(healthStatus[link.badge.endpoint] || 'pending')"
+                        >
+                          {{ healthLabels[healthStatus[link.badge.endpoint] || 'pending'] }}
+                        </ui-status-badge>
+                      }
                     </div>
-                  }
-                  <div class="link-url">{{ link.url }}</div>
-                </a>
-              }
+                    <div class="link-desc">{{ link.description }}</div>
+                    <div class="link-url">{{ link.routerLink }}</div>
+                  </a>
+                } @else {
+                  <a [href]="link.url" target="_blank" rel="noopener noreferrer" class="link-card-inner">
+                    <div class="link-header">
+                      <div class="link-name">{{ link.name }}</div>
+                      @if (link.badge) {
+                        <ui-status-badge
+                          [variant]="healthVariant(healthStatus[link.badge.endpoint] || 'pending')"
+                        >
+                          {{ healthLabels[healthStatus[link.badge.endpoint] || 'pending'] }}
+                        </ui-status-badge>
+                      }
+                    </div>
+                    <div class="link-desc">{{ link.description }}</div>
+                    @if (link.credentials) {
+                      <div class="credentials">
+                        <span class="cred-label">Login:</span>
+                        <code>{{ link.credentials.username }}</code> / <code>{{ link.credentials.password }}</code>
+                      </div>
+                    }
+                    <div class="link-url">{{ link.url }}</div>
+                  </a>
+                }
+              </ui-card>
             }
           </div>
         </section>
       }
     </div>
   `,
-  styles: [`
-    .page {
-      max-width: 960px;
-      margin: 0 auto;
-      padding: 2rem 1.5rem;
-      font-family: system-ui, -apple-system, sans-serif;
-    }
-    .page-header {
-      margin-bottom: 2rem;
-    }
-    .header-title {
-      display: flex;
-      align-items: center;
-      gap: 0.75rem;
-    }
-    .header-icon {
-      width: 32px;
-      height: 32px;
-      color: #6366f1;
-    }
-    .page-header h1 {
-      font-size: 1.75rem;
-      font-weight: 700;
-      color: #111827;
-      margin: 0;
-    }
-    .header-sub {
-      color: #6b7280;
-      margin: 0.5rem 0 0;
-    }
-    .link-section {
-      margin-bottom: 2rem;
-    }
-    .section-title {
-      font-size: 1rem;
-      font-weight: 600;
-      color: #374151;
-      text-transform: uppercase;
-      letter-spacing: 0.05em;
-      margin: 0 0 0.75rem;
-      padding-bottom: 0.5rem;
-      border-bottom: 1px solid #e5e7eb;
-    }
-    .link-grid {
-      display: grid;
-      grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
-      gap: 1rem;
-    }
-    .link-card {
-      display: block;
-      background: #fff;
-      border: 1px solid #e5e7eb;
-      border-radius: 8px;
-      padding: 1.25rem;
-      text-decoration: none;
-      color: inherit;
-      transition: border-color 0.15s, box-shadow 0.15s;
-    }
-    .link-card:hover {
-      border-color: #6366f1;
-      box-shadow: 0 2px 12px rgba(99, 102, 241, 0.15);
-    }
-    .link-header {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      margin-bottom: 0.375rem;
-    }
-    .link-name {
-      font-size: 1rem;
-      font-weight: 600;
-      color: #111827;
-    }
-    .link-desc {
-      font-size: 0.875rem;
-      color: #6b7280;
-      line-height: 1.4;
-      margin-bottom: 0.5rem;
-    }
-    .link-url {
-      font-size: 0.75rem;
-      color: #6366f1;
-      font-family: ui-monospace, monospace;
-      word-break: break-all;
-    }
-    .status-badge {
-      font-size: 0.7rem;
-      font-weight: 600;
-      padding: 0.15rem 0.5rem;
-      border-radius: 9999px;
-      text-transform: uppercase;
-      letter-spacing: 0.03em;
-      flex-shrink: 0;
-    }
-    .status-badge.up {
-      background: #dcfce7;
-      color: #166534;
-    }
-    .status-badge.down {
-      background: #fee2e2;
-      color: #991b1b;
-    }
-    .status-badge.pending {
-      background: #f3f4f6;
-      color: #6b7280;
-    }
-    .credentials {
-      display: flex;
-      align-items: center;
-      gap: 0.35rem;
-      font-size: 0.8rem;
-      color: #374151;
-      margin-bottom: 0.5rem;
-    }
-    .cred-label {
-      font-weight: 500;
-    }
-    .credentials code {
-      background: #f3f4f6;
-      padding: 0.1rem 0.35rem;
-      border-radius: 4px;
-      font-family: ui-monospace, monospace;
-      font-size: 0.8rem;
-    }
-  `],
+  styles: [
+    `
+      :host {
+        display: block;
+        font-family: system-ui, -apple-system, sans-serif;
+        -webkit-font-smoothing: antialiased;
+      }
+      .page-container {
+        max-width: 960px;
+        margin: 0 auto;
+        padding: 32px 24px;
+      }
+      .link-section {
+        margin-bottom: 24px;
+      }
+      .section-title {
+        font-size: 0.75rem;
+        font-weight: 600;
+        color: #94a3b8;
+        text-transform: uppercase;
+        letter-spacing: 0.06em;
+        margin: 0 0 12px;
+        padding-bottom: 8px;
+        border-bottom: 1px solid #e2e8f0;
+      }
+      .link-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+        gap: 12px;
+      }
+      .link-card-inner {
+        display: block;
+        padding: 18px 20px;
+        text-decoration: none;
+        color: inherit;
+        transition: background 0.15s;
+      }
+      .link-card-inner:hover {
+        background: #f8fafc;
+      }
+      .link-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        margin-bottom: 6px;
+      }
+      .link-name {
+        font-size: 0.9375rem;
+        font-weight: 600;
+        color: #1e293b;
+      }
+      .link-desc {
+        font-size: 0.8125rem;
+        color: #64748b;
+        line-height: 1.4;
+        margin-bottom: 8px;
+      }
+      .link-url {
+        font-size: 0.75rem;
+        color: #6366f1;
+        font-family: ui-monospace, monospace;
+        word-break: break-all;
+      }
+      .credentials {
+        display: flex;
+        align-items: center;
+        gap: 4px;
+        font-size: 0.8125rem;
+        color: #334155;
+        margin-bottom: 8px;
+      }
+      .cred-label {
+        font-weight: 500;
+      }
+      .credentials code {
+        background: #f1f5f9;
+        padding: 1px 6px;
+        border-radius: 4px;
+        font-family: ui-monospace, monospace;
+        font-size: 0.8125rem;
+      }
+    `,
+  ],
 })
 export class RemoteEntry implements OnInit {
   readonly links = ADMIN_LINKS;
@@ -256,6 +215,12 @@ export class RemoteEntry implements OnInit {
 
   linksByCategory(category: string): AdminLink[] {
     return this.links.filter((l) => l.category === category);
+  }
+
+  healthVariant(status: string): string {
+    if (status === 'up') return 'success';
+    if (status === 'down') return 'danger';
+    return 'neutral';
   }
 
   private checkHealth(endpoint: string): void {

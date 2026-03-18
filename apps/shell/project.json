@@ -20,7 +20,11 @@
             "input": "apps/shell/public"
           }
         ],
-        "styles": ["apps/shell/src/styles.css"],
+        "styles": [
+          "node_modules/primeicons/primeicons.css",
+          "libs/shared/ui/src/lib/styles/shared-styles.css",
+          "apps/shell/src/styles.css"
+        ],
         "customWebpackConfig": {
           "path": "apps/shell/webpack.config.ts"
         }

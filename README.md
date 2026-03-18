@@ -74,6 +74,32 @@
 
 An Nx monorepo demonstrating Angular Module Federation micro-frontends with a .NET 9 Weather API backend and PostgreSQL, all containerized with Podman and orchestrated via `podman play kube`. Traefik handles SSL termination and reverse proxying, while nginx serves the Angular static files. Authentication is handled by [Ory Kratos](https://www.ory.sh/kratos/).
 
+## Demo
+
+### Shell — Home Dashboard
+
+The shell app is the Module Federation host. It provides the sidebar layout, navigation, and session-aware greeting banner.
+
+![Shell Home Dashboard](docs/screenshots/shell-home.png)
+
+### Weather Forecast (read-only)
+
+Displays weather data from the .NET API in a clean table with color-coded summary badges.
+
+![Weather Forecast App](docs/screenshots/weather-app.png)
+
+### Manage Forecasts (CRUD)
+
+Full create, edit, and delete workflow for weather forecasts. Requires authentication.
+
+![Manage Forecasts App](docs/screenshots/weatheredit-app.png)
+
+### Admin Dashboard
+
+Quick links to infrastructure and admin services — API docs, Kratos identity management, Grafana, Kafka UI, and Traefik.
+
+![Admin Dashboard](docs/screenshots/admin-app.png)
+
 ## Architecture
 
 ```
@@ -121,6 +147,46 @@ Kafka CDC (separate pod, not started by kube-up shell)
   ├── Debezium Connect (:8083) — CDC from PostgreSQL → Kafka topics (Avro-encoded)
   ├── Kafka UI (:8090 / https://localhost:8443/kafka-ui/) — topic, connector, and schema browser
   └── slot-guard — replication slot lag monitor; drops stale slots >5 GB as a safety net
+```
+
+## Shared UI Library
+
+All Angular applications share a common design system provided by the `@org/ui` library at `libs/shared/ui/`. It uses [PrimeNG](https://primeng.org/) with the Aura theme preset for a professional, minimal look.
+
+### Components
+
+| Component | Selector | Purpose |
+|-----------|----------|---------|
+| `LayoutComponent` | `<ui-layout>` | App shell with collapsible sidebar navigation and router outlet |
+| `PageHeaderComponent` | `<ui-page-header>` | Page title, optional subtitle, and action slot |
+| `CardComponent` | `<ui-card>` | Content card with subtle border and shadow |
+| `StatusBadgeComponent` | `<ui-status-badge>` | Color-coded badges (cold/cool/mild/warm/hot, success/danger/neutral) |
+
+### Usage
+
+Import components from `@org/ui` in any Angular standalone component:
+
+```typescript
+import { PageHeaderComponent, CardComponent } from '@org/ui';
+
+@Component({
+  imports: [PageHeaderComponent, CardComponent],
+  template: `
+    <ui-page-header title="My Page" subtitle="Description"></ui-page-header>
+    <ui-card>Content here</ui-card>
+  `,
+})
+export class MyComponent {}
+```
+
+Add `provideSharedUI()` to the app config for PrimeNG theme and animations:
+
+```typescript
+import { provideSharedUI } from '@org/ui';
+
+export const appConfig: ApplicationConfig = {
+  providers: [...provideSharedUI()],
+};
 ```
 
 ## Observability

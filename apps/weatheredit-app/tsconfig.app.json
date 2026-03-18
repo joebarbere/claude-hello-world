@@ -8,9 +8,9 @@
     "composite": false,
     "declarationMap": false,
     "emitDeclarationOnly": false,
-    "baseUrl": "."
+    "baseUrl": "../../"
   },
-  "include": ["src/**/*.ts"],
+  "include": ["src/**/*.ts", "../../libs/shared/ui/src/index.ts", "../../libs/shared/ui/src/lib/**/*.ts"],
   "exclude": [
     "src/**/*.spec.ts",
     "src/**/*.test.ts",
@@ -26,5 +26,10 @@
     "src/**/*.spec.jsx",
     "src/test-setup.ts"
   ],
-  "files": ["src/app/remote-entry/entry.routes.ts"]
+  "files": ["src/app/remote-entry/entry.routes.ts"],
+  "references": [
+    {
+      "path": "../../libs/shared/ui/tsconfig.lib.json"
+    }
+  ]
 }

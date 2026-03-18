@@ -1,11 +1,17 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { TestBed } from '@angular/core/testing';
+import { CUSTOM_ELEMENTS_SCHEMA } from '@angular/core';
 import { provideHttpClient } from '@angular/common/http';
 import {
   provideHttpClientTesting,
   HttpTestingController,
 } from '@angular/common/http/testing';
 import { RemoteEntry } from './entry';
+import {
+  PageHeaderComponent,
+  CardComponent,
+  StatusBadgeComponent,
+} from '@org/ui';
 
 interface WeatherForecast {
   date: string;
@@ -26,7 +32,14 @@ describe('RemoteEntry (weather-app)', () => {
     await TestBed.configureTestingModule({
       imports: [RemoteEntry],
       providers: [provideHttpClient(), provideHttpClientTesting()],
-    }).compileComponents();
+    })
+      .overrideComponent(RemoteEntry, {
+        remove: {
+          imports: [PageHeaderComponent, CardComponent, StatusBadgeComponent],
+        },
+        add: { schemas: [CUSTOM_ELEMENTS_SCHEMA] },
+      })
+      .compileComponents();
     httpMock = TestBed.inject(HttpTestingController);
   });
 
@@ -52,7 +65,7 @@ describe('RemoteEntry (weather-app)', () => {
     const fixture = TestBed.createComponent(RemoteEntry);
     fixture.detectChanges();
     const el = fixture.nativeElement as HTMLElement;
-    expect(el.textContent).toContain('Loading...');
+    expect(el.textContent).toContain('Loading forecasts...');
     httpMock.expectOne('/weather').flush([]);
   });
 
@@ -111,8 +124,8 @@ describe('RemoteEntry (weather-app)', () => {
       fixture.nativeElement.querySelectorAll('tbody td')
     ).map((td: Element) => td.textContent?.trim());
     expect(cells).toContain('2024-01-01');
-    expect(cells).toContain('5');
-    expect(cells).toContain('41');
+    expect(cells).toContain('5°');
+    expect(cells).toContain('41°');
     expect(cells).toContain('Chilly');
   });
 

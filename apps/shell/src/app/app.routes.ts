@@ -1,8 +1,8 @@
-import { NxWelcome } from './nx-welcome';
 import { Route } from '@angular/router';
 import { weatherEditAuthGuard, adminAuthGuard } from './auth/auth.guard';
 import { LoginComponent } from './auth/login/login.component';
 import { UnauthorizedComponent } from './auth/unauthorized/unauthorized.component';
+import { HomeComponent } from './home/home.component';
 
 export const appRoutes: Route[] = [
   {
@@ -35,6 +35,6 @@ export const appRoutes: Route[] = [
   },
   {
     path: '',
-    component: NxWelcome,
+    component: HomeComponent,
   },
 ];

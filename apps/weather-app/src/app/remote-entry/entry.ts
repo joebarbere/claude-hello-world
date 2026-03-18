@@ -1,5 +1,6 @@
 import { Component, inject, OnInit, signal } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
+import { PageHeaderComponent, CardComponent, StatusBadgeComponent } from '@org/ui';
 
 interface WeatherForecast {
   date: string;
@@ -10,43 +11,140 @@ interface WeatherForecast {
 
 @Component({
   selector: 'app-weather-app-entry',
+  imports: [PageHeaderComponent, CardComponent, StatusBadgeComponent],
   template: `
-    <h2>Weather Forecast</h2>
-    @if (loading()) {
-      <p>Loading...</p>
-    } @else if (error()) {
-      <p class="error">{{ error() }}</p>
-    } @else {
-      <table>
-        <thead>
-          <tr>
-            <th>Date</th>
-            <th>Temp (°C)</th>
-            <th>Temp (°F)</th>
-            <th>Summary</th>
-          </tr>
-        </thead>
-        <tbody>
-          @for (row of forecasts(); track row.date) {
-            <tr>
-              <td>{{ row.date }}</td>
-              <td>{{ row.temperatureC }}</td>
-              <td>{{ row.temperatureF }}</td>
-              <td>{{ row.summary }}</td>
-            </tr>
-          }
-        </tbody>
-      </table>
-    }
+    <div class="page-container">
+      <ui-page-header
+        title="Weather Forecast"
+        subtitle="Current weather data from the API."
+      ></ui-page-header>
+
+      @if (loading()) {
+        <ui-card>
+          <div class="loading-state">
+            <i class="pi pi-spin pi-spinner" style="font-size: 1.5rem; color: #6366f1;"></i>
+            <span>Loading forecasts...</span>
+          </div>
+        </ui-card>
+      } @else if (error()) {
+        <div class="alert-error">
+          <i class="pi pi-exclamation-circle"></i>
+          {{ error() }}
+        </div>
+      } @else {
+        <ui-card>
+          <div class="table-wrapper">
+            <table>
+              <thead>
+                <tr>
+                  <th>Date</th>
+                  <th>Temp (°C)</th>
+                  <th>Temp (°F)</th>
+                  <th>Summary</th>
+                </tr>
+              </thead>
+              <tbody>
+                @for (row of forecasts(); track row.date) {
+                  <tr>
+                    <td class="cell-date">{{ row.date }}</td>
+                    <td class="cell-temp">{{ row.temperatureC }}°</td>
+                    <td class="cell-temp muted">{{ row.temperatureF }}°</td>
+                    <td>
+                      @if (row.summary) {
+                        <ui-status-badge [variant]="tempVariant(row.temperatureC)">
+                          {{ row.summary }}
+                        </ui-status-badge>
+                      } @else {
+                        <span class="dash">—</span>
+                      }
+                    </td>
+                  </tr>
+                }
+              </tbody>
+            </table>
+          </div>
+        </ui-card>
+      }
+    </div>
   `,
-  styles: [`
-    h2 { font-family: sans-serif; }
-    table { border-collapse: collapse; width: 100%; font-family: sans-serif; }
-    th, td { border: 1px solid #ccc; padding: 8px 12px; text-align: left; }
-    th { background: #f0f0f0; font-weight: 600; }
-    tr:nth-child(even) { background: #fafafa; }
-    .error { color: red; font-family: sans-serif; }
-  `],
+  styles: [
+    `
+      .page-container {
+        max-width: 960px;
+        margin: 0 auto;
+        padding: 32px 24px;
+      }
+      .loading-state {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 12px;
+        padding: 48px 24px;
+        color: #64748b;
+        font-size: 0.875rem;
+      }
+      .alert-error {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        padding: 12px 16px;
+        background: #fef2f2;
+        border: 1px solid #fecaca;
+        color: #b91c1c;
+        border-radius: 8px;
+        font-size: 0.875rem;
+      }
+      .table-wrapper {
+        overflow-x: auto;
+      }
+      table {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 0.875rem;
+      }
+      thead th {
+        padding: 12px 16px;
+        text-align: left;
+        font-size: 0.6875rem;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 0.06em;
+        color: #94a3b8;
+        background: #f8fafc;
+        border-bottom: 1px solid #e2e8f0;
+      }
+      tbody tr {
+        border-bottom: 1px solid #f1f5f9;
+        transition: background 0.1s;
+      }
+      tbody tr:last-child {
+        border-bottom: none;
+      }
+      tbody tr:hover {
+        background: #f8fafc;
+      }
+      td {
+        padding: 12px 16px;
+        color: #334155;
+      }
+      .cell-date {
+        font-variant-numeric: tabular-nums;
+        color: #475569;
+      }
+      .cell-temp {
+        font-variant-numeric: tabular-nums;
+        font-weight: 600;
+        color: #1e293b;
+      }
+      .cell-temp.muted {
+        font-weight: 400;
+        color: #94a3b8;
+      }
+      .dash {
+        color: #cbd5e1;
+      }
+    `,
+  ],
 })
 export class RemoteEntry implements OnInit {
   private http = inject(HttpClient);
@@ -66,5 +164,13 @@ export class RemoteEntry implements OnInit {
         this.loading.set(false);
       },
     });
+  }
+
+  tempVariant(temp: number): string {
+    if (temp < 0) return 'cold';
+    if (temp < 15) return 'cool';
+    if (temp < 25) return 'mild';
+    if (temp < 35) return 'warm';
+    return 'hot';
   }
 }
