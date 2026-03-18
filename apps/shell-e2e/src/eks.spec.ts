@@ -38,8 +38,8 @@ test.describe('Shell host – MFE navigation', () => {
     page,
   }) => {
     await page.goto('/weather-app');
-    // MFE remote entry renders <h2>Weather Forecast</h2>
-    await expect(page.locator('h2')).toContainText('Weather Forecast', {
+    // MFE remote entry renders Weather Forecast via PageHeaderComponent <h1>
+    await expect(page.locator('h1')).toContainText('Weather Forecast', {
       timeout: 15000,
     });
   });
