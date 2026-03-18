@@ -30,7 +30,7 @@ jobs:
 
       - run: npm ci
 
-      - uses: actions/setup-dotnet@v4
+      - uses: actions/setup-dotnet@v5
         with:
           dotnet-version: '9.0.x'
 
@@ -48,7 +48,7 @@ jobs:
           node-version: 20
           cache: 'npm'
 
-      - uses: actions/setup-dotnet@v4
+      - uses: actions/setup-dotnet@v5
         with:
           dotnet-version: '9.0.x'
 

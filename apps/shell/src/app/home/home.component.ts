@@ -1,5 +1,5 @@
 import { Component, inject, OnInit, signal } from '@angular/core';
-import { Router } from '@angular/router';
+import { RouterLink } from '@angular/router';
 import { PageHeaderComponent, CardComponent } from '@org/ui';
 import { AuthService, KratosSession } from '../auth/auth.service';
 
@@ -13,7 +13,7 @@ interface DashboardLink {
 @Component({
   selector: 'app-home',
   standalone: true,
-  imports: [PageHeaderComponent, CardComponent],
+  imports: [PageHeaderComponent, CardComponent, RouterLink],
   template: `
     <div class="page-container">
       <ui-page-header
@@ -32,7 +32,7 @@ interface DashboardLink {
       <div class="link-grid">
         @for (link of links; track link.route) {
           <ui-card>
-            <a class="link-card-inner" (click)="navigate(link.route)">
+            <a class="link-card-inner" [routerLink]="link.route">
               <i [class]="link.icon + ' link-icon'"></i>
               <div>
                 <div class="link-title">{{ link.title }}</div>
@@ -113,8 +113,6 @@ interface DashboardLink {
 })
 export class HomeComponent implements OnInit {
   private readonly authService = inject(AuthService);
-  private readonly router = inject(Router);
-
   session = signal<KratosSession | null>(null);
 
   readonly links: DashboardLink[] = [
@@ -140,9 +138,5 @@ export class HomeComponent implements OnInit {
 
   ngOnInit(): void {
     this.authService.getSession().subscribe((s) => this.session.set(s));
-  }
-
-  navigate(route: string): void {
-    this.router.navigate([route]);
   }
 }

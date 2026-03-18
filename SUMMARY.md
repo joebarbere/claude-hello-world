@@ -3158,3 +3158,16 @@ Created a shared Angular UI library (`@org/ui`) at `libs/shared/ui/` using Prime
 - `docs/screenshots/weatheredit-app.png` — forecast CRUD management screenshot
 - `docs/screenshots/admin-app.png` — admin dashboard screenshot
 - `scripts/take-screenshots.mjs` — Playwright screenshot capture script
+
+
+---
+
+## Step 124: Fix — GitHub Actions CI warnings and lint errors
+
+**Root cause:** Two issues in the CI pipeline: (1) `actions/setup-dotnet@v4` runs on Node.js 20, which is deprecated on GitHub Actions runners (EOL April 2026). (2) The shell app's `home.component.ts` used a `(click)` handler on an `<a>` tag without keyboard event support, causing two accessibility lint errors (`click-events-have-key-events` and `interactive-supports-focus`).
+
+**Fix:** Updated `actions/setup-dotnet` from v4 to v5 (which uses Node.js 24) in both CI jobs. Replaced the imperative `(click)="navigate(link.route)"` with declarative `[routerLink]="link.route"` on the dashboard link cards, which natively provides keyboard accessibility. Removed the now-unused `Router` injection and `navigate()` method.
+
+**Files changed:**
+- `.github/workflows/ci.yml` — upgraded `actions/setup-dotnet` from v4 to v5
+- `apps/shell/src/app/home/home.component.ts` — replaced `(click)` with `[routerLink]`, removed unused `Router` import/injection
