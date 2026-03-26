@@ -3232,3 +3232,223 @@ Added two new applications to the workspace:
 - `apps/lightning-app/src/kafka-consumer.js` — KafkaWeatherConsumer EventEmitter wrapper
 - `package.json` — added electron and kafkajs dependencies
 - `README.md`, `RUN.md`, `SUMMARY.md` — updated documentation
+
+---
+
+## Step 128: Update — devops-sre-lean agent to reflect project architecture
+
+The generic DevOps/SRE agent definition was updated to accurately represent this project's specific infrastructure and tooling.
+
+**Root cause / motivation:** The agent referenced generic tools (Docker, docker-compose, pnpm) instead of the actual stack (Podman, `podman play kube` with K8s manifests, npm). It also lacked knowledge of the project's observability stack, Traefik routing, Ory Kratos auth, pod startup ordering, and Nx container lifecycle targets.
+
+**What changed:**
+- Replaced generic container/orchestration guidance with Podman + K8s pod manifest specifics
+- Added full architecture reference: pod manifests, startup order, networking, Traefik routing, health check endpoints
+- Updated examples to use project-specific scenarios (weather-api, pod manifests, GitHub Actions)
+- Updated anti-patterns to prevent recommending Docker/docker-compose/pnpm
+- Added self-verification checklist items for pod manifests, Traefik config, and Nx targets
+- Documented all CI/CD workflows and their triggers
+- Removed the persistent memory section (path was incorrect and not relevant to the agent's core purpose)
+
+**Files changed:**
+- `.claude/agents/devops-sre-lean.md` — rewritten to match project architecture
+- `SUMMARY.md` — added this step
+
+---
+
+## Step 129: Refactor — split devops-sre-lean agent into separate DevOps and SRE agents
+
+Split the combined `devops-sre-lean` agent into two focused agents with clear domain boundaries.
+
+**Root cause / motivation:** A single agent covering both DevOps and SRE conflated build/ship/deploy concerns with runtime reliability/observability. Splitting them gives each agent a tighter scope, better examples, and more relevant checklists.
+
+**What changed:**
+- **devops agent** (`.claude/agents/devops.md`) — CI/CD pipelines, container builds, K8s pod manifests, Traefik routing, Nx targets, deployment automation. Owns the "build and ship" domain.
+- **sre agent** (`.claude/agents/sre.md`) — Prometheus/Grafana/Loki observability, alerting rules, SLOs/error budgets, health checks, incident response, performance diagnosis. Owns the "keep it running" domain.
+- Both agents maintain lean principles and reference the project's exact stack (Podman, `podman play kube`, npm, etc.)
+- Deleted the combined `devops-sre-lean.md`
+
+**Files changed:**
+- `.claude/agents/devops.md` — new DevOps agent
+- `.claude/agents/sre.md` — new SRE agent
+- `.claude/agents/devops-sre-lean.md` — deleted
+- `SUMMARY.md` — added this step
+
+---
+
+## Step 130: Add — security engineer Claude agent
+
+Created a dedicated security engineer agent tailored to this project's auth, scanning, and infrastructure security stack.
+
+**Root cause / motivation:** The DevOps and SRE agents cover build/deploy and runtime reliability, but neither owns application security concerns like auth hardening, vulnerability scanning tuning, security headers, CORS/CSRF policy, or production readiness audits.
+
+**What changed:**
+- New agent covers: Ory Kratos auth hardening, KratosAuthMiddleware and Angular guard review, Traefik security middleware (headers, rate limiting), CodeQL/OWASP Dependency-Check/Dependabot pipeline tuning, TLS config, CORS/CSRF policy, secret management, and OWASP Top 10 analysis
+- Documents all known dev-only security shortcuts with `DEV-ONLY:` labeling convention
+- Severity classification system (Critical/High/Medium/Low) for all findings
+- Lean philosophy: prefer Traefik middleware over WAFs, CodeQL over commercial SAST, tight config over complex token schemes
+
+**Files changed:**
+- `.claude/agents/security.md` — new security engineer agent
+- `SUMMARY.md` — added this step
+
+---
+
+## Step 131: Add — Nx monorepo specialist Claude agent
+
+Created a dedicated Nx agent focused on build performance optimization and developer flow state.
+
+**Root cause / motivation:** The existing agents (devops, sre, security) don't own Nx-specific concerns like cache configuration, target dependency graphs, affected commands, generator usage, or build performance tuning. Developers need consistent, fast commands to stay in flow.
+
+**What changed:**
+- New agent documents the full Nx target graph, caching strategy, named inputs, and plugin configuration
+- Flow-state command reference with consistent `npx nx` patterns for daily dev, build/verify, container/stack, and investigation workflows
+- Build performance optimization checklist (cache correctness -> affected scope -> parallelism -> target granularity -> dev server performance)
+- Requires consulting official Nx docs (`nx_docs` or `--help`) before recommending flags — never guesses
+- Anti-patterns: guessing flags, npm wrappers, `run-many` when `affected` suffices, serializing parallel work
+
+**Files changed:**
+- `.claude/agents/nx.md` — new Nx monorepo specialist agent
+- `SUMMARY.md` — added this step
+
+---
+
+## Step 132: Add — PostgreSQL database engineer Claude agent
+
+Created a dedicated PostgreSQL agent focused on performance, health, backups, and replication management.
+
+**Root cause / motivation:** No existing agent owns database concerns — query performance, schema migrations, backup strategy, replication slot health, or vacuum tuning. The single PostgreSQL instance serves four consumers (weather-api, Ory Kratos, Debezium CDC, postgres-exporter) and needs focused expertise.
+
+**What changed:**
+- New agent documents the full database topology: schema, all consumers and their connection strings, WAL/replication config, CDC setup (Debezium slot, publication, slot-guard), and health check patterns
+- Tiered backup strategy guidance (dev -> staging -> production) with specific tools at each tier
+- Performance expertise: EXPLAIN ANALYZE workflow, index strategy, vacuum tuning, connection management, lock diagnosis
+- Hard rule to consult official PostgreSQL 17 docs before recommending any GUC parameter
+- Output markers: `BACKUP:`, `PERF:`, `LOCK:`, `WAL:` for change impact visibility
+- Anti-patterns: blind GUC tuning, VACUUM FULL in production, ignoring co-tenant impact
+
+**Files changed:**
+- `.claude/agents/postgres.md` — new PostgreSQL database engineer agent
+- `SUMMARY.md` — added this step
+
+---
+
+## Step 133: Add — Kafka event streaming Claude agent
+
+Created a dedicated Kafka agent covering the full CDC pipeline from PostgreSQL through Debezium to KafkaJS consumers.
+
+**Root cause / motivation:** No existing agent owns event streaming concerns — Debezium connector configuration, Avro schema management, Schema Registry compatibility, KafkaJS consumer tuning, topic design, or replication slot coordination with PostgreSQL.
+
+**What changed:**
+- New agent documents the complete event streaming architecture: Kafka 3.9 (KRaft), Schema Registry 7.7.1, Debezium 2.7, Kafka UI, slot-guard, KafkaJS consumer (lightning-app), and Angular Kafka service (weatherstream-app)
+- Avro schema workflow: auto-generation from DDL via Debezium, manual management via Schema Registry REST API, and evolution safety rules (add/remove/change/rename columns)
+- Full connector config reference (`weather-api-connector`) with all properties documented
+- Output markers: `SCHEMA:`, `REPLICATION:`, `CONSUMER:` for change impact visibility
+- Hard rule to consult official Kafka, Debezium, Schema Registry, and KafkaJS docs before recommending config
+- Anti-patterns: guessing config keys, ignoring schema compatibility, JSON converters when Avro is configured
+
+**Files changed:**
+- `.claude/agents/kafka.md` — new Kafka event streaming agent
+- `SUMMARY.md` — added this step
+
+---
+
+## Step 134: Add — Entity Framework Core Claude agent
+
+Created a dedicated EF Core agent focused on model design, query performance, migration safety, and cross-agent coordination with postgres and kafka agents.
+
+**Root cause / motivation:** Schema changes in EF Core cascade downstream — a column addition generates a PostgreSQL DDL change and a new Avro schema in Kafka's Schema Registry. No existing agent owned this coordination or EF Core-specific concerns like query optimization, migration safety, or Npgsql provider configuration.
+
+**What changed:**
+- New agent documents the full EF Core setup: WeatherDbContext, entity model, repository pattern, migration history, NuGet packages, and API endpoints
+- Cross-agent coordination protocol: model changes flagged with `POSTGRES:` markers (DDL, locks, indexes) and `KAFKA:` markers (Avro schema compatibility, consumer impact)
+- Query performance expertise: `.ToQueryString()` review, `AsNoTracking()`, projection, split queries, compiled queries
+- Migration safety: non-blocking DDL, concurrent index creation, rollback via `Down()`, script preview
+- Hard rule to consult official EF Core 9, Npgsql, and .NET 9 docs before recommending APIs
+
+**Files changed:**
+- `.claude/agents/efcore.md` — new Entity Framework Core agent
+- `SUMMARY.md` — added this step
+
+---
+
+## Step 135: Refactor — replace unit-test-writer agent with comprehensive test agent
+
+Replaced the generic `unit-test-writer.md` agent with a project-specific `test.md` agent covering unit tests (Vitest + xUnit), E2E tests (Playwright), and test suite architecture.
+
+**Root cause / motivation:** The old agent was generic (Jest/Vitest only, no E2E, no .NET tests, wrong package manager reference). It didn't address E2E testing with Playwright, .NET xUnit tests, test execution time as a developer experience concern, or the separation of full test suites from feature-level tests.
+
+**What changed:**
+- New agent covers all three test frameworks: Vitest (Angular unit), xUnit (.NET unit), Playwright (E2E)
+- Test suite architecture: feature-level tests (fast feedback, per-PR) vs. full suites (comprehensive, separate runs)
+- Separation rules: smoke tests (`eks-e2e.yml`) stay fast; feature E2E tests go in new spec files, not `eks.spec.ts`
+- Execution time awareness: unit tests <1s per file, E2E <30s per test; `SLOW:` and `FLAKY:` markers
+- Documents all established test patterns (mock factories, auth helpers, dynamic test data, TestBed setup)
+- Complete command reference for developer flow (single file, affected) vs. full validation (coverage, all E2E)
+- Hard rule to consult official Vitest, Playwright, xUnit, and Angular testing docs
+- Deleted the old `unit-test-writer.md` with its generic content and incorrect memory path
+
+**Files changed:**
+- `.claude/agents/test.md` — new comprehensive test agent
+- `.claude/agents/unit-test-writer.md` — deleted
+- `SUMMARY.md` — added this step
+
+---
+
+## Step 136: Add — data science Claude agent
+
+Created a data science agent for Python-based analytics, visualization, and pipeline work on top of this project's existing data sources.
+
+**Root cause / motivation:** The project has rich data sources (PostgreSQL weather data, Kafka CDC streams, Prometheus metrics) but no data science tooling. A dedicated agent provides guidance for EDA, visualization, Airflow pipelines, and ML while connecting to the established infrastructure.
+
+**What changed:**
+- New agent maps all project data sources: PostgreSQL `WeatherForecasts` table, Ory Kratos identity tables (read-only), Kafka CDC topics (Avro), Prometheus metrics, and Grafana dashboards
+- Covers pandas, NumPy, matplotlib, seaborn, plotly, scikit-learn, Apache Airflow, SQLAlchemy, and confluent-kafka
+- Includes Python environment setup guide (virtual env, pinned deps) and recommended project structure for notebooks/pipelines
+- Visualization best practices: titles, labels, appropriate chart types, accessible colors
+- Airflow DAG design: idempotent tasks, retry logic, Podman-compatible containerized deployment
+- Hard rule to consult official docs for all library APIs
+- Read-only access to production tables — no writes to EF Core or Kratos managed data
+
+**Files changed:**
+- `.claude/agents/data-science.md` — new data science agent
+- `SUMMARY.md` — added this step
+
+---
+
+## Step 137: Add — business analyst Claude agent with weather domain expertise
+
+Created a business analyst agent that turns vague requirements into detailed, implementable specifications using deep weather domain knowledge.
+
+**Root cause / motivation:** Developers receiving imprecise requirements like "add wind data" or "we need alerts" waste time guessing intent. A dedicated BA agent asks the right clarifying questions (sustained vs. gust speed? what alert channels? what thresholds?) and produces structured specs with acceptance criteria, data model changes, and cross-agent coordination flags.
+
+**What changed:**
+- New agent documents the full current product state (CRUD model, streaming events, auth roles, temperature classification, UI capabilities, what's missing)
+- Comprehensive weather vocabulary: temperature (air, feels-like, wind chill, heat index, dew point), precipitation (rate, accumulation, PoP, type, freezing level), wind (sustained, gust, direction, Beaufort), pressure (SLP, tendency), humidity (RH, dew point, wet bulb), visibility/clouds (oktas, ceiling, fog types), UV, severe weather (scales, thresholds), and forecast terminology (nowcast through seasonal)
+- Clarifying question framework (Who/What-Data/What-Behavior/When/Where/Why)
+- Structured spec template with data requirements, acceptance criteria, API changes, model changes, and cross-agent flags
+- Output markers: `MODEL:`, `CDC:`, `AUTH:`, `UI:` for cross-cutting concerns
+
+**Files changed:**
+- `.claude/agents/business-analyst.md` — new business analyst agent
+- `SUMMARY.md` — added this step
+
+---
+
+## Step 138: Add — architect Claude agent with agent ecosystem governance
+
+Created a software architect agent that owns the system architecture and is responsible for keeping all Claude agent definitions in sync when the architecture evolves.
+
+**Root cause / motivation:** With 12 specialized agents, each embedding architecture knowledge (tech stack, pod topology, data flows, file paths), architectural changes can cause documentation drift across agent definitions. A dedicated architect agent owns the big picture, evaluates technology decisions, and enforces an agent update protocol when the architecture changes.
+
+**What changed:**
+- New agent documents the full system architecture: ASCII topology diagram, technology stack table, pod topology with startup order, 5 data flow paths, and 10 architectural decision records with rationale
+- Agent ecosystem table listing all 12 agents with their files and ownership domains
+- Agent update protocol: identify affected agents, classify change (additive/replacement/removal/restructuring), update definitions, verify consistency
+- Triggers for agent updates: new containers, technology swaps, new Nx projects, schema changes, CI/CD changes, new agents
+- Trade-off evaluation framework: decision matrices, migration paths, rollback plans
+- Output markers: `BREAKING:`, `AGENTS:`, `MIGRATION:` for architectural change impact
+
+**Files changed:**
+- `.claude/agents/architect.md` — new architect agent
+- `SUMMARY.md` — added this step
