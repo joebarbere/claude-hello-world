@@ -3392,3 +3392,24 @@ Replaced the generic `unit-test-writer.md` agent with a project-specific `test.m
 - `.claude/agents/test.md` — new comprehensive test agent
 - `.claude/agents/unit-test-writer.md` — deleted
 - `SUMMARY.md` — added this step
+
+---
+
+## Step 136: Add — data science Claude agent
+
+Created a data science agent for Python-based analytics, visualization, and pipeline work on top of this project's existing data sources.
+
+**Root cause / motivation:** The project has rich data sources (PostgreSQL weather data, Kafka CDC streams, Prometheus metrics) but no data science tooling. A dedicated agent provides guidance for EDA, visualization, Airflow pipelines, and ML while connecting to the established infrastructure.
+
+**What changed:**
+- New agent maps all project data sources: PostgreSQL `WeatherForecasts` table, Ory Kratos identity tables (read-only), Kafka CDC topics (Avro), Prometheus metrics, and Grafana dashboards
+- Covers pandas, NumPy, matplotlib, seaborn, plotly, scikit-learn, Apache Airflow, SQLAlchemy, and confluent-kafka
+- Includes Python environment setup guide (virtual env, pinned deps) and recommended project structure for notebooks/pipelines
+- Visualization best practices: titles, labels, appropriate chart types, accessible colors
+- Airflow DAG design: idempotent tasks, retry logic, Podman-compatible containerized deployment
+- Hard rule to consult official docs for all library APIs
+- Read-only access to production tables — no writes to EF Core or Kratos managed data
+
+**Files changed:**
+- `.claude/agents/data-science.md` — new data science agent
+- `SUMMARY.md` — added this step
