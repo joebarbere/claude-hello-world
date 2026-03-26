@@ -3330,3 +3330,23 @@ Created a dedicated PostgreSQL agent focused on performance, health, backups, an
 **Files changed:**
 - `.claude/agents/postgres.md` — new PostgreSQL database engineer agent
 - `SUMMARY.md` — added this step
+
+---
+
+## Step 133: Add — Kafka event streaming Claude agent
+
+Created a dedicated Kafka agent covering the full CDC pipeline from PostgreSQL through Debezium to KafkaJS consumers.
+
+**Root cause / motivation:** No existing agent owns event streaming concerns — Debezium connector configuration, Avro schema management, Schema Registry compatibility, KafkaJS consumer tuning, topic design, or replication slot coordination with PostgreSQL.
+
+**What changed:**
+- New agent documents the complete event streaming architecture: Kafka 3.9 (KRaft), Schema Registry 7.7.1, Debezium 2.7, Kafka UI, slot-guard, KafkaJS consumer (lightning-app), and Angular Kafka service (weatherstream-app)
+- Avro schema workflow: auto-generation from DDL via Debezium, manual management via Schema Registry REST API, and evolution safety rules (add/remove/change/rename columns)
+- Full connector config reference (`weather-api-connector`) with all properties documented
+- Output markers: `SCHEMA:`, `REPLICATION:`, `CONSUMER:` for change impact visibility
+- Hard rule to consult official Kafka, Debezium, Schema Registry, and KafkaJS docs before recommending config
+- Anti-patterns: guessing config keys, ignoring schema compatibility, JSON converters when Avro is configured
+
+**Files changed:**
+- `.claude/agents/kafka.md` — new Kafka event streaming agent
+- `SUMMARY.md` — added this step
