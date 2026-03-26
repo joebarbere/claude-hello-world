@@ -3369,3 +3369,26 @@ Created a dedicated EF Core agent focused on model design, query performance, mi
 **Files changed:**
 - `.claude/agents/efcore.md` — new Entity Framework Core agent
 - `SUMMARY.md` — added this step
+
+---
+
+## Step 135: Refactor — replace unit-test-writer agent with comprehensive test agent
+
+Replaced the generic `unit-test-writer.md` agent with a project-specific `test.md` agent covering unit tests (Vitest + xUnit), E2E tests (Playwright), and test suite architecture.
+
+**Root cause / motivation:** The old agent was generic (Jest/Vitest only, no E2E, no .NET tests, wrong package manager reference). It didn't address E2E testing with Playwright, .NET xUnit tests, test execution time as a developer experience concern, or the separation of full test suites from feature-level tests.
+
+**What changed:**
+- New agent covers all three test frameworks: Vitest (Angular unit), xUnit (.NET unit), Playwright (E2E)
+- Test suite architecture: feature-level tests (fast feedback, per-PR) vs. full suites (comprehensive, separate runs)
+- Separation rules: smoke tests (`eks-e2e.yml`) stay fast; feature E2E tests go in new spec files, not `eks.spec.ts`
+- Execution time awareness: unit tests <1s per file, E2E <30s per test; `SLOW:` and `FLAKY:` markers
+- Documents all established test patterns (mock factories, auth helpers, dynamic test data, TestBed setup)
+- Complete command reference for developer flow (single file, affected) vs. full validation (coverage, all E2E)
+- Hard rule to consult official Vitest, Playwright, xUnit, and Angular testing docs
+- Deleted the old `unit-test-writer.md` with its generic content and incorrect memory path
+
+**Files changed:**
+- `.claude/agents/test.md` — new comprehensive test agent
+- `.claude/agents/unit-test-writer.md` — deleted
+- `SUMMARY.md` — added this step
