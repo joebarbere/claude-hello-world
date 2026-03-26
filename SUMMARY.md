@@ -3310,3 +3310,23 @@ Created a dedicated Nx agent focused on build performance optimization and devel
 **Files changed:**
 - `.claude/agents/nx.md` — new Nx monorepo specialist agent
 - `SUMMARY.md` — added this step
+
+---
+
+## Step 132: Add — PostgreSQL database engineer Claude agent
+
+Created a dedicated PostgreSQL agent focused on performance, health, backups, and replication management.
+
+**Root cause / motivation:** No existing agent owns database concerns — query performance, schema migrations, backup strategy, replication slot health, or vacuum tuning. The single PostgreSQL instance serves four consumers (weather-api, Ory Kratos, Debezium CDC, postgres-exporter) and needs focused expertise.
+
+**What changed:**
+- New agent documents the full database topology: schema, all consumers and their connection strings, WAL/replication config, CDC setup (Debezium slot, publication, slot-guard), and health check patterns
+- Tiered backup strategy guidance (dev -> staging -> production) with specific tools at each tier
+- Performance expertise: EXPLAIN ANALYZE workflow, index strategy, vacuum tuning, connection management, lock diagnosis
+- Hard rule to consult official PostgreSQL 17 docs before recommending any GUC parameter
+- Output markers: `BACKUP:`, `PERF:`, `LOCK:`, `WAL:` for change impact visibility
+- Anti-patterns: blind GUC tuning, VACUUM FULL in production, ignoring co-tenant impact
+
+**Files changed:**
+- `.claude/agents/postgres.md` — new PostgreSQL database engineer agent
+- `SUMMARY.md` — added this step
