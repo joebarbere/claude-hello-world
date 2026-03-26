@@ -3432,3 +3432,23 @@ Created a business analyst agent that turns vague requirements into detailed, im
 **Files changed:**
 - `.claude/agents/business-analyst.md` — new business analyst agent
 - `SUMMARY.md` — added this step
+
+---
+
+## Step 138: Add — architect Claude agent with agent ecosystem governance
+
+Created a software architect agent that owns the system architecture and is responsible for keeping all Claude agent definitions in sync when the architecture evolves.
+
+**Root cause / motivation:** With 12 specialized agents, each embedding architecture knowledge (tech stack, pod topology, data flows, file paths), architectural changes can cause documentation drift across agent definitions. A dedicated architect agent owns the big picture, evaluates technology decisions, and enforces an agent update protocol when the architecture changes.
+
+**What changed:**
+- New agent documents the full system architecture: ASCII topology diagram, technology stack table, pod topology with startup order, 5 data flow paths, and 10 architectural decision records with rationale
+- Agent ecosystem table listing all 12 agents with their files and ownership domains
+- Agent update protocol: identify affected agents, classify change (additive/replacement/removal/restructuring), update definitions, verify consistency
+- Triggers for agent updates: new containers, technology swaps, new Nx projects, schema changes, CI/CD changes, new agents
+- Trade-off evaluation framework: decision matrices, migration paths, rollback plans
+- Output markers: `BREAKING:`, `AGENTS:`, `MIGRATION:` for architectural change impact
+
+**Files changed:**
+- `.claude/agents/architect.md` — new architect agent
+- `SUMMARY.md` — added this step
