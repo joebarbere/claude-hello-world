@@ -3350,3 +3350,22 @@ Created a dedicated Kafka agent covering the full CDC pipeline from PostgreSQL t
 **Files changed:**
 - `.claude/agents/kafka.md` — new Kafka event streaming agent
 - `SUMMARY.md` — added this step
+
+---
+
+## Step 134: Add — Entity Framework Core Claude agent
+
+Created a dedicated EF Core agent focused on model design, query performance, migration safety, and cross-agent coordination with postgres and kafka agents.
+
+**Root cause / motivation:** Schema changes in EF Core cascade downstream — a column addition generates a PostgreSQL DDL change and a new Avro schema in Kafka's Schema Registry. No existing agent owned this coordination or EF Core-specific concerns like query optimization, migration safety, or Npgsql provider configuration.
+
+**What changed:**
+- New agent documents the full EF Core setup: WeatherDbContext, entity model, repository pattern, migration history, NuGet packages, and API endpoints
+- Cross-agent coordination protocol: model changes flagged with `POSTGRES:` markers (DDL, locks, indexes) and `KAFKA:` markers (Avro schema compatibility, consumer impact)
+- Query performance expertise: `.ToQueryString()` review, `AsNoTracking()`, projection, split queries, compiled queries
+- Migration safety: non-blocking DDL, concurrent index creation, rollback via `Down()`, script preview
+- Hard rule to consult official EF Core 9, Npgsql, and .NET 9 docs before recommending APIs
+
+**Files changed:**
+- `.claude/agents/efcore.md` — new Entity Framework Core agent
+- `SUMMARY.md` — added this step
