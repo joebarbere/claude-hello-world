@@ -3232,3 +3232,24 @@ Added two new applications to the workspace:
 - `apps/lightning-app/src/kafka-consumer.js` — KafkaWeatherConsumer EventEmitter wrapper
 - `package.json` — added electron and kafkajs dependencies
 - `README.md`, `RUN.md`, `SUMMARY.md` — updated documentation
+
+---
+
+## Step 128: Update — devops-sre-lean agent to reflect project architecture
+
+The generic DevOps/SRE agent definition was updated to accurately represent this project's specific infrastructure and tooling.
+
+**Root cause / motivation:** The agent referenced generic tools (Docker, docker-compose, pnpm) instead of the actual stack (Podman, `podman play kube` with K8s manifests, npm). It also lacked knowledge of the project's observability stack, Traefik routing, Ory Kratos auth, pod startup ordering, and Nx container lifecycle targets.
+
+**What changed:**
+- Replaced generic container/orchestration guidance with Podman + K8s pod manifest specifics
+- Added full architecture reference: pod manifests, startup order, networking, Traefik routing, health check endpoints
+- Updated examples to use project-specific scenarios (weather-api, pod manifests, GitHub Actions)
+- Updated anti-patterns to prevent recommending Docker/docker-compose/pnpm
+- Added self-verification checklist items for pod manifests, Traefik config, and Nx targets
+- Documented all CI/CD workflows and their triggers
+- Removed the persistent memory section (path was incorrect and not relevant to the agent's core purpose)
+
+**Files changed:**
+- `.claude/agents/devops-sre-lean.md` — rewritten to match project architecture
+- `SUMMARY.md` — added this step
