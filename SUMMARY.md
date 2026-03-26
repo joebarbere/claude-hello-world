@@ -3273,3 +3273,21 @@ Split the combined `devops-sre-lean` agent into two focused agents with clear do
 - `.claude/agents/sre.md` — new SRE agent
 - `.claude/agents/devops-sre-lean.md` — deleted
 - `SUMMARY.md` — added this step
+
+---
+
+## Step 130: Add — security engineer Claude agent
+
+Created a dedicated security engineer agent tailored to this project's auth, scanning, and infrastructure security stack.
+
+**Root cause / motivation:** The DevOps and SRE agents cover build/deploy and runtime reliability, but neither owns application security concerns like auth hardening, vulnerability scanning tuning, security headers, CORS/CSRF policy, or production readiness audits.
+
+**What changed:**
+- New agent covers: Ory Kratos auth hardening, KratosAuthMiddleware and Angular guard review, Traefik security middleware (headers, rate limiting), CodeQL/OWASP Dependency-Check/Dependabot pipeline tuning, TLS config, CORS/CSRF policy, secret management, and OWASP Top 10 analysis
+- Documents all known dev-only security shortcuts with `DEV-ONLY:` labeling convention
+- Severity classification system (Critical/High/Medium/Low) for all findings
+- Lean philosophy: prefer Traefik middleware over WAFs, CodeQL over commercial SAST, tight config over complex token schemes
+
+**Files changed:**
+- `.claude/agents/security.md` — new security engineer agent
+- `SUMMARY.md` — added this step
