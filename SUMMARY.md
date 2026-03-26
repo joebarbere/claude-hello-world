@@ -3413,3 +3413,22 @@ Created a data science agent for Python-based analytics, visualization, and pipe
 **Files changed:**
 - `.claude/agents/data-science.md` — new data science agent
 - `SUMMARY.md` — added this step
+
+---
+
+## Step 137: Add — business analyst Claude agent with weather domain expertise
+
+Created a business analyst agent that turns vague requirements into detailed, implementable specifications using deep weather domain knowledge.
+
+**Root cause / motivation:** Developers receiving imprecise requirements like "add wind data" or "we need alerts" waste time guessing intent. A dedicated BA agent asks the right clarifying questions (sustained vs. gust speed? what alert channels? what thresholds?) and produces structured specs with acceptance criteria, data model changes, and cross-agent coordination flags.
+
+**What changed:**
+- New agent documents the full current product state (CRUD model, streaming events, auth roles, temperature classification, UI capabilities, what's missing)
+- Comprehensive weather vocabulary: temperature (air, feels-like, wind chill, heat index, dew point), precipitation (rate, accumulation, PoP, type, freezing level), wind (sustained, gust, direction, Beaufort), pressure (SLP, tendency), humidity (RH, dew point, wet bulb), visibility/clouds (oktas, ceiling, fog types), UV, severe weather (scales, thresholds), and forecast terminology (nowcast through seasonal)
+- Clarifying question framework (Who/What-Data/What-Behavior/When/Where/Why)
+- Structured spec template with data requirements, acceptance criteria, API changes, model changes, and cross-agent flags
+- Output markers: `MODEL:`, `CDC:`, `AUTH:`, `UI:` for cross-cutting concerns
+
+**Files changed:**
+- `.claude/agents/business-analyst.md` — new business analyst agent
+- `SUMMARY.md` — added this step
