@@ -3253,3 +3253,23 @@ The generic DevOps/SRE agent definition was updated to accurately represent this
 **Files changed:**
 - `.claude/agents/devops-sre-lean.md` — rewritten to match project architecture
 - `SUMMARY.md` — added this step
+
+---
+
+## Step 129: Refactor — split devops-sre-lean agent into separate DevOps and SRE agents
+
+Split the combined `devops-sre-lean` agent into two focused agents with clear domain boundaries.
+
+**Root cause / motivation:** A single agent covering both DevOps and SRE conflated build/ship/deploy concerns with runtime reliability/observability. Splitting them gives each agent a tighter scope, better examples, and more relevant checklists.
+
+**What changed:**
+- **devops agent** (`.claude/agents/devops.md`) — CI/CD pipelines, container builds, K8s pod manifests, Traefik routing, Nx targets, deployment automation. Owns the "build and ship" domain.
+- **sre agent** (`.claude/agents/sre.md`) — Prometheus/Grafana/Loki observability, alerting rules, SLOs/error budgets, health checks, incident response, performance diagnosis. Owns the "keep it running" domain.
+- Both agents maintain lean principles and reference the project's exact stack (Podman, `podman play kube`, npm, etc.)
+- Deleted the combined `devops-sre-lean.md`
+
+**Files changed:**
+- `.claude/agents/devops.md` — new DevOps agent
+- `.claude/agents/sre.md` — new SRE agent
+- `.claude/agents/devops-sre-lean.md` — deleted
+- `SUMMARY.md` — added this step
