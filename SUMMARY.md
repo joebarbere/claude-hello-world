@@ -3291,3 +3291,22 @@ Created a dedicated security engineer agent tailored to this project's auth, sca
 **Files changed:**
 - `.claude/agents/security.md` — new security engineer agent
 - `SUMMARY.md` — added this step
+
+---
+
+## Step 131: Add — Nx monorepo specialist Claude agent
+
+Created a dedicated Nx agent focused on build performance optimization and developer flow state.
+
+**Root cause / motivation:** The existing agents (devops, sre, security) don't own Nx-specific concerns like cache configuration, target dependency graphs, affected commands, generator usage, or build performance tuning. Developers need consistent, fast commands to stay in flow.
+
+**What changed:**
+- New agent documents the full Nx target graph, caching strategy, named inputs, and plugin configuration
+- Flow-state command reference with consistent `npx nx` patterns for daily dev, build/verify, container/stack, and investigation workflows
+- Build performance optimization checklist (cache correctness -> affected scope -> parallelism -> target granularity -> dev server performance)
+- Requires consulting official Nx docs (`nx_docs` or `--help`) before recommending flags — never guesses
+- Anti-patterns: guessing flags, npm wrappers, `run-many` when `affected` suffices, serializing parallel work
+
+**Files changed:**
+- `.claude/agents/nx.md` — new Nx monorepo specialist agent
+- `SUMMARY.md` — added this step
