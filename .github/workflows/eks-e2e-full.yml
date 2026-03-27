@@ -241,7 +241,7 @@ jobs:
       # Each playwright.config.ts writes junit.xml when CI=true.
       - name: Publish test results as Check Run
         if: always()
-        uses: dorny/test-reporter@v2
+        uses: dorny/test-reporter@v3
         with:
           name: Playwright EKS E2E (Full)
           path: apps/*/playwright-report/junit.xml
