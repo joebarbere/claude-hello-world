@@ -125,7 +125,7 @@ describe('RemoteEntry (admin-app)', () => {
     httpMock.expectOne(HEALTH_ENDPOINT).flush('OK');
     const compiled = fixture.nativeElement as HTMLElement;
     const cards = compiled.querySelectorAll('.link-card-inner');
-    expect(cards.length).toBe(5);
+    expect(cards.length).toBe(6);
   });
 
   it('should render external links with target="_blank"', () => {

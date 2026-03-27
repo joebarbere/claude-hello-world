@@ -3534,3 +3534,38 @@ CI failed because weather-app branch coverage was 50% (threshold: 80%). The `tem
 - `apps/admin-app/src/app/kratos-admin/kratos-admin.service.ts` — added activate, deactivate, generateRecoveryLink
 - `apps/admin-app/src/app/kratos-admin/kratos-admin.component.ts` — approve/deactivate/magic link UI
 - `SUMMARY.md` — added this step
+
+## Step 142: Add — Minion Manager for automated weather event generation
+
+**Root cause / motivation:** Admin users needed a way to automate weather event creation on a schedule without manual intervention. Minions are configurable automated agents that create random weather forecasts at specified intervals, cron schedules, or daily times.
+
+**What changed:**
+
+*Backend model & migration* — Added `Minion` entity (Name, ScheduleType, ScheduleValue, IsActive, LastRunAt, CreatedAt, UpdatedAt) with `ScheduleType` enum (Interval, Cron, DailyAt). Created EF Core migration for the Minions table. Added `IMinionRepository` interface and `EfMinionRepository` implementation with CRUD + active/scheduling support.
+
+*API endpoints* — Added `/minions` route group with GET (list/detail), POST (create), PUT (update), DELETE, and POST start/stop endpoints. Added Traefik router and dev proxy for the new path. Added Cronos NuGet package for cron expression parsing.
+
+*Background scheduler* — Added `MinionSchedulerService` (BackgroundService) that ticks every 30 seconds, checks active minions against their schedule, and creates random weather forecasts when due. Supports interval (every N minutes), cron expressions (via Cronos), and daily-at (HH:mm UTC) scheduling. Generated forecasts are prefixed with `[Minion: name]` in the summary.
+
+*Frontend UI* — Created `MinionsComponent` in admin-app with full CRUD, start/stop controls, and three schedule input modes: interval (number input), cron expression (text input with hint), and daily time (native time picker). Includes inline editing, relative time display for last run, and status badges. Added `MinionsService` for API calls.
+
+*Routing & dashboard* — Added `/admin-app/minions` route. Added "Minion Manager" card under new "Automation" category on the admin dashboard.
+
+**Files changed:**
+- `apps/weather-api/Models/Minion.cs` — Minion entity and ScheduleType enum
+- `apps/weather-api/Repositories/IMinionRepository.cs` — repository interface
+- `apps/weather-api/Repositories/EfMinionRepository.cs` — EF Core implementation
+- `apps/weather-api/Data/WeatherDbContext.cs` — added Minions DbSet
+- `apps/weather-api/Migrations/20260326000000_AddMinions*.cs` — EF Core migration
+- `apps/weather-api/Migrations/WeatherDbContextModelSnapshot.cs` — updated snapshot
+- `apps/weather-api/Program.cs` — minion endpoints, DI registration, hosted service
+- `apps/weather-api/Services/MinionSchedulerService.cs` — background scheduler
+- `apps/weather-api/WeatherApi.csproj` — added Cronos package
+- `traefik/traefik-dynamic.yml` — added minions-router
+- `apps/shell/proxy.conf.json` — added /minions dev proxy
+- `apps/admin-app/src/app/minions/minions.service.ts` — API service
+- `apps/admin-app/src/app/minions/minions.component.ts` — management UI
+- `apps/admin-app/src/app/minions/minions.component.spec.ts` — unit tests
+- `apps/admin-app/src/app/remote-entry/entry.routes.ts` — added minions route
+- `apps/admin-app/src/app/remote-entry/entry.ts` — added dashboard card
+- `SUMMARY.md` — added this step

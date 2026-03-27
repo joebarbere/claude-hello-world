@@ -46,6 +46,12 @@ const ADMIN_LINKS: AdminLink[] = [
     description: 'Reverse proxy routing, middleware, and TLS configuration.',
     category: 'Infrastructure',
   },
+  {
+    name: 'Minion Manager',
+    routerLink: '/admin-app/minions',
+    description: 'Create and manage automated weather event generators that run on a schedule.',
+    category: 'Automation',
+  },
 ];
 
 @Component({
