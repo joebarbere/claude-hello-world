@@ -84,11 +84,11 @@ import {
             <table class="identity-table">
               <thead>
                 <tr>
-                  <th>Email</th>
-                  <th>Role</th>
-                  <th>State</th>
-                  <th>Created</th>
-                  <th>Actions</th>
+                  <th scope="col">Email</th>
+                  <th scope="col">Role</th>
+                  <th scope="col">State</th>
+                  <th scope="col">Created</th>
+                  <th scope="col">Actions</th>
                 </tr>
               </thead>
               <tbody>

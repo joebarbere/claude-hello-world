@@ -119,11 +119,11 @@ import { MinionsService, Minion, ScheduleType, MinionPayload } from './minions.s
             <table class="minion-table">
               <thead>
                 <tr>
-                  <th>Name</th>
-                  <th>Schedule</th>
-                  <th>Status</th>
-                  <th>Last Run</th>
-                  <th>Actions</th>
+                  <th scope="col">Name</th>
+                  <th scope="col">Schedule</th>
+                  <th scope="col">Status</th>
+                  <th scope="col">Last Run</th>
+                  <th scope="col">Actions</th>
                 </tr>
               </thead>
               <tbody>

@@ -120,12 +120,12 @@ interface ForecastFormData {
             <table>
               <thead>
                 <tr>
-                  <th>ID</th>
-                  <th>Date</th>
-                  <th>Temp °C</th>
-                  <th>Temp °F</th>
-                  <th>Summary</th>
-                  <th>Actions</th>
+                  <th scope="col">ID</th>
+                  <th scope="col">Date</th>
+                  <th scope="col">Temp °C</th>
+                  <th scope="col">Temp °F</th>
+                  <th scope="col">Summary</th>
+                  <th scope="col">Actions</th>
                 </tr>
               </thead>
               <tbody>
