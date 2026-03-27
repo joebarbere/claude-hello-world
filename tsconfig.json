@@ -29,6 +29,12 @@
     },
     {
       "path": "./apps/shell"
+    },
+    {
+      "path": "./apps/weatherstream-app-e2e"
+    },
+    {
+      "path": "./apps/lightning-app-e2e"
     }
   ]
 }
