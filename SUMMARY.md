@@ -3922,4 +3922,53 @@ Merged all 10 open Dependabot PRs with the `dependencies` label. Applied lessons
 **Files changed:**
 - `README.md` — added Design section, updated Demo descriptions
 - `SUMMARY.md` — added steps 154-158
+
+## Step 159: fix — add shared-styles.css to remaining apps and remove dead CSS
+
+**What:** Added `shared-styles.css` and `primeicons.css` to admin-app, weather-app, and weatheredit-app project.json build configs so CSS variables work when apps run standalone. Deleted unused `entry.css` in weatheredit-app (not imported by any component).
+
+**Files changed:**
+- `apps/admin-app/project.json`, `apps/weather-app/project.json`, `apps/weatheredit-app/project.json` — added shared styles to build config
+- `apps/weatheredit-app/src/app/remote-entry/entry.css` — deleted (dead file)
+
+## Step 160: fix — replace hardcoded colors in inline template style attributes
+
+**What:** Replaced 3 remaining hardcoded hex colors in template `style=""` attributes with CSS classes using design tokens.
+
+**Files changed:**
+- `apps/weather-app/src/app/remote-entry/entry.ts` — spinner icon uses `.spinner-icon` class
+- `apps/weatheredit-app/src/app/remote-entry/entry.ts` — spinner and empty icons use CSS classes
+
+## Step 161: add — :focus-visible styles for keyboard accessibility
+
+**What:** Added global `:focus-visible` rule with accent-colored outline for keyboard navigation. Added specific focus styles to nav items and sidebar toggle.
+
+**Files changed:**
+- `libs/shared/ui/src/lib/styles/shared-styles.css` — global `:focus-visible` rule
+- `libs/shared/ui/src/lib/layout/layout.css` — nav-item and sidebar-toggle focus styles
+
+## Step 162: add — responsive breakpoints for tables and auth forms
+
+**What:** Added media queries to improve mobile experience across auth forms, data tables, and admin link grids.
+
+**Files changed:**
+- `apps/shell/src/app/auth/login/login.component.ts` — mobile padding at 480px
+- `apps/shell/src/app/auth/signup/signup.component.ts` — same
+- `apps/shell/src/app/auth/recovery/recovery.component.ts` — same
+- `apps/shell/src/app/auth/unauthorized/unauthorized.component.ts` — same
+- `apps/weather-app/src/app/remote-entry/entry.ts` — compact table at 640px
+- `apps/admin-app/src/app/kratos-admin/kratos-admin.component.ts` — compact table and stacked form
+- `apps/admin-app/src/app/minions/minions.component.ts` — same
+- `apps/admin-app/src/app/remote-entry/entry.ts` — single-column grid on mobile
+
+## Step 163: add — ARIA labels and semantic table attributes for accessibility
+
+**What:** Added `aria-label` to sidebar nav items and nav element. Added `scope="col"` to all table header cells across weather, weatheredit, kratos-admin, and minions components.
+
+**Files changed:**
+- `libs/shared/ui/src/lib/layout/layout.html` — aria-label on nav and nav items
+- `apps/weather-app/src/app/remote-entry/entry.ts` — scope="col" on th elements
+- `apps/weatheredit-app/src/app/remote-entry/entry.ts` — same
+- `apps/admin-app/src/app/kratos-admin/kratos-admin.component.ts` — same
+- `apps/admin-app/src/app/minions/minions.component.ts` — same
 - `SUMMARY.md` — added this step
