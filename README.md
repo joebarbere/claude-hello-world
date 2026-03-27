@@ -293,13 +293,15 @@ Electron desktop application that hosts `weatherstream-app` and provides native 
 **Serve (dev mode):** `npx nx serve-dev lightning-app`
 **Serve (production build):** `npx nx serve lightning-app`
 
-### Environment Variables
+<details>
+<summary>Environment variables</summary>
 
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `KAFKA_BROKERS` | `localhost:9092` | Comma-separated Kafka broker addresses |
 | `KAFKA_TOPIC` | `weather-events` | Kafka topic to consume |
 | `KAFKA_GROUP_ID` | `lightning-app-group` | Consumer group ID |
+</details>
 
 ## Authentication
 
@@ -336,33 +338,40 @@ The observability stack runs as a **separate pod** and is never started by `kube
 | auth-proxy | 4180 | Validates Kratos sessions for Grafana SSO (Traefik forwardAuth middleware) |
 | postgres-exporter | 9187 | Scrapes `pg_replication_slots` metrics from PostgreSQL for CDC lag visibility |
 
-### Metrics scraped by Prometheus
-
-- `weather-api` — ASP.NET Core HTTP metrics via `prometheus-net` at `host.containers.internal:5221/metrics`
-- `nginx` — connection stats via the `nginx-prometheus-exporter` sidecar at `host.containers.internal:9113`
-- `traefik` — request counts, error rates, latency histograms at `host.containers.internal:8081/metrics`
-- `postgres` — replication slot lag and status via `postgres-exporter` at `localhost:9187`
-- `debezium` — CDC consumer lag and throughput via Debezium JMX Prometheus agent at `host.containers.internal:9404`
-- `prometheus` — self-scrape at `localhost:9090`
-
-### Logs collected by Promtail
-
-- `/var/log/pods/*/*/*.log` — CRI-format pod logs
-- `/var/lib/containers/storage/overlay-containers/*/userdata/ctr.log` — raw Podman container logs
-- `/var/log/traefik/access.log` — Traefik JSON access logs (client IP, User-Agent, status, route, service)
-- `/var/log/nginx/access.log` — nginx JSON access logs (remote_addr, request, status, request_time)
-
 ### Grafana dashboards
 
-Three pre-provisioned dashboards are available:
+Three pre-provisioned dashboards at `https://localhost:8443/grafana/` (SSO via Kratos):
 
 - **Weather API** — HTTP request rate, p99 latency, in-flight requests, process memory, nginx active connections
 - **System Health** — system health %, running pods, container health table, HTTP request/error rates by service, top IP + User-Agent, recent error logs (status >= 400)
 - **Kafka & CDC** — replication slot lag (bytes), slot active status, Debezium time-behind-source, events processed rate, queue capacity, connector task status (requires kafka pod)
 
-### Grafana SSO via Ory Kratos
+<details>
+<summary>Metrics scraped by Prometheus</summary>
 
-Grafana is accessible at `https://localhost:8443/grafana/` with automatic SSO through Ory Kratos:
+| Target | Endpoint | Metrics |
+|--------|----------|---------|
+| weather-api | `host.containers.internal:5221/metrics` | ASP.NET Core HTTP metrics via `prometheus-net` |
+| nginx | `host.containers.internal:9113` | Connection stats via `nginx-prometheus-exporter` sidecar |
+| traefik | `host.containers.internal:8081/metrics` | Request counts, error rates, latency histograms |
+| postgres | `localhost:9187` | Replication slot lag and status via `postgres-exporter` |
+| debezium | `host.containers.internal:9404` | CDC consumer lag and throughput via JMX Prometheus agent |
+| prometheus | `localhost:9090` | Self-scrape |
+</details>
+
+<details>
+<summary>Logs collected by Promtail</summary>
+
+| Source | Path |
+|--------|------|
+| CRI pod logs | `/var/log/pods/*/*/*.log` |
+| Podman container logs | `/var/lib/containers/storage/overlay-containers/*/userdata/ctr.log` |
+| Traefik access logs | `/var/log/traefik/access.log` (JSON — client IP, User-Agent, status, route) |
+| nginx access logs | `/var/log/nginx/access.log` (JSON — remote_addr, request, status, request_time) |
+</details>
+
+<details>
+<summary>Grafana SSO via Ory Kratos</summary>
 
 1. Traefik routes `/grafana` through a `forwardAuth` middleware to the auth-proxy
 2. The auth-proxy reads the Kratos session cookie and calls `/sessions/whoami`
@@ -371,6 +380,7 @@ Grafana is accessible at `https://localhost:8443/grafana/` with automatic SSO th
 5. Grafana's `auth.proxy` trusts the `X-Webauth-User` header and auto-signs-up/logs in the user
 
 > **macOS note:** Podman containers run inside a Linux VM. The `hostPath` volume mounts (`/var/log`, `/var/lib/containers`) refer to paths inside that VM, not the macOS host filesystem. Log collection works automatically when `kube-up shell` and `kube-up observability` are both running inside the same Podman Machine.
+</details>
 
 ## Kafka & CDC
 
@@ -391,7 +401,10 @@ The Kafka pod runs as a **separate pod** and is never started by `kube-up shell`
 
 PostgreSQL has logical replication enabled (`wal_level=logical`). Debezium creates the `debezium_weather` replication slot and `dbz_publication` publication on the `appdb` database, then streams changes from all `public` schema tables. Topics are named with the prefix `weather` (e.g., `weather.public.WeatherForecasts`). Messages are Avro-encoded using Confluent Schema Registry — schemas are auto-registered on first write and can be browsed in Kafka UI.
 
-### Monitoring — three layers
+<details>
+<summary>Monitoring & alerting</summary>
+
+**Three monitoring layers:**
 
 | Layer | Source | What it measures |
 |-------|--------|-----------------|
@@ -399,15 +412,10 @@ PostgreSQL has logical replication enabled (`wal_level=logical`). Debezium creat
 | Debezium JMX → Prometheus → Grafana | Debezium JMX exporter (port 9404) | Time-behind-source lag on the consumer side |
 | slot-guard | `pg_replication_slots` via `psql` | Last-resort automated cleanup — drops inactive slots >5 GB to prevent WAL disk exhaustion |
 
-### Alerting thresholds
-
-| Severity | Condition |
-|----------|-----------|
-| Warning | Slot lag >500 MB or slot inactive >10 min |
-| Critical | Slot lag >2 GB or slot inactive >30 min |
-| Emergency (slot-guard triggers) | Slot lag >5 GB (slot is dropped automatically) |
+**Alerting thresholds:** Warning at >500 MB / inactive >10 min · Critical at >2 GB / inactive >30 min · Emergency (slot-guard auto-drops) at >5 GB.
 
 > **macOS note:** The kafka pod uses `host.containers.internal` to reach the apps pod (Postgres). Both pods must be running inside the same Podman Machine.
+</details>
 
 ## Test & Lint
 
