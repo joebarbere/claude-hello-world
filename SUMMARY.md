@@ -3857,3 +3857,13 @@ Merged all 10 open Dependabot PRs with the `dependencies` label. Applied lessons
 - `.github/workflows/` — updated action versions (via merged PRs)
 - `apps/weather-api/WeatherApi.csproj` — Scalar.AspNetCore 2.13.12 (via merged PR)
 - `SUMMARY.md` — added this step
+
+## Step 153: fix — regenerate package-lock.json to fix CI
+
+**Root cause:** After multiple Dependabot merges (react, rspack, angular/cdk, module-federation, etc.), `package-lock.json` was out of sync with `package.json`, causing `npm ci` to fail in GitHub Actions.
+
+**Fix:** Ran `npm install` to regenerate the lock file, verified all lint and unit tests pass.
+
+**Files changed:**
+- `package-lock.json` — regenerated to include all missing transitive dependencies
+- `SUMMARY.md` — added this step
