@@ -3867,4 +3867,6 @@ Merged all 10 open Dependabot PRs with the `dependencies` label. Applied lessons
 **Files changed:**
 - `package-lock.json` — regenerated to include all missing transitive dependencies
 - `.github/workflows/ci.yml` — updated Node version from 20 to 24 to match local environment
+- `.github/workflows/eks-e2e.yml` — updated Node version from 20 to 24
+- `.github/workflows/eks-e2e-full.yml` — updated Node version from 20 to 24
 - `SUMMARY.md` — added this step
