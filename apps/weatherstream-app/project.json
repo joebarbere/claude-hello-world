@@ -19,7 +19,10 @@
             "input": "apps/weatherstream-app/public"
           }
         ],
-        "styles": ["apps/weatherstream-app/src/styles.css"]
+        "styles": [
+          "libs/shared/ui/src/lib/styles/shared-styles.css",
+          "apps/weatherstream-app/src/styles.css"
+        ]
       },
       "configurations": {
         "production": {

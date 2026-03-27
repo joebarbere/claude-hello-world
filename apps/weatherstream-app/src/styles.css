@@ -7,8 +7,8 @@
 }
 
 body {
-  background: #0f172a;
-  color: #e2e8f0;
-  font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+  background: var(--bg-body);
+  color: var(--text-primary);
+  font-family: var(--font-sans);
   min-height: 100vh;
 }
