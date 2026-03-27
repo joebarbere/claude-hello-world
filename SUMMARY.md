@@ -3452,3 +3452,22 @@ Created a software architect agent that owns the system architecture and is resp
 **Files changed:**
 - `.claude/agents/architect.md` — new architect agent
 - `SUMMARY.md` — added this step
+
+---
+
+## Step 139: Reorganize — README.md for scannability and navigation
+
+The README was 569 lines with no table of contents, no anchor links, and sections ordered so that the ~60-line security disclaimer appeared before the reader even knew what the project was.
+
+**Root cause / motivation:** New visitors had to scroll past security warnings to reach the project description. Verbose per-OS SSL instructions (~80 lines) and observability/Kafka details made the page hard to scan. No TOC meant no way to jump to a section.
+
+**What changed:**
+- Moved project description and demo screenshots above the security disclaimer (which is now at the end, linked from the intro)
+- Added a clickable Table of Contents grouping sections into: Getting Started, Applications, Infrastructure, Testing, API Reference, and Security Disclaimer
+- Condensed SSL install/uninstall/regenerate from ~80 lines of per-OS code blocks into a single 3-row table with a collapsible `<details>` block for regeneration prerequisites
+- Collapsed Prometheus metrics, Promtail logs, Grafana SSO flow, Kafka monitoring/alerting thresholds, and Lightning App environment variables into `<details>` blocks
+- Converted bullet lists to compact tables where appropriate
+
+**Files changed:**
+- `README.md` — reorganized sections, added TOC, condensed verbose content
+- `SUMMARY.md` — added this step
