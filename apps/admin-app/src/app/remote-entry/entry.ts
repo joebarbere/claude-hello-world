@@ -52,6 +52,27 @@ const ADMIN_LINKS: AdminLink[] = [
     description: 'Create and manage automated weather event generators that run on a schedule.',
     category: 'Automation',
   },
+  {
+    name: 'Apache Airflow',
+    url: 'http://localhost:8280',
+    description: 'Orchestrate and monitor data pipelines and DAG workflows.',
+    category: 'Data Science',
+    credentials: { username: 'admin', password: 'admin' },
+  },
+  {
+    name: 'Jupyter Lab',
+    url: 'http://localhost:8888',
+    description: 'Interactive notebooks with DuckDB, pandas, and MinIO integration.',
+    category: 'Data Science',
+    credentials: { username: 'token', password: 'datascience' },
+  },
+  {
+    name: 'MinIO Console',
+    url: 'http://localhost:9001',
+    description: 'S3-compatible object storage for datasets, models, and artifacts.',
+    category: 'Data Science',
+    credentials: { username: 'minioadmin', password: 'minioadmin' },
+  },
 ];
 
 @Component({

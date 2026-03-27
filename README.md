@@ -30,6 +30,7 @@ An Nx monorepo demonstrating Angular Module Federation micro-frontends with a .N
   - [Authentication](#authentication)
   - [Observability](#observability)
   - [Kafka & CDC](#kafka--cdc)
+  - [Data Science](#data-science)
 - **Testing**
   - [Test & Lint](#test--lint)
   - [E2E Tests (Playwright)](#e2e-tests-playwright)
@@ -61,7 +62,7 @@ Full create, edit, and delete workflow for weather forecasts. Requires authentic
 
 ### Admin Dashboard
 
-Quick links to infrastructure and admin services — API docs, Kratos identity management, Grafana, Kafka UI, and Traefik.
+Quick links to infrastructure and admin services — API docs, Kratos identity management, Grafana, Kafka UI, Traefik, and the data science stack (Airflow, Jupyter, MinIO).
 
 ![Admin Dashboard](docs/screenshots/admin-app.png)
 
@@ -112,6 +113,11 @@ Kafka CDC (separate pod, not started by kube-up shell)
   ├── Debezium Connect (:8083) — CDC from PostgreSQL → Kafka topics (Avro-encoded)
   ├── Kafka UI (:8090 / https://localhost:8443/kafka-ui/) — topic, connector, and schema browser
   └── slot-guard — replication slot lag monitor; drops stale slots >5 GB as a safety net
+
+Data Science (separate pod, not started by kube-up shell)
+  ├── Apache Airflow (:8280) — DAG-based workflow orchestration (slim image, SequentialExecutor + SQLite)
+  ├── Jupyter Lab (:8888) — interactive notebooks with DuckDB, pandas, pyarrow, boto3
+  └── MinIO (:9000 API / :9001 console) — S3-compatible object storage for datasets and artifacts
 ```
 
 ## Prerequisites
@@ -180,6 +186,7 @@ npx nx podman-build weather-api    # .NET API image
 npx nx podman-build postgres       # PostgreSQL image
 npx nx podman-build ory            # Ory Kratos image + init image
 npx nx run kafka:podman-build      # Kafka CDC images (debezium-connect, debezium-init, slot-guard)
+npx nx podman-build datascience    # Data science images (airflow, jupyter; MinIO uses upstream image)
 ```
 
 ## Run (containers)
@@ -217,6 +224,10 @@ npx nx kube-down shell
 | http://localhost:9092 | Kafka broker (requires kafka pod) |
 | http://localhost:8083 | Debezium Connect REST API (requires kafka pod) |
 | http://localhost:8085 | Schema Registry (requires kafka pod) |
+| http://localhost:8280 | Airflow webserver (requires datascience pod) |
+| http://localhost:8888 | Jupyter Lab (requires datascience pod) |
+| http://localhost:9000 | MinIO S3 API (requires datascience pod) |
+| http://localhost:9001 | MinIO Console (requires datascience pod) |
 
 ### Individual containers
 
@@ -416,6 +427,52 @@ PostgreSQL has logical replication enabled (`wal_level=logical`). Debezium creat
 
 > **macOS note:** The kafka pod uses `host.containers.internal` to reach the apps pod (Postgres). Both pods must be running inside the same Podman Machine.
 </details>
+
+## Data Science
+
+The data science stack runs as a **separate pod** and is never started by `kube-up shell`. It provides workflow orchestration, interactive notebooks, and S3-compatible object storage for local data science development.
+
+### Start / stop
+
+```sh
+npx nx run datascience:kube-up    # Build images and start the pod
+npx nx run datascience:kube-down  # Stop the pod
+```
+
+### Components
+
+| Component | Port | Image | Purpose |
+|-----------|------|-------|---------|
+| Apache Airflow | 8280 | `apache/airflow:slim-2.10.4-python3.11` | DAG-based workflow orchestration (SequentialExecutor + SQLite) |
+| Jupyter Lab | 8888 | `quay.io/jupyter/minimal-notebook` + DuckDB | Interactive notebooks with DuckDB, pandas, pyarrow, boto3 |
+| MinIO | 9000 (API), 9001 (Console) | `quay.io/minio/minio` | S3-compatible object storage for datasets, models, and artifacts |
+
+### Default credentials
+
+| Service | Username | Password |
+|---------|----------|----------|
+| Airflow | `admin` | `admin` |
+| Jupyter Lab | token | `datascience` |
+| MinIO Console | `minioadmin` | `minioadmin` |
+
+### Pre-installed libraries
+
+The Jupyter container ships with DuckDB (embedded analytical database), pandas, pyarrow, the MinIO Python client, and boto3 for S3 access. Airflow includes `duckdb-engine` (SQLAlchemy dialect) and the MinIO client.
+
+### Persisting MinIO data
+
+By default, MinIO data is stored in `/tmp/datascience/minio/data` which is lost on reboot. To persist objects across restarts:
+
+```sh
+# 1. Create a permanent directory
+mkdir -p ~/datascience/minio/data
+
+# 2. Edit k8s/datascience-pod.yaml — change the minio-data hostPath:
+#    from: /tmp/datascience/minio/data
+#    to:   /home/<your-user>/datascience/minio/data
+```
+
+The same pattern applies to `airflow-dags` and `jupyter-work` volumes if you want DAGs and notebooks to persist.
 
 ## Test & Lint
 

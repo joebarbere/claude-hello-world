@@ -3569,3 +3569,37 @@ CI failed because weather-app branch coverage was 50% (threshold: 80%). The `tem
 - `apps/admin-app/src/app/remote-entry/entry.routes.ts` — added minions route
 - `apps/admin-app/src/app/remote-entry/entry.ts` — added dashboard card
 - `SUMMARY.md` — added this step
+
+## Step 143: Add — Data science stack with Airflow, Jupyter, MinIO, and DuckDB
+
+**Root cause / motivation:** The project needed a data science stack for pipeline orchestration, interactive notebooks, and object storage. Apache Airflow handles DAG-based workflow orchestration, Jupyter Lab provides interactive analysis with DuckDB (an embedded analytical database), and MinIO offers S3-compatible object storage for datasets and artifacts.
+
+**What changed:**
+
+*Pod definition* — Created `k8s/datascience-pod.yaml` with three containers: Airflow (port 8280), Jupyter (port 8888), and MinIO (ports 9000 API + 9001 console). All three mount hostPath volumes under `/tmp/datascience/` for development. MinIO uses the upstream `quay.io/minio/minio:latest` image directly; Airflow and Jupyter use custom lightweight builds.
+
+*Airflow container* — Built from `apache/airflow:slim-2.10.4-python3.11` with DuckDB, duckdb-engine, and minio pip packages. Custom entrypoint runs `airflow db migrate`, creates admin user, starts scheduler in background and webserver in foreground. Uses SequentialExecutor with SQLite for lightweight local development.
+
+*Jupyter container* — Built from `quay.io/jupyter/minimal-notebook` with duckdb, pandas, pyarrow, minio, and boto3 pre-installed. Token-based auth (`datascience`).
+
+*Nx targets* — Created `apps/datascience/project.json` with `podman-build-airflow`, `podman-build-jupyter`, `podman-build` (aggregator), `kube-up` (`podman play kube k8s/datascience-pod.yaml`), and `kube-down`.
+
+*Admin dashboard* — Added Airflow, Jupyter Lab, and MinIO Console links under new "Data Science" category with credentials displayed.
+
+*MinIO data persistence* — hostPath volume defaults to `/tmp/datascience/minio/data`. To persist across restarts, change the hostPath to a permanent local directory (e.g., `/home/joe/datascience/minio/data`). Instructions are documented as inline YAML comments in the pod definition.
+
+**Usage:**
+```bash
+npm exec nx run datascience:kube-up    # Build images and start the stack
+npm exec nx run datascience:kube-down  # Stop the stack
+```
+
+**Files changed:**
+- `k8s/datascience-pod.yaml` — pod definition with Airflow, Jupyter, MinIO containers
+- `apps/datascience/project.json` — Nx project with build and kube targets
+- `apps/datascience/airflow/Containerfile` — slim Airflow image with DuckDB
+- `apps/datascience/airflow/entrypoint.sh` — db migrate, user creation, scheduler + webserver
+- `apps/datascience/jupyter/Containerfile` — minimal Jupyter with DuckDB and data science libs
+- `apps/datascience/jupyter/requirements.txt` — pip dependency reference
+- `apps/admin-app/src/app/remote-entry/entry.ts` — added Data Science admin links
+- `SUMMARY.md` — added this step

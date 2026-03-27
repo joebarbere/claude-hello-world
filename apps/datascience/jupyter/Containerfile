@@ -1,0 +1,6 @@
+FROM quay.io/jupyter/minimal-notebook:latest
+USER root
+RUN pip install --no-cache-dir duckdb pandas pyarrow minio boto3 && \
+    fix-permissions "${CONDA_DIR}" && \
+    fix-permissions "/home/${NB_USER}"
+USER ${NB_UID}

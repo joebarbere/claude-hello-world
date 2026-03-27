@@ -1,0 +1,49 @@
+{
+  "name": "datascience",
+  "$schema": "../../node_modules/nx/schemas/project-schema.json",
+  "projectType": "application",
+  "sourceRoot": "apps/datascience",
+  "tags": [],
+  "targets": {
+    "podman-build-airflow": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "podman build -t airflow -f apps/datascience/airflow/Containerfile apps/datascience/airflow",
+        "cwd": "{workspaceRoot}"
+      }
+    },
+    "podman-build-jupyter": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "podman build -t jupyter -f apps/datascience/jupyter/Containerfile apps/datascience/jupyter",
+        "cwd": "{workspaceRoot}"
+      }
+    },
+    "podman-build": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "echo 'Data science images built'",
+        "cwd": "{workspaceRoot}"
+      },
+      "dependsOn": [
+        "podman-build-airflow",
+        "podman-build-jupyter"
+      ]
+    },
+    "kube-up": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "podman play kube k8s/datascience-pod.yaml",
+        "cwd": "{workspaceRoot}"
+      },
+      "dependsOn": ["podman-build"]
+    },
+    "kube-down": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "podman play kube k8s/datascience-pod.yaml --down || true",
+        "cwd": "{workspaceRoot}"
+      }
+    }
+  }
+}
