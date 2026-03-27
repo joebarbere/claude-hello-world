@@ -3603,3 +3603,69 @@ npm exec nx run datascience:kube-down  # Stop the stack
 - `apps/datascience/jupyter/requirements.txt` — pip dependency reference
 - `apps/admin-app/src/app/remote-entry/entry.ts` — added Data Science admin links
 - `SUMMARY.md` — added this step
+
+## Step 144: Add — E2E and unit tests for lightning-app and weatherstream-app
+
+**Root cause / motivation:** The lightning-app (Electron + Kafka weather streamer) and weatherstream-app (Angular streaming dashboard) had minimal test coverage — only a basic `app.spec.ts` that wasn't passing due to `@analogjs/vite-plugin-angular` incompatibility with vitest 4.x test suite discovery.
+
+**What changed:**
+
+*Fixed vitest configuration* — Removed the `angular()` vite plugin that broke test discovery and added `esbuild.tsconfigRaw` with `experimentalDecorators` support (matching the working shell app pattern). Unit tests instantiate services directly with mock dependencies instead of relying on TestBed component resolution.
+
+*weatherstream-app unit tests (37 tests):*
+- `kafka-stream.service.spec.ts` — 20 tests covering simulation mode (event generation, 100-event cap, timer lifecycle, clear/reconnect) and Electron mode (IPC listener registration, weather event forwarding, status/error handling, reconnect, cleanup)
+- `weather-dashboard.spec.ts` — 16 tests for `conditionIcon()` (all 10 weather conditions + unknown fallback) and `tempColor()` (5 temperature ranges with boundary values)
+- `app.spec.ts` — fixed pre-existing broken test
+
+*lightning-app unit tests (9 tests):*
+- `kafka-consumer.spec.mjs` — tests for connect/subscribe/run lifecycle, `connected` event emission, connect failure error handling, message parsing with metadata enrichment, null message skipping, invalid JSON error emission, disconnect with `disconnected` event, and graceful disconnect error handling
+- Added `vitest.config.mjs` and `test` target to `project.json`
+
+*weatherstream-app-e2e (Playwright):*
+- Page load tests (200 status, heading, Simulated badge, Connected status)
+- Simulation event tests (empty state, event card rendering, temperature/humidity/wind display, condition icons, event count increment, card accumulation)
+- Interaction tests (Clear button, no Reconnect in simulation, no error banner)
+
+*lightning-app-e2e (Playwright):*
+- Dashboard structure tests (page load, header, status bar, mode badge)
+- Real-time streaming tests (auto-start, condition icons, known locations, three metrics, timestamps, newest-first ordering)
+- Control tests (Clear button clears and events resume)
+
+**Files changed:**
+- `apps/weatherstream-app/src/app/services/kafka-stream.service.spec.ts` — new service unit tests
+- `apps/weatherstream-app/src/app/weather-dashboard/weather-dashboard.spec.ts` — new component unit tests
+- `apps/weatherstream-app/src/app/app.spec.ts` — fixed broken test
+- `apps/weatherstream-app/vite.config.mts` — removed angular() plugin, added esbuild config
+- `apps/weatherstream-app/src/test-setup.ts` — removed incompatible snapshot import
+- `apps/lightning-app/src/kafka-consumer.spec.mjs` — new Kafka consumer unit tests
+- `apps/lightning-app/vitest.config.mjs` — new vitest configuration
+- `apps/lightning-app/project.json` — added test target
+- `apps/weatherstream-app-e2e/` — new Playwright E2E project (6 files)
+- `apps/lightning-app-e2e/` — new Playwright E2E project (6 files)
+- `SUMMARY.md` — added this step
+
+## Step 145: Add — CI coverage for lightning-app and weatherstream-app unit tests
+
+**Root cause / motivation:** The new unit tests for lightning-app (9 tests) and weatherstream-app (37 tests) were not included in the GitHub Actions CI pipeline and had no code coverage reporting.
+
+**What changed:**
+
+*CI workflow* — Added `weatherstream-app` to the existing `nx run-many --target=test` command in the `unit-tests` job. Added a separate step for `lightning-app` using `npx vitest run` directly (it uses `nx:run-commands` executor, not `@nx/vitest:test`, so it needs its own invocation to pass `--coverage`).
+
+*Coverage configuration* — Updated both vitest configs to output coverage reports to the standard `coverage/apps/{app-name}/` directory (matching shell, weather-app, etc.). Provider: v8.
+
+*Coverage results:*
+- **lightning-app** (`kafka-consumer.js`): 100% statements, 100% branches, 100% functions, 100% lines
+- **weatherstream-app**: 96.97% statements, 100% branches, 92.3% functions, 96.07% lines
+  - `kafka-stream.service.ts`: 100% across all metrics
+  - `weather-dashboard.ts`: 92.85% statements, 88.88% lines (the `inject()` field initializer isn't exercised in unit tests — covered by E2E)
+
+*Test approach fix (lightning-app)* — Replaced the recreated test class (which gave 0% coverage) with importing the real `kafka-consumer.js` module and patching its internal `consumer` property with a mock before any async operations. This achieves full coverage of the actual source code.
+
+**Files changed:**
+- `.github/workflows/ci.yml` — added weatherstream-app to test matrix, added lightning-app coverage step
+- `apps/lightning-app/vitest.config.mjs` — updated coverage output path
+- `apps/lightning-app/project.json` — added cwd to test target
+- `apps/lightning-app/src/kafka-consumer.spec.mjs` — import real module for coverage
+- `apps/weatherstream-app/vite.config.mts` — updated coverage output path
+- `SUMMARY.md` — added this step
