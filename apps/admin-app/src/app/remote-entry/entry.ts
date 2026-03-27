@@ -140,7 +140,7 @@ const ADMIN_LINKS: AdminLink[] = [
     `
       :host {
         display: block;
-        font-family: system-ui, -apple-system, sans-serif;
+        font-family: var(--font-sans);
         -webkit-font-smoothing: antialiased;
       }
       .page-container {
@@ -154,12 +154,12 @@ const ADMIN_LINKS: AdminLink[] = [
       .section-title {
         font-size: 0.75rem;
         font-weight: 600;
-        color: #94a3b8;
+        color: var(--text-secondary);
         text-transform: uppercase;
         letter-spacing: 0.06em;
         margin: 0 0 12px;
         padding-bottom: 8px;
-        border-bottom: 1px solid #e2e8f0;
+        border-bottom: 1px solid var(--border-color);
       }
       .link-grid {
         display: grid;
@@ -174,7 +174,7 @@ const ADMIN_LINKS: AdminLink[] = [
         transition: background 0.15s;
       }
       .link-card-inner:hover {
-        background: #f8fafc;
+        background: var(--bg-surface-hover);
       }
       .link-header {
         display: flex;
@@ -185,18 +185,18 @@ const ADMIN_LINKS: AdminLink[] = [
       .link-name {
         font-size: 0.9375rem;
         font-weight: 600;
-        color: #1e293b;
+        color: var(--text-primary);
       }
       .link-desc {
         font-size: 0.8125rem;
-        color: #64748b;
+        color: var(--text-secondary);
         line-height: 1.4;
         margin-bottom: 8px;
       }
       .link-url {
         font-size: 0.75rem;
-        color: #6366f1;
-        font-family: ui-monospace, monospace;
+        color: var(--accent);
+        font-family: var(--font-mono);
         word-break: break-all;
       }
       .credentials {
@@ -204,17 +204,17 @@ const ADMIN_LINKS: AdminLink[] = [
         align-items: center;
         gap: 4px;
         font-size: 0.8125rem;
-        color: #334155;
+        color: var(--text-secondary);
         margin-bottom: 8px;
       }
       .cred-label {
         font-weight: 500;
       }
       .credentials code {
-        background: #f1f5f9;
+        background: rgba(148, 163, 184, 0.1);
         padding: 1px 6px;
         border-radius: 4px;
-        font-family: ui-monospace, monospace;
+        font-family: var(--font-mono);
         font-size: 0.8125rem;
       }
     `,

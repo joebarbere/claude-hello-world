@@ -52,15 +52,15 @@ interface DashboardLink {
         align-items: center;
         gap: 8px;
         padding: 12px 16px;
-        background: #eef2ff;
+        background: var(--accent-muted);
         border-radius: 8px;
         font-size: 0.875rem;
-        color: #4338ca;
+        color: var(--accent);
         margin-bottom: 24px;
       }
       .role-badge {
-        background: #c7d2fe;
-        color: #3730a3;
+        background: rgba(129, 140, 248, 0.2);
+        color: var(--accent);
         padding: 2px 8px;
         border-radius: 9999px;
         font-size: 0.75rem;
@@ -83,11 +83,11 @@ interface DashboardLink {
         transition: background 0.15s;
       }
       .link-card-inner:hover {
-        background: #f8fafc;
+        background: var(--bg-surface-hover);
       }
       .link-icon {
         font-size: 1.25rem;
-        color: #6366f1;
+        color: var(--accent);
         flex-shrink: 0;
         width: 24px;
         text-align: center;
@@ -95,16 +95,16 @@ interface DashboardLink {
       .link-title {
         font-weight: 600;
         font-size: 0.9375rem;
-        color: #1e293b;
+        color: var(--text-primary);
         margin-bottom: 2px;
       }
       .link-desc {
         font-size: 0.8125rem;
-        color: #64748b;
+        color: var(--text-secondary);
       }
       .link-arrow {
         margin-left: auto;
-        color: #cbd5e1;
+        color: var(--text-muted);
         font-size: 0.875rem;
         flex-shrink: 0;
       }

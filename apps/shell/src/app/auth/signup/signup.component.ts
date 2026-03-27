@@ -48,12 +48,13 @@ import { HttpClient } from '@angular/common/http';
       display: flex;
       align-items: center;
       justify-content: center;
-      background: #f3f4f6;
+      background: var(--bg-body);
+      font-family: var(--font-sans);
     }
     .signup-card {
-      background: #fff;
+      background: var(--bg-surface);
       border-radius: 8px;
-      box-shadow: 0 2px 16px rgba(0,0,0,0.1);
+      box-shadow: var(--shadow-md);
       padding: 2.5rem 2rem;
       width: 100%;
       max-width: 400px;
@@ -63,10 +64,11 @@ import { HttpClient } from '@angular/common/http';
       font-weight: 700;
       margin: 0 0 0.5rem;
       text-align: center;
+      color: var(--text-primary);
     }
     .signup-desc {
       text-align: center;
-      color: #6b7280;
+      color: var(--text-secondary);
       font-size: 0.875rem;
       margin: 0 0 1.5rem;
     }
@@ -79,24 +81,27 @@ import { HttpClient } from '@angular/common/http';
     label {
       font-size: 0.875rem;
       font-weight: 500;
-      color: #374151;
+      color: var(--text-secondary);
     }
     .form-input {
       padding: 0.5rem 0.75rem;
-      border: 1px solid #d1d5db;
+      border: 1px solid var(--border-color);
       border-radius: 4px;
       font-size: 1rem;
       outline: none;
       transition: border-color 0.15s;
+      background: var(--bg-surface);
+      color: var(--text-primary);
+      font-family: var(--font-sans);
     }
     .form-input:focus {
-      border-color: #6366f1;
+      border-color: var(--accent-solid);
       box-shadow: 0 0 0 2px rgba(99,102,241,0.2);
     }
     .btn-submit {
       width: 100%;
       padding: 0.625rem 1rem;
-      background: #6366f1;
+      background: var(--accent-solid);
       color: #fff;
       border: none;
       border-radius: 4px;
@@ -105,6 +110,7 @@ import { HttpClient } from '@angular/common/http';
       cursor: pointer;
       margin-top: 0.5rem;
       transition: background 0.15s;
+      font-family: var(--font-sans);
     }
     .btn-submit:hover:not(:disabled) { background: #4f46e5; }
     .btn-submit:disabled { opacity: 0.5; cursor: not-allowed; }
@@ -114,14 +120,14 @@ import { HttpClient } from '@angular/common/http';
       margin-bottom: 1rem;
       font-size: 0.875rem;
     }
-    .msg-error { background: #fee2e2; color: #b91c1c; }
-    .msg-success { background: #dcfce7; color: #166534; }
+    .msg-error { background: rgba(239, 68, 68, 0.15); color: #f87171; }
+    .msg-success { background: rgba(34, 197, 94, 0.15); color: #4ade80; }
     .back-link {
       display: block;
       text-align: center;
       margin-top: 1.25rem;
       font-size: 0.875rem;
-      color: #6366f1;
+      color: var(--accent);
       text-decoration: none;
     }
     .back-link:hover { text-decoration: underline; }

@@ -80,7 +80,7 @@ interface WeatherForecast {
         align-items: center;
         gap: 12px;
         padding: 48px 24px;
-        color: #64748b;
+        color: var(--text-secondary);
         font-size: 0.875rem;
       }
       .alert-error {
@@ -88,9 +88,9 @@ interface WeatherForecast {
         align-items: center;
         gap: 8px;
         padding: 12px 16px;
-        background: #fef2f2;
-        border: 1px solid #fecaca;
-        color: #b91c1c;
+        background: rgba(239, 68, 68, 0.15);
+        border: 1px solid rgba(239, 68, 68, 0.3);
+        color: #f87171;
         border-radius: 8px;
         font-size: 0.875rem;
       }
@@ -109,39 +109,39 @@ interface WeatherForecast {
         font-weight: 600;
         text-transform: uppercase;
         letter-spacing: 0.06em;
-        color: #94a3b8;
-        background: #f8fafc;
-        border-bottom: 1px solid #e2e8f0;
+        color: var(--text-secondary);
+        background: var(--bg-body);
+        border-bottom: 1px solid var(--border-color);
       }
       tbody tr {
-        border-bottom: 1px solid #f1f5f9;
+        border-bottom: 1px solid var(--border-color);
         transition: background 0.1s;
       }
       tbody tr:last-child {
         border-bottom: none;
       }
       tbody tr:hover {
-        background: #f8fafc;
+        background: var(--bg-surface-hover);
       }
       td {
         padding: 12px 16px;
-        color: #334155;
+        color: var(--text-primary);
       }
       .cell-date {
         font-variant-numeric: tabular-nums;
-        color: #475569;
+        color: var(--text-muted);
       }
       .cell-temp {
         font-variant-numeric: tabular-nums;
         font-weight: 600;
-        color: #1e293b;
+        color: var(--text-primary);
       }
       .cell-temp.muted {
         font-weight: 400;
-        color: #94a3b8;
+        color: var(--text-secondary);
       }
       .dash {
-        color: #cbd5e1;
+        color: var(--text-muted);
       }
     `,
   ],
