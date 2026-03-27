@@ -23,7 +23,7 @@
     "@nx/eslint": "22.5.1",
     "@nx/eslint-plugin": "22.5.1",
     "@nx/js": "22.5.1",
-    "@nx/module-federation": "22.5.1",
+    "@nx/module-federation": "22.5.4",
     "@nx/playwright": "22.5.1",
     "@nx/vitest": "22.5.1",
     "@nx/web": "22.5.4",
