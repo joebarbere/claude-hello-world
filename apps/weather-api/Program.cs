@@ -6,6 +6,7 @@ using WeatherApi.Middleware;
 using System.Net.Http.Json;
 using WeatherApi.Models;
 using WeatherApi.Repositories;
+using WeatherApi.Services;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -20,6 +21,7 @@ switch (repositoryType)
         builder.Services.AddDbContext<WeatherDbContext>(options => options.UseNpgsql(connectionString));
         builder.Services.AddScoped<IWeatherForecastRepository, EfWeatherForecastRepository>();
         builder.Services.AddScoped<IMinionRepository, EfMinionRepository>();
+        builder.Services.AddHostedService<MinionSchedulerService>();
         break;
     case "InMemory":
         builder.Services.AddSingleton<IWeatherForecastRepository, InMemoryWeatherForecastRepository>();
