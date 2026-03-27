@@ -3869,4 +3869,5 @@ Merged all 10 open Dependabot PRs with the `dependencies` label. Applied lessons
 - `.github/workflows/ci.yml` — updated Node version from 20 to 24 to match local environment
 - `.github/workflows/eks-e2e.yml` — updated Node version from 20 to 24
 - `.github/workflows/eks-e2e-full.yml` — updated Node version from 20 to 24
+- `Containerfile.nginx` — updated base image from node:20-alpine to node:24-alpine
 - `SUMMARY.md` — added this step
