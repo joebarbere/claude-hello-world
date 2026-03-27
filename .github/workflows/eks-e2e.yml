@@ -32,7 +32,7 @@ jobs:
           node-version: 20
           cache: 'npm'
 
-      - uses: actions/setup-dotnet@v4
+      - uses: actions/setup-dotnet@v5
         with:
           dotnet-version: '9.0.x'
 
@@ -249,7 +249,7 @@ jobs:
       # Each playwright.config.ts writes junit.xml when CI=true.
       - name: Publish test results as Check Run
         if: always()
-        uses: dorny/test-reporter@v1
+        uses: dorny/test-reporter@v2
         with:
           name: Playwright EKS E2E (Smoke)
           path: apps/shell-e2e/playwright-report/junit.xml
@@ -259,7 +259,7 @@ jobs:
       # Upload HTML reports so engineers can drill into failures.
       - name: Upload Playwright HTML reports
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: playwright-reports
           path: apps/shell-e2e/playwright-report/

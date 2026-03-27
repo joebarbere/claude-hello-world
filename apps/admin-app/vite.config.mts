@@ -1,10 +1,16 @@
 /// <reference types='vitest' />
 import { defineConfig } from 'vite';
+import path from 'path';
 
 export default defineConfig(() => ({
   root: __dirname,
   cacheDir: '../../node_modules/.vite/apps/admin-app',
   plugins: [],
+  resolve: {
+    alias: {
+      '@org/ui': path.resolve(__dirname, '../../libs/shared/ui/src/index.ts'),
+    },
+  },
   esbuild: {
     tsconfigRaw: {
       compilerOptions: {

@@ -1,20 +1,22 @@
 import { Component, inject } from '@angular/core';
-import { Router } from '@angular/router';
+import { Router, RouterLink } from '@angular/router';
 import { AuthService } from '../auth.service';
 
 @Component({
   selector: 'app-unauthorized',
   standalone: true,
+  imports: [RouterLink],
   template: `
     <div class="unauth-wrapper">
       <div class="unauth-card">
         <h1 class="unauth-title">Access Denied</h1>
         <p class="unauth-msg">
           You do not have permission to access this page.<br />
-          Only <strong>admin</strong> and <strong>weather_admin</strong> users may access Weather Forecasts.
+          Your account may be pending approval. Contact an administrator for access.
         </p>
         <div class="unauth-actions">
           <button class="btn-secondary" (click)="goHome()">Go to Home</button>
+          <a routerLink="/auth/signup" class="btn-secondary">Request Access</a>
           <button class="btn-primary" (click)="logout()">Sign out</button>
         </div>
       </div>

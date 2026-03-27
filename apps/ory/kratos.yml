@@ -41,9 +41,13 @@ selfservice:
     - https://localhost:8443/admin-app
     - https://localhost:8443/grafana
     - https://localhost:8443/grafana/
+    - https://localhost:8443/auth/recovery
+    - https://localhost:8443/auth/settings
 
   methods:
     password:
+      enabled: true
+    link:
       enabled: true
 
   flows:
@@ -55,6 +59,10 @@ selfservice:
         default_browser_return_url: https://localhost:8443/
     error:
       ui_url: https://localhost:8443/auth/error
+    recovery:
+      enabled: true
+      ui_url: https://localhost:8443/auth/recovery
+      use: link
     settings:
       ui_url: https://localhost:8443/auth/settings
       privileged_session_max_age: 15m
@@ -86,3 +94,4 @@ identity:
 courier:
   smtp:
     connection_uri: smtp://localhost:1025/?skip_ssl_verify=true
+    from_address: noreply@localhost

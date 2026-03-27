@@ -6,4 +6,5 @@ namespace WeatherApi.Data;
 public class WeatherDbContext(DbContextOptions<WeatherDbContext> options) : DbContext(options)
 {
     public DbSet<WeatherForecast> WeatherForecasts => Set<WeatherForecast>();
+    public DbSet<Minion> Minions => Set<Minion>();
 }

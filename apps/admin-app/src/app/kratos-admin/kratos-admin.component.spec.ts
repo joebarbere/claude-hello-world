@@ -245,6 +245,15 @@ describe('KratosAdminComponent', () => {
     expect(backLink?.textContent).toContain('Back to Dashboard');
   });
 
+  it('should default editRole to empty string when identity has no role', () => {
+    const { component } = createComponent();
+    const identity = makeIdentity({ traits: { email: 'norole@example.com' } });
+    flushInit([identity]);
+
+    component.startEdit(identity);
+    expect(component.editRole).toBe('');
+  });
+
   it('should save role with empty string when no role selected', () => {
     const { component } = createComponent();
     const identity = makeIdentity();

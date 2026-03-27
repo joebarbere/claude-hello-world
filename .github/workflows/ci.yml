@@ -30,7 +30,7 @@ jobs:
 
       - run: npm ci
 
-      - uses: actions/setup-dotnet@v4
+      - uses: actions/setup-dotnet@v5
         with:
           dotnet-version: '9.0.x'
 
@@ -48,7 +48,7 @@ jobs:
           node-version: 20
           cache: 'npm'
 
-      - uses: actions/setup-dotnet@v4
+      - uses: actions/setup-dotnet@v5
         with:
           dotnet-version: '9.0.x'
 
@@ -59,7 +59,10 @@ jobs:
       - run: npm ci
 
       - name: Run Angular unit tests with coverage
-        run: npx nx run-many --target=test --projects=shell,weather-app,weatheredit-app --parallel=3 --coverage
+        run: npx nx run-many --target=test --projects=shell,weather-app,weatheredit-app,weatherstream-app --parallel=3 --coverage
+
+      - name: Run lightning-app unit tests with coverage
+        run: npx vitest run --config apps/lightning-app/vitest.config.mjs --coverage
 
       - name: Run weather-api unit tests with coverage
         run: npx nx run weather-api-tests:test

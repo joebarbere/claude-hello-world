@@ -3158,3 +3158,665 @@ Created a shared Angular UI library (`@org/ui`) at `libs/shared/ui/` using Prime
 - `docs/screenshots/weatheredit-app.png` — forecast CRUD management screenshot
 - `docs/screenshots/admin-app.png` — admin dashboard screenshot
 - `scripts/take-screenshots.mjs` — Playwright screenshot capture script
+
+
+---
+
+## Step 124: Fix — GitHub Actions CI warnings and lint errors
+
+**Root cause:** Two issues in the CI pipeline: (1) `actions/setup-dotnet@v4` runs on Node.js 20, which is deprecated on GitHub Actions runners (EOL April 2026). (2) The shell app's `home.component.ts` used a `(click)` handler on an `<a>` tag without keyboard event support, causing two accessibility lint errors (`click-events-have-key-events` and `interactive-supports-focus`).
+
+**Fix:** Updated `actions/setup-dotnet` from v4 to v5 (which uses Node.js 24) in both CI jobs. Replaced the imperative `(click)="navigate(link.route)"` with declarative `[routerLink]="link.route"` on the dashboard link cards, which natively provides keyboard accessibility. Removed the now-unused `Router` injection and `navigate()` method.
+
+**Files changed:**
+- `.github/workflows/ci.yml` — upgraded `actions/setup-dotnet` from v4 to v5
+- `apps/shell/src/app/home/home.component.ts` — replaced `(click)` with `[routerLink]`, removed unused `Router` import/injection
+
+
+---
+
+## Step 125: Fix — e2e tests to match current Dashboard UI
+
+**Root cause:** The e2e tests in `example.spec.ts` and `eks.spec.ts` were written for the original Nx welcome page (expecting `#welcome h1` with "Welcome shell" text and a `#hero` banner). The home page was redesigned to use a `PageHeaderComponent` with a "Dashboard" heading and "Welcome to the NxWeather application." subtitle, so these selectors and assertions no longer matched.
+
+**Fix:** Updated `example.spec.ts` to assert `h1` contains "Dashboard" instead of "Welcome". Updated `eks.spec.ts` home page tests to check for the `h1` "Dashboard" heading and `.page-subtitle` containing the welcome message, replacing the obsolete `#welcome` and `#hero` selectors.
+
+**Files changed:**
+- `apps/shell-e2e/src/example.spec.ts` — updated h1 assertion from "Welcome" to "Dashboard"
+- `apps/shell-e2e/src/eks.spec.ts` — rewrote home page tests to match Dashboard UI selectors
+
+
+---
+
+## Step 126: Fix — e2e test selector for weather-app heading
+
+**Root cause:** The `eks.spec.ts` e2e test for the weather-app MFE navigation used `page.locator('h2')` to find the "Weather Forecast" heading. However, the `PageHeaderComponent` renders the title in an `<h1>` element, not `<h2>`, causing the test to time out.
+
+**Fix:** Changed the locator from `h2` to `h1` in the weather-app navigation test.
+
+**Files changed:**
+- `apps/shell-e2e/src/eks.spec.ts` — updated heading locator from `h2` to `h1`
+
+## Step 127: Add — WeatherStream Angular app and Lightning Electron host
+
+Added two new applications to the workspace:
+
+**Root cause / motivation:** Need a real-time weather event streaming dashboard with native Kafka integration, leveraging Electron's Node.js runtime for direct Kafka consumer access.
+
+**What was built:**
+
+1. **weatherstream-app** (Angular) — Real-time weather event streaming dashboard
+   - Weather dashboard component with live event cards (temperature, humidity, wind, conditions)
+   - `KafkaStreamService` using Angular signals for reactive state management
+   - Electron IPC bridge integration — receives Kafka events from the main process
+   - Simulated event fallback when running standalone in the browser
+   - Dark-themed responsive UI with animated card grid
+   - Dev server on port 4203
+
+2. **lightning-app** (Electron) — Desktop host for weatherstream-app with native Kafka
+   - Main process: Kafka consumer via `kafkajs`, connects to configurable brokers/topic
+   - Preload script: `contextBridge`-based IPC API (`electronKafka`) with context isolation
+   - Loads weatherstream-app (dev server or production build)
+   - Environment-variable-driven configuration (KAFKA_BROKERS, KAFKA_TOPIC, KAFKA_GROUP_ID)
+   - Nx targets: `serve` (prod build), `serve-dev` (hot reload), `build-angular`, `package`
+
+**Dependencies added:** `electron`, `kafkajs`
+
+**Files changed:**
+- `apps/weatherstream-app/` — new Angular app (generated via `@nx/angular:application`)
+- `apps/weatherstream-app/src/app/services/kafka-stream.service.ts` — Kafka stream service with signals
+- `apps/weatherstream-app/src/app/weather-dashboard/` — dashboard component (ts, html, css)
+- `apps/lightning-app/project.json` — Nx project config with serve/serve-dev/package targets
+- `apps/lightning-app/src/main.js` — Electron main process with Kafka consumer
+- `apps/lightning-app/src/preload.js` — context-isolated IPC bridge
+- `apps/lightning-app/src/kafka-consumer.js` — KafkaWeatherConsumer EventEmitter wrapper
+- `package.json` — added electron and kafkajs dependencies
+- `README.md`, `RUN.md`, `SUMMARY.md` — updated documentation
+
+---
+
+## Step 128: Update — devops-sre-lean agent to reflect project architecture
+
+The generic DevOps/SRE agent definition was updated to accurately represent this project's specific infrastructure and tooling.
+
+**Root cause / motivation:** The agent referenced generic tools (Docker, docker-compose, pnpm) instead of the actual stack (Podman, `podman play kube` with K8s manifests, npm). It also lacked knowledge of the project's observability stack, Traefik routing, Ory Kratos auth, pod startup ordering, and Nx container lifecycle targets.
+
+**What changed:**
+- Replaced generic container/orchestration guidance with Podman + K8s pod manifest specifics
+- Added full architecture reference: pod manifests, startup order, networking, Traefik routing, health check endpoints
+- Updated examples to use project-specific scenarios (weather-api, pod manifests, GitHub Actions)
+- Updated anti-patterns to prevent recommending Docker/docker-compose/pnpm
+- Added self-verification checklist items for pod manifests, Traefik config, and Nx targets
+- Documented all CI/CD workflows and their triggers
+- Removed the persistent memory section (path was incorrect and not relevant to the agent's core purpose)
+
+**Files changed:**
+- `.claude/agents/devops-sre-lean.md` — rewritten to match project architecture
+- `SUMMARY.md` — added this step
+
+---
+
+## Step 129: Refactor — split devops-sre-lean agent into separate DevOps and SRE agents
+
+Split the combined `devops-sre-lean` agent into two focused agents with clear domain boundaries.
+
+**Root cause / motivation:** A single agent covering both DevOps and SRE conflated build/ship/deploy concerns with runtime reliability/observability. Splitting them gives each agent a tighter scope, better examples, and more relevant checklists.
+
+**What changed:**
+- **devops agent** (`.claude/agents/devops.md`) — CI/CD pipelines, container builds, K8s pod manifests, Traefik routing, Nx targets, deployment automation. Owns the "build and ship" domain.
+- **sre agent** (`.claude/agents/sre.md`) — Prometheus/Grafana/Loki observability, alerting rules, SLOs/error budgets, health checks, incident response, performance diagnosis. Owns the "keep it running" domain.
+- Both agents maintain lean principles and reference the project's exact stack (Podman, `podman play kube`, npm, etc.)
+- Deleted the combined `devops-sre-lean.md`
+
+**Files changed:**
+- `.claude/agents/devops.md` — new DevOps agent
+- `.claude/agents/sre.md` — new SRE agent
+- `.claude/agents/devops-sre-lean.md` — deleted
+- `SUMMARY.md` — added this step
+
+---
+
+## Step 130: Add — security engineer Claude agent
+
+Created a dedicated security engineer agent tailored to this project's auth, scanning, and infrastructure security stack.
+
+**Root cause / motivation:** The DevOps and SRE agents cover build/deploy and runtime reliability, but neither owns application security concerns like auth hardening, vulnerability scanning tuning, security headers, CORS/CSRF policy, or production readiness audits.
+
+**What changed:**
+- New agent covers: Ory Kratos auth hardening, KratosAuthMiddleware and Angular guard review, Traefik security middleware (headers, rate limiting), CodeQL/OWASP Dependency-Check/Dependabot pipeline tuning, TLS config, CORS/CSRF policy, secret management, and OWASP Top 10 analysis
+- Documents all known dev-only security shortcuts with `DEV-ONLY:` labeling convention
+- Severity classification system (Critical/High/Medium/Low) for all findings
+- Lean philosophy: prefer Traefik middleware over WAFs, CodeQL over commercial SAST, tight config over complex token schemes
+
+**Files changed:**
+- `.claude/agents/security.md` — new security engineer agent
+- `SUMMARY.md` — added this step
+
+---
+
+## Step 131: Add — Nx monorepo specialist Claude agent
+
+Created a dedicated Nx agent focused on build performance optimization and developer flow state.
+
+**Root cause / motivation:** The existing agents (devops, sre, security) don't own Nx-specific concerns like cache configuration, target dependency graphs, affected commands, generator usage, or build performance tuning. Developers need consistent, fast commands to stay in flow.
+
+**What changed:**
+- New agent documents the full Nx target graph, caching strategy, named inputs, and plugin configuration
+- Flow-state command reference with consistent `npx nx` patterns for daily dev, build/verify, container/stack, and investigation workflows
+- Build performance optimization checklist (cache correctness -> affected scope -> parallelism -> target granularity -> dev server performance)
+- Requires consulting official Nx docs (`nx_docs` or `--help`) before recommending flags — never guesses
+- Anti-patterns: guessing flags, npm wrappers, `run-many` when `affected` suffices, serializing parallel work
+
+**Files changed:**
+- `.claude/agents/nx.md` — new Nx monorepo specialist agent
+- `SUMMARY.md` — added this step
+
+---
+
+## Step 132: Add — PostgreSQL database engineer Claude agent
+
+Created a dedicated PostgreSQL agent focused on performance, health, backups, and replication management.
+
+**Root cause / motivation:** No existing agent owns database concerns — query performance, schema migrations, backup strategy, replication slot health, or vacuum tuning. The single PostgreSQL instance serves four consumers (weather-api, Ory Kratos, Debezium CDC, postgres-exporter) and needs focused expertise.
+
+**What changed:**
+- New agent documents the full database topology: schema, all consumers and their connection strings, WAL/replication config, CDC setup (Debezium slot, publication, slot-guard), and health check patterns
+- Tiered backup strategy guidance (dev -> staging -> production) with specific tools at each tier
+- Performance expertise: EXPLAIN ANALYZE workflow, index strategy, vacuum tuning, connection management, lock diagnosis
+- Hard rule to consult official PostgreSQL 17 docs before recommending any GUC parameter
+- Output markers: `BACKUP:`, `PERF:`, `LOCK:`, `WAL:` for change impact visibility
+- Anti-patterns: blind GUC tuning, VACUUM FULL in production, ignoring co-tenant impact
+
+**Files changed:**
+- `.claude/agents/postgres.md` — new PostgreSQL database engineer agent
+- `SUMMARY.md` — added this step
+
+---
+
+## Step 133: Add — Kafka event streaming Claude agent
+
+Created a dedicated Kafka agent covering the full CDC pipeline from PostgreSQL through Debezium to KafkaJS consumers.
+
+**Root cause / motivation:** No existing agent owns event streaming concerns — Debezium connector configuration, Avro schema management, Schema Registry compatibility, KafkaJS consumer tuning, topic design, or replication slot coordination with PostgreSQL.
+
+**What changed:**
+- New agent documents the complete event streaming architecture: Kafka 3.9 (KRaft), Schema Registry 7.7.1, Debezium 2.7, Kafka UI, slot-guard, KafkaJS consumer (lightning-app), and Angular Kafka service (weatherstream-app)
+- Avro schema workflow: auto-generation from DDL via Debezium, manual management via Schema Registry REST API, and evolution safety rules (add/remove/change/rename columns)
+- Full connector config reference (`weather-api-connector`) with all properties documented
+- Output markers: `SCHEMA:`, `REPLICATION:`, `CONSUMER:` for change impact visibility
+- Hard rule to consult official Kafka, Debezium, Schema Registry, and KafkaJS docs before recommending config
+- Anti-patterns: guessing config keys, ignoring schema compatibility, JSON converters when Avro is configured
+
+**Files changed:**
+- `.claude/agents/kafka.md` — new Kafka event streaming agent
+- `SUMMARY.md` — added this step
+
+---
+
+## Step 134: Add — Entity Framework Core Claude agent
+
+Created a dedicated EF Core agent focused on model design, query performance, migration safety, and cross-agent coordination with postgres and kafka agents.
+
+**Root cause / motivation:** Schema changes in EF Core cascade downstream — a column addition generates a PostgreSQL DDL change and a new Avro schema in Kafka's Schema Registry. No existing agent owned this coordination or EF Core-specific concerns like query optimization, migration safety, or Npgsql provider configuration.
+
+**What changed:**
+- New agent documents the full EF Core setup: WeatherDbContext, entity model, repository pattern, migration history, NuGet packages, and API endpoints
+- Cross-agent coordination protocol: model changes flagged with `POSTGRES:` markers (DDL, locks, indexes) and `KAFKA:` markers (Avro schema compatibility, consumer impact)
+- Query performance expertise: `.ToQueryString()` review, `AsNoTracking()`, projection, split queries, compiled queries
+- Migration safety: non-blocking DDL, concurrent index creation, rollback via `Down()`, script preview
+- Hard rule to consult official EF Core 9, Npgsql, and .NET 9 docs before recommending APIs
+
+**Files changed:**
+- `.claude/agents/efcore.md` — new Entity Framework Core agent
+- `SUMMARY.md` — added this step
+
+---
+
+## Step 135: Refactor — replace unit-test-writer agent with comprehensive test agent
+
+Replaced the generic `unit-test-writer.md` agent with a project-specific `test.md` agent covering unit tests (Vitest + xUnit), E2E tests (Playwright), and test suite architecture.
+
+**Root cause / motivation:** The old agent was generic (Jest/Vitest only, no E2E, no .NET tests, wrong package manager reference). It didn't address E2E testing with Playwright, .NET xUnit tests, test execution time as a developer experience concern, or the separation of full test suites from feature-level tests.
+
+**What changed:**
+- New agent covers all three test frameworks: Vitest (Angular unit), xUnit (.NET unit), Playwright (E2E)
+- Test suite architecture: feature-level tests (fast feedback, per-PR) vs. full suites (comprehensive, separate runs)
+- Separation rules: smoke tests (`eks-e2e.yml`) stay fast; feature E2E tests go in new spec files, not `eks.spec.ts`
+- Execution time awareness: unit tests <1s per file, E2E <30s per test; `SLOW:` and `FLAKY:` markers
+- Documents all established test patterns (mock factories, auth helpers, dynamic test data, TestBed setup)
+- Complete command reference for developer flow (single file, affected) vs. full validation (coverage, all E2E)
+- Hard rule to consult official Vitest, Playwright, xUnit, and Angular testing docs
+- Deleted the old `unit-test-writer.md` with its generic content and incorrect memory path
+
+**Files changed:**
+- `.claude/agents/test.md` — new comprehensive test agent
+- `.claude/agents/unit-test-writer.md` — deleted
+- `SUMMARY.md` — added this step
+
+---
+
+## Step 136: Add — data science Claude agent
+
+Created a data science agent for Python-based analytics, visualization, and pipeline work on top of this project's existing data sources.
+
+**Root cause / motivation:** The project has rich data sources (PostgreSQL weather data, Kafka CDC streams, Prometheus metrics) but no data science tooling. A dedicated agent provides guidance for EDA, visualization, Airflow pipelines, and ML while connecting to the established infrastructure.
+
+**What changed:**
+- New agent maps all project data sources: PostgreSQL `WeatherForecasts` table, Ory Kratos identity tables (read-only), Kafka CDC topics (Avro), Prometheus metrics, and Grafana dashboards
+- Covers pandas, NumPy, matplotlib, seaborn, plotly, scikit-learn, Apache Airflow, SQLAlchemy, and confluent-kafka
+- Includes Python environment setup guide (virtual env, pinned deps) and recommended project structure for notebooks/pipelines
+- Visualization best practices: titles, labels, appropriate chart types, accessible colors
+- Airflow DAG design: idempotent tasks, retry logic, Podman-compatible containerized deployment
+- Hard rule to consult official docs for all library APIs
+- Read-only access to production tables — no writes to EF Core or Kratos managed data
+
+**Files changed:**
+- `.claude/agents/data-science.md` — new data science agent
+- `SUMMARY.md` — added this step
+
+---
+
+## Step 137: Add — business analyst Claude agent with weather domain expertise
+
+Created a business analyst agent that turns vague requirements into detailed, implementable specifications using deep weather domain knowledge.
+
+**Root cause / motivation:** Developers receiving imprecise requirements like "add wind data" or "we need alerts" waste time guessing intent. A dedicated BA agent asks the right clarifying questions (sustained vs. gust speed? what alert channels? what thresholds?) and produces structured specs with acceptance criteria, data model changes, and cross-agent coordination flags.
+
+**What changed:**
+- New agent documents the full current product state (CRUD model, streaming events, auth roles, temperature classification, UI capabilities, what's missing)
+- Comprehensive weather vocabulary: temperature (air, feels-like, wind chill, heat index, dew point), precipitation (rate, accumulation, PoP, type, freezing level), wind (sustained, gust, direction, Beaufort), pressure (SLP, tendency), humidity (RH, dew point, wet bulb), visibility/clouds (oktas, ceiling, fog types), UV, severe weather (scales, thresholds), and forecast terminology (nowcast through seasonal)
+- Clarifying question framework (Who/What-Data/What-Behavior/When/Where/Why)
+- Structured spec template with data requirements, acceptance criteria, API changes, model changes, and cross-agent flags
+- Output markers: `MODEL:`, `CDC:`, `AUTH:`, `UI:` for cross-cutting concerns
+
+**Files changed:**
+- `.claude/agents/business-analyst.md` — new business analyst agent
+- `SUMMARY.md` — added this step
+
+---
+
+## Step 138: Add — architect Claude agent with agent ecosystem governance
+
+Created a software architect agent that owns the system architecture and is responsible for keeping all Claude agent definitions in sync when the architecture evolves.
+
+**Root cause / motivation:** With 12 specialized agents, each embedding architecture knowledge (tech stack, pod topology, data flows, file paths), architectural changes can cause documentation drift across agent definitions. A dedicated architect agent owns the big picture, evaluates technology decisions, and enforces an agent update protocol when the architecture changes.
+
+**What changed:**
+- New agent documents the full system architecture: ASCII topology diagram, technology stack table, pod topology with startup order, 5 data flow paths, and 10 architectural decision records with rationale
+- Agent ecosystem table listing all 12 agents with their files and ownership domains
+- Agent update protocol: identify affected agents, classify change (additive/replacement/removal/restructuring), update definitions, verify consistency
+- Triggers for agent updates: new containers, technology swaps, new Nx projects, schema changes, CI/CD changes, new agents
+- Trade-off evaluation framework: decision matrices, migration paths, rollback plans
+- Output markers: `BREAKING:`, `AGENTS:`, `MIGRATION:` for architectural change impact
+
+**Files changed:**
+- `.claude/agents/architect.md` — new architect agent
+- `SUMMARY.md` — added this step
+
+---
+
+## Step 139: Reorganize — README.md for scannability and navigation
+
+The README was 569 lines with no table of contents, no anchor links, and sections ordered so that the ~60-line security disclaimer appeared before the reader even knew what the project was.
+
+**Root cause / motivation:** New visitors had to scroll past security warnings to reach the project description. Verbose per-OS SSL instructions (~80 lines) and observability/Kafka details made the page hard to scan. No TOC meant no way to jump to a section.
+
+**What changed:**
+- Moved project description and demo screenshots above the security disclaimer (which is now at the end, linked from the intro)
+- Added a clickable Table of Contents grouping sections into: Getting Started, Applications, Infrastructure, Testing, API Reference, and Security Disclaimer
+- Condensed SSL install/uninstall/regenerate from ~80 lines of per-OS code blocks into a single 3-row table with a collapsible `<details>` block for regeneration prerequisites
+- Collapsed Prometheus metrics, Promtail logs, Grafana SSO flow, Kafka monitoring/alerting thresholds, and Lightning App environment variables into `<details>` blocks
+- Converted bullet lists to compact tables where appropriate
+
+**Files changed:**
+- `README.md` — reorganized sections, added TOC, condensed verbose content
+- `SUMMARY.md` — added this step
+
+---
+
+## Step 140: Fix — increase unit test coverage to 100% across all apps
+
+CI failed because weather-app branch coverage was 50% (threshold: 80%). The `tempVariant()` method had 5 branches but only 3 were tested. Investigation revealed coverage gaps in all three apps.
+
+**Root cause / motivation:** Tests only exercised happy-path data, leaving conditional branches uncovered: `tempVariant()` warm/hot paths in weather-app, `healthVariant()`/`checkHealth()` in admin-app, `summary ?? ''` null coalescing in weatheredit-app, and `role || ''` falsy branch in kratos-admin.
+
+**What changed:**
+
+*weather-app* — Added 6 tests: all 5 `tempVariant()` branches (cold/cool/mild/warm/hot) + null summary dash rendering. Added mock data with temps 30 and 40 to hit warm/hot paths. Coverage: 50% → 100% branches.
+
+*admin-app remote-entry* — Fixed broken test setup: added `resolve.alias` for `@org/ui` in `vite.config.mts`, replaced `resolveComponentResources` (Angular private API) with `overrideComponent` + `CUSTOM_ELEMENTS_SCHEMA` pattern, added `HttpTestingController` with `afterEach` verification, fixed 3 DOM tests with wrong selectors. Added 6 new tests for `healthVariant()` (3 branches) and `checkHealth()` HTTP flow (init request, success, error).
+
+*weatheredit-app* — Added test calling `openEdit()` with `summary: null` to cover the `??` operator's falsy branch. Coverage: 91.66% → 100% branches.
+
+*kratos-admin* — Added test calling `startEdit()` with identity lacking a role to cover `role || ''` falsy branch. Coverage: 83.33% → 100% branches.
+
+*test agent definition* — Added "Code Coverage" section with threshold documentation, branch coverage guidance, diagnostic workflow, and common patterns needing explicit branch tests.
+
+**Files changed:**
+- `apps/weather-app/src/app/remote-entry/entry.spec.ts` — added tempVariant + null summary tests
+- `apps/admin-app/vite.config.mts` — added `resolve.alias` for `@org/ui`
+- `apps/admin-app/src/app/remote-entry/entry.spec.ts` — fixed setup, added healthVariant/checkHealth tests
+- `apps/admin-app/src/app/kratos-admin/kratos-admin.component.spec.ts` — added no-role startEdit test
+- `apps/weatheredit-app/src/app/remote-entry/entry.spec.ts` — added null-summary openEdit test
+- `.claude/agents/test.md` — added Code Coverage guidance section
+- `SUMMARY.md` — added this step
+
+---
+
+## Step 141: Add — user signup with magic links and admin approval
+
+**Root cause:** Users had no way to self-register. Only pre-seeded admin accounts existed, requiring manual identity creation via the Kratos Admin API.
+
+**What changed:**
+
+*Kratos config* — Enabled recovery flow with `link` strategy and added `link` selfservice method. Added recovery/settings return URLs and SMTP `from_address`. This allows the admin to generate one-time magic links via the Kratos Admin API.
+
+*Signup API + page* — Added `POST /signup` endpoint to weather-api that creates inactive Kratos identities with a random password (user never sees it). Added Traefik route for `/signup`. Excluded `/signup` from KratosAuthMiddleware. Created Angular signup component at `/auth/signup` with email-only form and success/error messaging. Added "Request Access" link to the login page.
+
+*Admin user management* — Enhanced KratosAdminService with `activateIdentity()`, `deactivateIdentity()`, and `generateRecoveryLink()` methods. Updated KratosAdminComponent with: Approve button (for inactive users, with role selector), Deactivate button (for active users), Generate Magic Link button (with copy-to-clipboard), and removed password requirement from the create form (auto-generates random password).
+
+*Auth flow polish* — Created RecoveryComponent that checks for an active session and redirects to home (handles magic link callback). Added `/auth/recovery` and `/auth/settings` routes. Updated unauthorized page with "Request Access" link and improved messaging.
+
+**Architecture:** New users are created with Kratos `state: "inactive"`, which prevents them from obtaining sessions at the Kratos level (no custom guard changes needed). Admin approves by setting state to active and assigning a role. Magic links are Kratos recovery links generated via the Admin API — clicking one creates a valid session.
+
+**Files changed:**
+- `apps/ory/kratos.yml` — enabled link method, recovery flow, return URLs, from_address
+- `apps/weather-api/Program.cs` — added POST /signup endpoint
+- `apps/weather-api/Models/SignupRequest.cs` — new request DTO
+- `apps/weather-api/appsettings.json` — added OryKratosAdminUrl
+- `apps/weather-api/Middleware/KratosAuthMiddleware.cs` — skip auth for /signup
+- `traefik/traefik-dynamic.yml` — added signup-router
+- `apps/shell/src/app/auth/signup/signup.component.ts` — new signup page
+- `apps/shell/src/app/auth/recovery/recovery.component.ts` — new recovery handler
+- `apps/shell/src/app/auth/login/login.component.ts` — added Request Access link
+- `apps/shell/src/app/auth/unauthorized/unauthorized.component.ts` — added Request Access link
+- `apps/shell/src/app/app.routes.ts` — added signup, recovery, settings routes
+- `apps/admin-app/src/app/kratos-admin/kratos-admin.service.ts` — added activate, deactivate, generateRecoveryLink
+- `apps/admin-app/src/app/kratos-admin/kratos-admin.component.ts` — approve/deactivate/magic link UI
+- `SUMMARY.md` — added this step
+
+## Step 142: Add — Minion Manager for automated weather event generation
+
+**Root cause / motivation:** Admin users needed a way to automate weather event creation on a schedule without manual intervention. Minions are configurable automated agents that create random weather forecasts at specified intervals, cron schedules, or daily times.
+
+**What changed:**
+
+*Backend model & migration* — Added `Minion` entity (Name, ScheduleType, ScheduleValue, IsActive, LastRunAt, CreatedAt, UpdatedAt) with `ScheduleType` enum (Interval, Cron, DailyAt). Created EF Core migration for the Minions table. Added `IMinionRepository` interface and `EfMinionRepository` implementation with CRUD + active/scheduling support.
+
+*API endpoints* — Added `/minions` route group with GET (list/detail), POST (create), PUT (update), DELETE, and POST start/stop endpoints. Added Traefik router and dev proxy for the new path. Added Cronos NuGet package for cron expression parsing.
+
+*Background scheduler* — Added `MinionSchedulerService` (BackgroundService) that ticks every 30 seconds, checks active minions against their schedule, and creates random weather forecasts when due. Supports interval (every N minutes), cron expressions (via Cronos), and daily-at (HH:mm UTC) scheduling. Generated forecasts are prefixed with `[Minion: name]` in the summary.
+
+*Frontend UI* — Created `MinionsComponent` in admin-app with full CRUD, start/stop controls, and three schedule input modes: interval (number input), cron expression (text input with hint), and daily time (native time picker). Includes inline editing, relative time display for last run, and status badges. Added `MinionsService` for API calls.
+
+*Routing & dashboard* — Added `/admin-app/minions` route. Added "Minion Manager" card under new "Automation" category on the admin dashboard.
+
+**Files changed:**
+- `apps/weather-api/Models/Minion.cs` — Minion entity and ScheduleType enum
+- `apps/weather-api/Repositories/IMinionRepository.cs` — repository interface
+- `apps/weather-api/Repositories/EfMinionRepository.cs` — EF Core implementation
+- `apps/weather-api/Data/WeatherDbContext.cs` — added Minions DbSet
+- `apps/weather-api/Migrations/20260326000000_AddMinions*.cs` — EF Core migration
+- `apps/weather-api/Migrations/WeatherDbContextModelSnapshot.cs` — updated snapshot
+- `apps/weather-api/Program.cs` — minion endpoints, DI registration, hosted service
+- `apps/weather-api/Services/MinionSchedulerService.cs` — background scheduler
+- `apps/weather-api/WeatherApi.csproj` — added Cronos package
+- `traefik/traefik-dynamic.yml` — added minions-router
+- `apps/shell/proxy.conf.json` — added /minions dev proxy
+- `apps/admin-app/src/app/minions/minions.service.ts` — API service
+- `apps/admin-app/src/app/minions/minions.component.ts` — management UI
+- `apps/admin-app/src/app/minions/minions.component.spec.ts` — unit tests
+- `apps/admin-app/src/app/remote-entry/entry.routes.ts` — added minions route
+- `apps/admin-app/src/app/remote-entry/entry.ts` — added dashboard card
+- `SUMMARY.md` — added this step
+
+## Step 143: Add — Data science stack with Airflow, Jupyter, MinIO, and DuckDB
+
+**Root cause / motivation:** The project needed a data science stack for pipeline orchestration, interactive notebooks, and object storage. Apache Airflow handles DAG-based workflow orchestration, Jupyter Lab provides interactive analysis with DuckDB (an embedded analytical database), and MinIO offers S3-compatible object storage for datasets and artifacts.
+
+**What changed:**
+
+*Pod definition* — Created `k8s/datascience-pod.yaml` with three containers: Airflow (port 8280), Jupyter (port 8888), and MinIO (ports 9000 API + 9001 console). All three mount hostPath volumes under `/tmp/datascience/` for development. MinIO uses the upstream `quay.io/minio/minio:latest` image directly; Airflow and Jupyter use custom lightweight builds.
+
+*Airflow container* — Built from `apache/airflow:slim-2.10.4-python3.11` with DuckDB, duckdb-engine, and minio pip packages. Custom entrypoint runs `airflow db migrate`, creates admin user, starts scheduler in background and webserver in foreground. Uses SequentialExecutor with SQLite for lightweight local development.
+
+*Jupyter container* — Built from `quay.io/jupyter/minimal-notebook` with duckdb, pandas, pyarrow, minio, and boto3 pre-installed. Token-based auth (`datascience`).
+
+*Nx targets* — Created `apps/datascience/project.json` with `podman-build-airflow`, `podman-build-jupyter`, `podman-build` (aggregator), `kube-up` (`podman play kube k8s/datascience-pod.yaml`), and `kube-down`.
+
+*Admin dashboard* — Added Airflow, Jupyter Lab, and MinIO Console links under new "Data Science" category with credentials displayed.
+
+*MinIO data persistence* — hostPath volume defaults to `/tmp/datascience/minio/data`. To persist across restarts, change the hostPath to a permanent local directory (e.g., `/home/joe/datascience/minio/data`). Instructions are documented as inline YAML comments in the pod definition.
+
+**Usage:**
+```bash
+npm exec nx run datascience:kube-up    # Build images and start the stack
+npm exec nx run datascience:kube-down  # Stop the stack
+```
+
+**Files changed:**
+- `k8s/datascience-pod.yaml` — pod definition with Airflow, Jupyter, MinIO containers
+- `apps/datascience/project.json` — Nx project with build and kube targets
+- `apps/datascience/airflow/Containerfile` — slim Airflow image with DuckDB
+- `apps/datascience/airflow/entrypoint.sh` — db migrate, user creation, scheduler + webserver
+- `apps/datascience/jupyter/Containerfile` — minimal Jupyter with DuckDB and data science libs
+- `apps/datascience/jupyter/requirements.txt` — pip dependency reference
+- `apps/admin-app/src/app/remote-entry/entry.ts` — added Data Science admin links
+- `SUMMARY.md` — added this step
+
+## Step 144: Add — E2E and unit tests for lightning-app and weatherstream-app
+
+**Root cause / motivation:** The lightning-app (Electron + Kafka weather streamer) and weatherstream-app (Angular streaming dashboard) had minimal test coverage — only a basic `app.spec.ts` that wasn't passing due to `@analogjs/vite-plugin-angular` incompatibility with vitest 4.x test suite discovery.
+
+**What changed:**
+
+*Fixed vitest configuration* — Removed the `angular()` vite plugin that broke test discovery and added `esbuild.tsconfigRaw` with `experimentalDecorators` support (matching the working shell app pattern). Unit tests instantiate services directly with mock dependencies instead of relying on TestBed component resolution.
+
+*weatherstream-app unit tests (37 tests):*
+- `kafka-stream.service.spec.ts` — 20 tests covering simulation mode (event generation, 100-event cap, timer lifecycle, clear/reconnect) and Electron mode (IPC listener registration, weather event forwarding, status/error handling, reconnect, cleanup)
+- `weather-dashboard.spec.ts` — 16 tests for `conditionIcon()` (all 10 weather conditions + unknown fallback) and `tempColor()` (5 temperature ranges with boundary values)
+- `app.spec.ts` — fixed pre-existing broken test
+
+*lightning-app unit tests (9 tests):*
+- `kafka-consumer.spec.mjs` — tests for connect/subscribe/run lifecycle, `connected` event emission, connect failure error handling, message parsing with metadata enrichment, null message skipping, invalid JSON error emission, disconnect with `disconnected` event, and graceful disconnect error handling
+- Added `vitest.config.mjs` and `test` target to `project.json`
+
+*weatherstream-app-e2e (Playwright):*
+- Page load tests (200 status, heading, Simulated badge, Connected status)
+- Simulation event tests (empty state, event card rendering, temperature/humidity/wind display, condition icons, event count increment, card accumulation)
+- Interaction tests (Clear button, no Reconnect in simulation, no error banner)
+
+*lightning-app-e2e (Playwright):*
+- Dashboard structure tests (page load, header, status bar, mode badge)
+- Real-time streaming tests (auto-start, condition icons, known locations, three metrics, timestamps, newest-first ordering)
+- Control tests (Clear button clears and events resume)
+
+**Files changed:**
+- `apps/weatherstream-app/src/app/services/kafka-stream.service.spec.ts` — new service unit tests
+- `apps/weatherstream-app/src/app/weather-dashboard/weather-dashboard.spec.ts` — new component unit tests
+- `apps/weatherstream-app/src/app/app.spec.ts` — fixed broken test
+- `apps/weatherstream-app/vite.config.mts` — removed angular() plugin, added esbuild config
+- `apps/weatherstream-app/src/test-setup.ts` — removed incompatible snapshot import
+- `apps/lightning-app/src/kafka-consumer.spec.mjs` — new Kafka consumer unit tests
+- `apps/lightning-app/vitest.config.mjs` — new vitest configuration
+- `apps/lightning-app/project.json` — added test target
+- `apps/weatherstream-app-e2e/` — new Playwright E2E project (6 files)
+- `apps/lightning-app-e2e/` — new Playwright E2E project (6 files)
+- `SUMMARY.md` — added this step
+
+## Step 145: Add — CI coverage for lightning-app and weatherstream-app unit tests
+
+**Root cause / motivation:** The new unit tests for lightning-app (9 tests) and weatherstream-app (37 tests) were not included in the GitHub Actions CI pipeline and had no code coverage reporting.
+
+**What changed:**
+
+*CI workflow* — Added `weatherstream-app` to the existing `nx run-many --target=test` command in the `unit-tests` job. Added a separate step for `lightning-app` using `npx vitest run` directly (it uses `nx:run-commands` executor, not `@nx/vitest:test`, so it needs its own invocation to pass `--coverage`).
+
+*Coverage configuration* — Updated both vitest configs to output coverage reports to the standard `coverage/apps/{app-name}/` directory (matching shell, weather-app, etc.). Provider: v8.
+
+*Coverage results:*
+- **lightning-app** (`kafka-consumer.js`): 100% statements, 100% branches, 100% functions, 100% lines
+- **weatherstream-app**: 96.97% statements, 100% branches, 92.3% functions, 96.07% lines
+  - `kafka-stream.service.ts`: 100% across all metrics
+  - `weather-dashboard.ts`: 92.85% statements, 88.88% lines (the `inject()` field initializer isn't exercised in unit tests — covered by E2E)
+
+*Test approach fix (lightning-app)* — Replaced the recreated test class (which gave 0% coverage) with importing the real `kafka-consumer.js` module and patching its internal `consumer` property with a mock before any async operations. This achieves full coverage of the actual source code.
+
+**Files changed:**
+- `.github/workflows/ci.yml` — added weatherstream-app to test matrix, added lightning-app coverage step
+- `apps/lightning-app/vitest.config.mjs` — updated coverage output path
+- `apps/lightning-app/project.json` — added cwd to test target
+- `apps/lightning-app/src/kafka-consumer.spec.mjs` — import real module for coverage
+- `apps/weatherstream-app/vite.config.mts` — updated coverage output path
+- `SUMMARY.md` — added this step
+
+---
+
+## Step 147: Implement — Jupyter notebooks, Airflow DAGs, and shared helpers for the weather data science stack
+
+Added concrete, runnable implementations for the data science infrastructure.
+
+**Shared helpers (`apps/datascience/shared/`):**
+- `minio_helper.py` — reusable MinIO client factory, `object_exists()` check, `upload_file()`, `upload_dataframe()`, `read_csv()`, `read_parquet()`. Works identically in Jupyter and Airflow.
+- `weather_sources.py` — download functions for NOAA GHCN-Daily per-station CSVs (`download_ghcn_station()`) and Open-Meteo historical API (`download_open_meteo()`). Includes curated station/location lists with long records: New York Central Park, LA LAX, London Heathrow, Tokyo, Melbourne.
+
+**Airflow DAGs (`apps/datascience/airflow/dags/`):**
+- `dag_download_weather.py` — DAG 1. Daily at 02:00 UTC. One `ShortCircuitOperator` per data source checks MinIO before downloading; if the object already exists the download is skipped. Downloads GHCN-Daily CSVs for 5 stations and Open-Meteo daily data for 5 cities. Uploads results to `weather-raw/` bucket.
+- `dag_kafka_cdc_to_duckdb.py` — DAG 2. Runs every 5 minutes. Consumes Avro-encoded Debezium CDC events from `weather.public.WeatherForecasts`, decodes them via confluent-kafka + Schema Registry, upserts into a DuckDB file stored in `weather-analytics/` in MinIO. Handles create/update/delete/snapshot ops. Manual offset commit after batch write.
+
+**DuckDB schema (defined in DAG 2):**
+- `weather_forecasts_cdc` — primary CDC table (id, date, temperature_c, summary, op, event_ts, loaded_at)
+- `weather_observations_raw` — GHCN observation table for cross-source joins
+- `daily_summary` — view aggregating CDC rows by date (count, avg/min/max temp)
+
+**Jupyter notebooks (`apps/datascience/jupyter/notebooks/`):**
+- `01_eda_open_meteo.ipynb` — 14-cell EDA notebook. Data quality checks, descriptive stats, histogram, monthly line chart with fill_between, box plot by month, correlation heatmap, multi-location pivot_table heatmap, DuckDB SQL window function query, grouped bar chart.
+- `02_cdc_duckdb_analysis.ipynb` — 10-cell notebook. Downloads DuckDB from MinIO (read-only), inspects CDC schema, operation breakdown bar chart, violin plot by Summary label, daily_summary time-series, cross-source scatter vs Open-Meteo reference data.
+
+**Infrastructure changes:**
+- `apps/datascience/jupyter/Containerfile` — added `matplotlib seaborn requests confluent-kafka fastavro`
+- `apps/datascience/airflow/Containerfile` — added `requests confluent-kafka fastavro`
+- `apps/datascience/jupyter/requirements.txt` — updated to match
+- `k8s/datascience-pod.yaml` — added `datascience-shared` and `jupyter-notebooks` volumes; shared helpers mounted at `/opt/airflow/dags/shared` and `/home/jovyan/work/shared`
+- `apps/datascience/project.json` — added `sync-files` target
+- `scripts/sync-datascience.sh` — copies DAGs, shared helpers, and notebooks into `/tmp/datascience/` host paths for the pod mounts
+
+**Files changed:**
+- `apps/datascience/shared/minio_helper.py` — new
+- `apps/datascience/shared/weather_sources.py` — new
+- `apps/datascience/airflow/dags/dag_download_weather.py` — new
+- `apps/datascience/airflow/dags/dag_kafka_cdc_to_duckdb.py` — new
+- `apps/datascience/jupyter/notebooks/01_eda_open_meteo.ipynb` — new
+- `apps/datascience/jupyter/notebooks/02_cdc_duckdb_analysis.ipynb` — new
+- `apps/datascience/jupyter/Containerfile` — updated
+- `apps/datascience/jupyter/requirements.txt` — updated
+- `apps/datascience/airflow/Containerfile` — updated
+- `apps/datascience/project.json` — updated
+- `k8s/datascience-pod.yaml` — updated
+- `scripts/sync-datascience.sh` — new
+- `SUMMARY.md` — added this step
+
+---
+
+## Step 146: Specify — data science initiative for realistic minion weather profiles
+
+Authored a full product specification for using open historical weather datasets to replace the uniform-random forecast generator in `MinionSchedulerService.cs` with statistically realistic profiles.
+
+**Datasets selected:**
+- NOAA GSOD (daily station data, public domain, direct CSV download, no API key)
+- Open-Meteo historical archive API (daily aggregates in Celsius, CC-BY 4.0, no API key for batch use)
+- NOAA CDO monthly normals (30-year averages for validation cross-checks, free API key)
+
+**Jupyter notebooks specified (4):**
+1. `01_getting_started.ipynb` — download GSOD, load into pandas, save to MinIO
+2. `02_cleaning_and_munging.ipynb` — handle NOAA sentinel values, normalize units, map temps to Summary labels using `temp_to_summary()` thresholds aligned with the existing UI color scheme
+3. `03_visualizing_patterns.ipynb` — seasonal cycle line plots, temperature box plots, city-month heatmap, DuckDB-over-MinIO queries
+4. `04_building_profiles.ipynb` — Gaussian temperature profiles per city/month, conditional summary label probabilities, `generate_forecast()` function, output `weather_profiles_v1.json`
+
+**Airflow DAGs specified (3):**
+1. `weather_dataset_ingestion` — daily 03:00 UTC; MinIO-check-before-download pattern; idempotent
+2. `weather_kafka_to_duckdb` — every 15 min; polls `weather.public.WeatherForecasts` Kafka topic; at-least-once upsert into DuckDB
+3. `weather_quality_report` — daily 06:00 UTC; z-score anomaly detection against NOAA norms; label consistency checks; quality score 0–100
+
+**MinIO bucket structure defined:** `raw-weather/`, `clean-weather/`, `analytics/`, `notebooks/`
+
+**Files changed:**
+- `docs/spec-data-science-initiative.md` — new specification document
+- `SUMMARY.md` — added this step
+
+---
+
+## Step 148: Add — Notebook 03: Weather Data Cleaning & Munging
+
+Educational notebook teaching data cleaning fundamentals with real GHCN-Daily and Open-Meteo weather data.
+
+**What it covers:**
+- Loading raw GHCN-Daily CSVs (long format with tenths-of-degree units)
+- Pivoting from long to wide format using `pivot_table()`
+- Missing value detection with `isnull()`, linear interpolation for temperatures, zero-fill for precipitation
+- Unit conversion (GHCN tenths of °C → actual °C)
+- Mapping temperatures to the app's 10 Summary labels using `pd.cut()` with defined thresholds
+- Processing all 5 GHCN stations and 5 Open-Meteo cities
+- Saving cleaned Parquet files to MinIO `clean-weather/` bucket
+- Loading cleaned data into DuckDB `weather_observations_clean` table
+
+**Visualizations:** missing data heatmap, before/after histograms, label distribution bar chart, temperature-by-label box plot, cross-location label frequency heatmap.
+
+**Files changed:**
+- `apps/datascience/jupyter/notebooks/03_cleaning_and_munging.ipynb` — new
+- `SUMMARY.md` — added this step
+
+---
+
+## Step 149: Add — Notebook 04: Building Realistic Weather Profiles
+
+Capstone notebook that builds statistical weather profiles from cleaned historical data for use by the minion scheduler.
+
+**What it covers:**
+- Computing monthly temperature statistics (`groupby` + `agg`) per location
+- Building Summary label probability distributions with Laplace smoothing
+- Visualizing profiles with heatmaps, stacked bar charts, violin plots, and radar charts
+- Validating profiles by sampling and overlaying against real data distributions
+- Exporting the profile as JSON to MinIO (`weather-analytics/profiles/weather_profiles_v1.json`)
+- Documentation of how `MinionSchedulerService` can consume the profile
+
+**Profile structure:** `{location: {month: {temp_mean, temp_std, temp_min, temp_max, labels: {Freezing: prob, ...}}}}`
+
+**Files changed:**
+- `apps/datascience/jupyter/notebooks/04_weather_profiles.ipynb` — new
+- `SUMMARY.md` — added this step
+
+---
+
+## Step 150: Add — DAG 3: Weather Quality Report
+
+Daily Airflow DAG that compares minion-generated forecasts against historical weather profiles to produce a quality score.
+
+**Tasks:**
+1. `load_profile` — Downloads weather profile JSON from MinIO
+2. `load_recent_forecasts` — Queries DuckDB CDC table for last 24h forecasts
+3. `generate_quality_report` — Computes temperature z-scores, checks label-temperature consistency, produces quality score (0-100)
+4. `save_report` — Uploads report JSON to MinIO `weather-analytics/reports/quality_YYYY-MM-DD.json`
+
+**Quality checks:**
+- Temperature z-score: how many standard deviations from the historical mean
+- Label consistency: does the Summary label match the temperature thresholds (e.g., "Scorching" should only appear above 40°C)
+- Overall score: 100 = all realistic, <50 = mostly anomalous (expected before profile integration)
+
+**Schedule:** daily at 06:00 UTC, after the download DAG runs at 02:00 UTC.
+
+**Files changed:**
+- `apps/datascience/airflow/dags/dag_quality_report.py` — new
+- `SUMMARY.md` — added this step
+
+---
+
+## Step 151: Fix — CI container build fails with "workspace is out of sync"
+
+**Root cause:** The `Containerfile.nginx` runs `nx run-many --target=build` inside a fresh container where TypeScript project references have never been synced. Locally this works because `nx sync` was previously run (or auto-applied in interactive mode), but in CI the container starts from a clean `npm ci` with no prior sync state.
+
+**Fix:** Added `RUN npx nx sync` before the build step in `Containerfile.nginx` to ensure TypeScript project references are up to date before building.
+
+**Files changed:**
+- `Containerfile.nginx` — added `npx nx sync` step before the production build
+- `SUMMARY.md` — added this step

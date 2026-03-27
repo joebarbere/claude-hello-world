@@ -22,6 +22,15 @@ http:
         - strip-ory-prefix
       tls: {}
 
+    # Signup endpoint — public, routed to weather-api
+    signup-router:
+      rule: "Path(`/signup`)"
+      entryPoints:
+        - websecure
+      service: weather-api
+      priority: 20
+      tls: {}
+
     # Weather API — exact /weather (list/create)
     weather-exact-router:
       rule: "Path(`/weather`)"
@@ -63,6 +72,15 @@ http:
         - websecure
       service: kafka-ui
       priority: 22
+      tls: {}
+
+    # Minions API — routed to weather-api
+    minions-router:
+      rule: "PathPrefix(`/minions`)"
+      entryPoints:
+        - websecure
+      service: weather-api
+      priority: 20
       tls: {}
 
     # Angular apps — catch-all to nginx (static files)

@@ -1,6 +1,8 @@
 import { Route } from '@angular/router';
 import { weatherEditAuthGuard, adminAuthGuard } from './auth/auth.guard';
 import { LoginComponent } from './auth/login/login.component';
+import { RecoveryComponent } from './auth/recovery/recovery.component';
+import { SignupComponent } from './auth/signup/signup.component';
 import { UnauthorizedComponent } from './auth/unauthorized/unauthorized.component';
 import { HomeComponent } from './home/home.component';
 
@@ -24,6 +26,18 @@ export const appRoutes: Route[] = [
   {
     path: 'auth/login',
     component: LoginComponent,
+  },
+  {
+    path: 'auth/signup',
+    component: SignupComponent,
+  },
+  {
+    path: 'auth/recovery',
+    component: RecoveryComponent,
+  },
+  {
+    path: 'auth/settings',
+    component: RecoveryComponent,
   },
   {
     path: 'auth/unauthorized',

@@ -11,6 +11,12 @@ public class KratosAuthMiddleware(RequestDelegate next, IConfiguration config, I
 
     public async Task InvokeAsync(HttpContext context)
     {
+        if (context.Request.Path.StartsWithSegments("/signup"))
+        {
+            await next(context);
+            return;
+        }
+
         if (!WriteMethods.Contains(context.Request.Method, StringComparer.OrdinalIgnoreCase))
         {
             await next(context);

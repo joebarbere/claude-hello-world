@@ -190,6 +190,20 @@ describe('RemoteEntry (weatheredit-app)', () => {
     );
   });
 
+  it('openEdit() sets formData.summary to empty string when forecast summary is null', () => {
+    const fixture = createAndInit();
+    httpMock.expectOne('/weather').flush(mockForecasts);
+    const nullSummaryForecast: WeatherForecast = {
+      id: 99,
+      date: '2024-07-01',
+      temperatureC: 22,
+      temperatureF: 71,
+      summary: null,
+    };
+    fixture.componentInstance.openEdit(nullSummaryForecast);
+    expect(fixture.componentInstance.formData.summary).toBe('');
+  });
+
   // --- Delete flow ---
 
   it('confirmDelete() sets confirmingDeleteId', () => {

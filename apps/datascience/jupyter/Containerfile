@@ -1,0 +1,16 @@
+FROM quay.io/jupyter/minimal-notebook:latest
+USER root
+RUN pip install --no-cache-dir \
+        duckdb \
+        pandas \
+        pyarrow \
+        minio \
+        boto3 \
+        matplotlib \
+        seaborn \
+        requests \
+        confluent-kafka \
+        fastavro && \
+    fix-permissions "${CONDA_DIR}" && \
+    fix-permissions "/home/${NB_USER}"
+USER ${NB_UID}

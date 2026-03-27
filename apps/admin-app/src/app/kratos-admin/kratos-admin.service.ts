@@ -56,6 +56,29 @@ export class KratosAdminService {
     return this.http.delete<void>(`${KRATOS_ADMIN_URL}/admin/identities/${id}`);
   }
 
+  activateIdentity(id: string, traits: KratosIdentityTraits): Observable<KratosIdentity> {
+    return this.http.put<KratosIdentity>(`${KRATOS_ADMIN_URL}/admin/identities/${id}`, {
+      schema_id: 'default',
+      traits,
+      state: 'active',
+    });
+  }
+
+  deactivateIdentity(id: string, traits: KratosIdentityTraits): Observable<KratosIdentity> {
+    return this.http.put<KratosIdentity>(`${KRATOS_ADMIN_URL}/admin/identities/${id}`, {
+      schema_id: 'default',
+      traits,
+      state: 'inactive',
+    });
+  }
+
+  generateRecoveryLink(identityId: string): Observable<{ recovery_link: string }> {
+    return this.http.post<{ recovery_link: string }>(
+      `${KRATOS_ADMIN_URL}/admin/recovery/link`,
+      { identity_id: identityId }
+    );
+  }
+
   checkHealth(): Observable<{ status: string }> {
     return this.http.get<{ status: string }>(`${KRATOS_ADMIN_URL}/health/alive`);
   }
