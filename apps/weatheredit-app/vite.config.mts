@@ -1,11 +1,24 @@
 /// <reference types='vitest' />
 import { defineConfig } from 'vite';
-import angular from '@analogjs/vite-plugin-angular';
+import path from 'path';
 
 export default defineConfig(() => ({
   root: __dirname,
   cacheDir: '../../node_modules/.vite/apps/weatheredit-app',
-  plugins: [angular()],
+  plugins: [],
+  resolve: {
+    alias: {
+      '@org/ui': path.resolve(__dirname, '../../libs/shared/ui/src/index.ts'),
+    },
+  },
+  esbuild: {
+    tsconfigRaw: {
+      compilerOptions: {
+        experimentalDecorators: true,
+        useDefineForClassFields: false,
+      },
+    },
+  },
   // Uncomment this if you are using workers.
   // worker: {
   //  plugins: [],
@@ -21,6 +34,12 @@ export default defineConfig(() => ({
     coverage: {
       reportsDirectory: './test-output/vitest/coverage',
       provider: 'v8' as const,
+      thresholds: {
+        lines: 80,
+        branches: 80,
+        functions: 80,
+        statements: 80,
+      },
     },
   },
 }));

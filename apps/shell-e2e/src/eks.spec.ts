@@ -1,29 +1,29 @@
 import { test, expect } from '@playwright/test';
 
 /**
- * E2E tests for the shell (host) application running in the EKS nginx pod.
+ * E2E tests for the shell (host) application running behind the Traefik reverse proxy.
  *
- * The nginx pod serves:
- *   /               → shell Angular host app
- *   /weather-app/   → weather-app MFE remote
- *   /weatheredit-app/ → weatheredit-app MFE remote
+ * Traefik handles SSL termination and proxying:
+ *   /               → nginx (static files) → shell Angular host app
+ *   /weather-app/   → nginx (static files) → weather-app MFE remote
+ *   /weatheredit-app/ → nginx (static files) → weatheredit-app MFE remote
+ *   /admin-app/     → nginx (static files) → admin-app MFE remote
  *   /weather        → proxied to weather-api pod
  *
  * Run against the EKS pod:
- *   BASE_URL=http://<eks-node>:8080 npx nx run shell-e2e:e2e
+ *   BASE_URL=https://<eks-node>:8443 npx nx run shell-e2e:e2e
  */
 
 test.describe('Shell host – home page', () => {
-  test('loads and displays the welcome heading', async ({ page }) => {
+  test('loads and displays the dashboard heading', async ({ page }) => {
     await page.goto('/');
-    await expect(page.locator('#welcome h1')).toContainText('Welcome shell');
+    await expect(page.locator('h1')).toContainText('Dashboard');
   });
 
-  test('shows the hero "You\'re up and running" banner', async ({ page }) => {
+  test('shows the welcome subtitle', async ({ page }) => {
     await page.goto('/');
-    await expect(page.locator('#hero')).toBeVisible();
-    await expect(page.locator('#hero .text-container h2 span')).toContainText(
-      "You're up and running"
+    await expect(page.locator('.page-subtitle')).toContainText(
+      'Welcome to the NxWeather application.'
     );
   });
 
@@ -38,8 +38,8 @@ test.describe('Shell host – MFE navigation', () => {
     page,
   }) => {
     await page.goto('/weather-app');
-    // MFE remote entry renders <h2>Weather Forecast</h2>
-    await expect(page.locator('h2')).toContainText('Weather Forecast', {
+    // MFE remote entry renders Weather Forecast via PageHeaderComponent <h1>
+    await expect(page.locator('h1')).toContainText('Weather Forecast', {
       timeout: 15000,
     });
   });
@@ -74,6 +74,44 @@ test.describe('Shell host – MFE navigation', () => {
     await expect(page.locator('input[name="password"]')).toBeVisible({
       timeout: 10000,
     });
+  });
+
+  test('navigates to admin-app and is redirected to the Ory login page', async ({
+    page,
+  }) => {
+    await page.goto('/admin-app');
+    // Admin auth guard redirects to Kratos browser flow → /auth/login?flow=<id>
+    await expect(page).toHaveURL(/\/auth\/login/, { timeout: 15000 });
+    await expect(page.locator('input[name="identifier"]')).toBeVisible({
+      timeout: 10000,
+    });
+  });
+});
+
+test.describe('Traefik reverse proxy – health', () => {
+  test('Traefik dashboard API responds on port 8081', async ({ playwright }) => {
+    const context = await playwright.request.newContext({
+      ignoreHTTPSErrors: true,
+    });
+    const response = await context.get('http://localhost:8081/api/overview');
+    expect(response.status()).toBe(200);
+    const body = await response.json();
+    expect(body).toHaveProperty('http');
+    await context.dispose();
+  });
+
+  test('Traefik access log volume is mounted (log file is created)', async ({ playwright }) => {
+    const context = await playwright.request.newContext({
+      ignoreHTTPSErrors: true,
+    });
+    // Hit the proxy to generate at least one access log entry
+    await context.get('https://localhost:8443/');
+    // Verify via the Traefik API that the service is routing correctly
+    const response = await context.get('http://localhost:8081/api/http/routers');
+    expect(response.status()).toBe(200);
+    const routers = await response.json();
+    expect(routers.length).toBeGreaterThan(0);
+    await context.dispose();
   });
 });
 

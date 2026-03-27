@@ -2285,3 +2285,1538 @@ Added GitHub Actions CodeQL Analysis workflow and a README badge.
 **Files changed:**
 - `Directory.Build.targets`
 - `.github/workflows/codeql.yml`
+
+---
+
+## Step 73: Add Traefik SSL termination and reverse proxy
+
+**Root cause:** nginx was handling three responsibilities — SSL termination, reverse proxying (to weather-api and Ory Kratos), and static file serving for Angular apps. This tight coupling made it harder to manage routing and TLS independently of the web server.
+
+**Fix:** Added a lightweight Traefik container (`traefik:v3.3`) that handles SSL termination and reverse proxying. nginx was simplified to only serve static Angular files on port 8080 (internal, no host port). Traefik and nginx run in the same pod, sharing a network namespace. Traefik exposes host ports 8080 (HTTP → HTTPS redirect) and 8443 (HTTPS), and routes requests to nginx (static files), weather-api, and Ory Kratos based on path rules. Path rewriting for `/weather` → `/weatherforecast` and `/.ory/kratos/public/` prefix stripping are handled by Traefik middleware.
+
+**Files created:**
+- `traefik/traefik.yml` — Traefik static configuration (entrypoints, file provider, HTTP→HTTPS redirect)
+- `traefik/traefik-dynamic.yml` — Traefik dynamic configuration (routers, services, middleware, TLS certificate)
+- `traefik/Containerfile` — Lightweight Traefik container image
+- `apps/traefik/project.json` — Nx project with `podman-build` target
+
+**Files changed:**
+- `nginx/nginx.conf` — removed SSL, HTTP→HTTPS redirect, and proxy locations; listen on port 8080 only
+- `Containerfile.nginx` — removed SSL cert copy and port 443 exposure; expose only 8080
+- `k8s/apps-pod.yaml` — added traefik container to claude-hello-world pod, removed nginx host ports
+- `k8s/pod.yaml` — same pod changes
+- `apps/shell/project.json` — added `traefik:podman-build` to `kube-up` dependsOn
+- `apps/shell-e2e/playwright.config.ts` — updated comments to reference Traefik
+- `apps/shell-e2e/src/eks.spec.ts` — updated doc comments to reference Traefik
+- `apps/weather-app-e2e/playwright.config.ts` — updated comments to reference Traefik
+- `apps/weatheredit-app-e2e/playwright.config.ts` — updated comments to reference Traefik
+- `.github/workflows/eks-e2e.yml` — added traefik build step, updated container names and health checks
+- `.github/workflows/eks-e2e-full.yml` — same CI workflow updates
+- `README.md` — updated architecture diagram, SSL section, build instructions
+- `RUN.md` — updated container and Kubernetes sections
+
+---
+
+## Step 74: Fix Traefik e2e test failures — invalid base image tag
+
+**Root cause:** The Traefik Containerfile used `traefik:v3.3-alpine` as the base image, but the `-alpine` suffix was only available for Traefik v1.x. For v3.x, the base `traefik:v3.3` tag is already Alpine-based (multi-arch Linux). The non-existent tag caused `podman build` to fail in CI, blocking all downstream e2e tests.
+
+**Fix:** Changed the base image from `traefik:v3.3-alpine` to `traefik:v3.3`.
+
+**Files changed:**
+- `traefik/Containerfile` — updated base image tag
+
+---
+
+## Step 75: Add unit tests across all Angular MFE apps
+
+**Root cause / motivation:** No unit tests existed for the Angular MFE apps (shell, weather-app, weatheredit-app). Tests were needed to add CI unit-test reporting and coverage badges.
+
+**Key discovery:** `@analogjs/vite-plugin-angular` v2.1.3 is incompatible with Vitest v4 — its `angularVitestPlugins()` intercept disrupts vitest's test registration. Fix: remove the Angular build plugin from all `vite.config.mts` test configs and rely on Angular JIT compiler (`@angular/compiler`) via `setupTestBed()` from `@analogjs/vitest-angular` for runtime component compilation.
+
+**Key discovery 2:** `resolveComponentResources` is exported as `ɵresolveComponentResources` (private API) from `@angular/core`. Components with external `styleUrl`/`templateUrl` require this to be called before `TestBed.configureTestingModule()` so Angular JIT can handle external resource references without a real fetch implementation.
+
+**Fix:**
+- Removed `@analogjs/vite-plugin-angular` plugin from `vite.config.mts` in all 3 apps; added explicit `esbuild.tsconfigRaw` with `experimentalDecorators: true` and `useDefineForClassFields: false`
+- Fixed `test-setup.ts` in all 3 apps: removed `@analogjs/vitest-angular/setup-snapshots` import (crashes vitest v4)
+- Added `ɵresolveComponentResources` call in `beforeEach` for shell and weatheredit-app specs (components with external templateUrl/styleUrl)
+- Used `RouterTestingHarness.create()` for the shell "should render title" test (zoneless Angular requires harness for router outlet rendering)
+- Added 12 tests for `weather-app` RemoteEntry (HTTP GET, loading state, data display, error handling)
+- Added 24 tests for `weatheredit-app` RemoteEntry (CRUD operations, tempClass, form state, delete flow, save flow)
+- Deleted temporary debug spec files created during investigation
+
+**Files changed:**
+- `apps/shell/vite.config.mts` — removed Angular plugin, added esbuild config
+- `apps/weather-app/vite.config.mts` — same
+- `apps/weatheredit-app/vite.config.mts` — same
+- `apps/shell/src/test-setup.ts` — removed setup-snapshots import
+- `apps/weather-app/src/test-setup.ts` — same
+- `apps/weatheredit-app/src/test-setup.ts` — same
+- `apps/shell/src/app/app.spec.ts` — added vitest imports, resolveComponentResources, RouterTestingHarness
+- `apps/weather-app/src/app/remote-entry/entry.spec.ts` — new file, 12 tests
+- `apps/weatheredit-app/src/app/remote-entry/entry.spec.ts` — new file, 24 tests
+
+---
+
+## Step 76: Add unit test CI job, coverage badges, and observability stack
+
+**Motivation:** CI needed a dedicated unit-test job with coverage reporting. README needed status badges. The system needed Prometheus + Grafana observability for local development.
+
+**Unit test CI:**
+- Added `unit-tests` job to `.github/workflows/ci.yml` running `nx run-many --target=test` with coverage
+- Uploads coverage reports to Codecov via `codecov/codecov-action@v5`
+- Added CI badge and Codecov coverage badge to `README.md`
+
+**Observability stack (local podman only):**
+- Added `prometheus-net.AspNetCore` to `apps/weather-api/WeatherApi.csproj`; added `app.UseHttpMetrics()` and `app.MapMetrics()` to `Program.cs` (exposes `/metrics`)
+- Added `stub_status` location to `nginx/nginx.conf`
+- Added `nginx/nginx-prometheus-exporter` sidecar container to `k8s/apps-pod.yaml` (port 9113)
+- Created `apps/observability/` with baked Prometheus and Grafana container images
+- Created `k8s/observability-pod.yaml` for local `podman play kube` (separate from e2e CI pod)
+- Created `apps/observability/project.json` Nx project with isolated `kube-up`/`kube-down` targets — never triggered by e2e tests
+
+**Files changed:**
+- `.github/workflows/ci.yml` — new unit-tests job
+- `README.md` — CI and coverage badges
+- `apps/weather-api/WeatherApi.csproj` — prometheus-net package
+- `apps/weather-api/Program.cs` — UseHttpMetrics, MapMetrics
+- `nginx/nginx.conf` — stub_status location
+- `k8s/apps-pod.yaml` — nginx-exporter sidecar
+- `k8s/observability-pod.yaml` — new
+- `apps/observability/prometheus/prometheus.yml` — new
+- `apps/observability/prometheus/Containerfile` — new
+- `apps/observability/grafana/Containerfile` — new
+- `apps/observability/grafana/provisioning/datasources/prometheus.yml` — new
+- `apps/observability/grafana/provisioning/dashboards/dashboards.yml` — new
+- `apps/observability/grafana/provisioning/dashboards/weather-api.json` — new
+- `apps/observability/project.json` — new Nx project
+
+---
+
+## Step 77: Add Loki log aggregation to observability stack
+
+**Motivation:** Complete the observability stack with log aggregation alongside existing metrics (Prometheus/Grafana). Loki is excluded from e2e test runs by design — the observability project's `kube-up` is not a dependency of shell's `kube-up`, so CI e2e tests never start it.
+
+**Architecture:**
+- **Loki** (port 3100) — log storage server using tsdb/filesystem backend, single-instance mode
+- **Promtail** — log collector sidecar; scrapes CRI-format pod logs from `/var/log/pods/` and Podman container logs from `/var/lib/containers/`; pushes to Loki at `localhost:3100`
+- **Grafana** — Loki datasource added alongside existing Prometheus datasource; queries logs at `localhost:3100`
+
+**Log collection:** Promtail mounts `/var/log` and `/var/lib/containers` as read-only hostPath volumes. On Linux, these map directly to host paths. On macOS with Podman Machine, they map to paths inside the Linux VM where containers run.
+
+**Files created:**
+- `apps/observability/loki/loki.yml` — Loki config (single-instance, filesystem storage, no auth)
+- `apps/observability/loki/Containerfile` — FROM grafana/loki
+- `apps/observability/promtail/promtail.yml` — Promtail config with pod-logs and container-logs scrape jobs
+- `apps/observability/promtail/Containerfile` — FROM grafana/promtail
+- `apps/observability/grafana/provisioning/datasources/loki.yml` — Loki datasource for Grafana
+
+**Files modified:**
+- `k8s/observability-pod.yaml` — added loki and promtail containers with hostPath volume mounts
+- `apps/observability/project.json` — added podman-build-loki and podman-build-promtail targets; updated podman-build dependsOn
+
+---
+
+## Step 78: Remove unit-test CI job and coverage badges
+
+**Root cause / motivation:** Removed the `unit-tests` job from `.github/workflows/ci.yml` and removed the Unit Tests and Codecov badges from `README.md`. The unit tests still exist and pass locally but are not run in CI.
+
+**Files changed:**
+- `.github/workflows/ci.yml` — removed `unit-tests` job (coverage upload to Codecov, `nx run-many --target=test`)
+- `README.md` — removed Unit Tests workflow badge and Codecov coverage badge
+
+---
+
+## Step 79: Enforce 80% code coverage threshold in CI
+
+**Root cause / motivation:** The `unit-tests` CI job ran tests with coverage collection but did not enforce a minimum coverage threshold, and it excluded the weather-api dotnet project entirely. Added Vitest coverage thresholds (80% for lines, branches, functions, and statements) to all three Angular app vite configs. Created a new xUnit test project for weather-api with 30 tests covering the model, InMemoryWeatherForecastRepository, and RandomWeatherForecastRepository. Added dotnet SDK setup and weather-api-tests to the CI unit-tests job with coverlet 80% line coverage threshold.
+
+**Files changed:**
+- `.github/workflows/ci.yml` — added `actions/setup-dotnet@v4`, added `weather-api-tests:test` step to unit-tests job
+- `apps/shell/vite.config.mts` — added `coverage.thresholds` with 80% minimum for lines, branches, functions, statements
+- `apps/weather-app/vite.config.mts` — added `coverage.thresholds` with 80% minimum for lines, branches, functions, statements
+- `apps/weatheredit-app/vite.config.mts` — added `coverage.thresholds` with 80% minimum for lines, branches, functions, statements
+- `apps/weather-api-tests/WeatherApi.Tests.csproj` — new xUnit test project referencing WeatherApi, with coverlet for coverage
+- `apps/weather-api-tests/project.json` — Nx project config with test target using dotnet test + coverlet 80% threshold
+- `apps/weather-api-tests/WeatherForecastModelTests.cs` — tests for WeatherForecast model (temperature conversion, properties)
+- `apps/weather-api-tests/InMemoryWeatherForecastRepositoryTests.cs` — full CRUD tests for InMemoryWeatherForecastRepository
+- `apps/weather-api-tests/RandomWeatherForecastRepositoryTests.cs` — tests for RandomWeatherForecastRepository (read ops + write rejection)
+
+---
+
+## Step 80: Add weather-api lint and build to CI build job
+
+**Root cause / motivation:** The CI `build` job only linted and built the Angular apps, excluding the weather-api dotnet project. Added `actions/setup-dotnet@v4` and included `weather-api` in the lint and build `nx run-many` commands.
+
+**Files changed:**
+- `.github/workflows/ci.yml` — added dotnet 9.0 setup to `build` job; added `weather-api` to lint and build targets
+
+---
+
+## Step 81: Fix — Ory Kratos init container health check uses HEAD (405)
+
+**Root cause:** The `init-users.sh` script used `wget --spider` (HEAD request) to check Kratos readiness, but Kratos's `/health/ready` endpoint returns 405 Method Not Allowed for HEAD. The init container never detected Kratos as ready, so no user identities were seeded — all login attempts failed with "invalid credentials."
+
+**Fix:** Changed the health check to `wget -q -O /dev/null` (GET request) targeting the correct `/admin/health/ready` path.
+
+**Files changed:**
+- `apps/ory/init-users.sh` — switched from `wget --spider` (HEAD) to `wget -q -O /dev/null` (GET); corrected path to `/admin/health/ready`
+
+---
+
+## Step 82: Fix — Remove unreachable host-level pg_isready from shell kube-up
+
+**Root cause:** The `shell:kube-up` target included a host-level `pg_isready` health check that loops forever on macOS (command not found). A working podman-based check already existed on the next line.
+
+**Fix:** Removed the host-level `until pg_isready …` command, keeping only the `podman run --rm localhost/postgres:latest pg_isready …` variant.
+
+**Files changed:**
+- `apps/shell/project.json` — removed unreachable host-level `pg_isready` command from `kube-up` target
+
+---
+
+## Step 83: Fix — Login form CSRF race condition and missing /auth/error route
+
+**Root cause:** The login form rendered (with submit button) as soon as the Kratos flow ID was present in the URL, but the CSRF hidden fields only appeared after an async API call to fetch the flow data. If the user submitted before the flow loaded, the form POST lacked the `csrf_token`, causing a 403 CSRF violation. Kratos then redirected to `/auth/error`, which had no route in the Angular shell — Angular fell through to the home page, making it look like "nothing happened."
+
+**Fix:** Gated the entire form on `flow` (not `flowId`) so the form only renders when the CSRF token is available. Added `/auth/error` route mapping to `LoginComponent` so Kratos error redirects are handled. When the flow fetch fails, the component now starts a fresh login flow instead of showing a broken form.
+
+**Files changed:**
+- `apps/shell/src/app/auth/login/login.component.ts` — form gated on `flow` instead of `flowId`; removed `formAction` getter; redirect to fresh flow on fetch failure
+- `apps/shell/src/app/app.routes.ts` — added `auth/error` route pointing to `LoginComponent`
+
+---
+
+## Step 84: Fix — Login form stuck on "Loading…" due to zoneless change detection
+
+**Root cause:** Angular 21 is running without Zone.js (zoneless mode — no `provideZoneChangeDetection()` in the app config). The HTTP response from `getLoginFlow()` returned 200 OK with valid flow data, but setting `this.flow = flow` inside a subscribe callback did not trigger Angular's change detection. The template stayed in the `@else` branch showing "Loading…" indefinitely.
+
+**Fix:** Injected `ChangeDetectorRef` and called `detectChanges()` after setting `this.flow`, forcing Angular to re-render the template with the form.
+
+**Files changed:**
+- `apps/shell/src/app/auth/login/login.component.ts` — added `ChangeDetectorRef` injection; call `cdr.detectChanges()` after setting the flow
+
+---
+
+## Step 85: Fix — Containerfile.nginx OOM during parallel Angular builds
+
+**Root cause:** Building three Angular apps in parallel (`--parallel=3`) inside the Podman VM exceeded available memory, causing SIGINT (exit 130) and build failures.
+
+**Fix:** Reduced build parallelism to `--parallel=1` to fit within the VM's memory constraints.
+
+**Files changed:**
+- `Containerfile.nginx` — changed `--parallel=3` to `--parallel=1`
+
+---
+
+## Step 86: Feat — Add admin-app MFE with admin-only access control
+
+Added a new Angular micro-frontend application (`admin-app`) that displays admin-useful links (Weather API Swagger, Ory Kratos Admin, Grafana, Traefik Dashboard). The app is protected by a new `adminAuthGuard` that restricts access to users with the `admin` role only (not `weather_admin`).
+
+**What was done:**
+- Scaffolded `admin-app` as an MF remote via `@nx/angular:remote` generator (directory: `apps/admin-app`, port 4203)
+- Created `RemoteEntry` component with a categorized link-card dashboard (API, Identity, Observability, Infrastructure)
+- Added `adminAuthGuard` in the shell's auth guard module — checks for `admin` role only
+- Added `canAccessAdmin()` method to `AuthService` with a separate `ADMIN_ROLES` whitelist
+- Registered the remote in shell's module federation config (dev + prod)
+- Added route `admin-app` in shell with the admin guard and nav link
+- Updated nginx config, Traefik routing, Containerfile.nginx, and Kratos allowed return URLs
+- Added 12 unit tests for the admin-app entry component
+- Added 3 unit tests for `adminAuthGuard` and 11 unit tests for `AuthService` (including `canAccessAdmin`)
+- Added Playwright e2e tests for admin-app (access control, link display, categories)
+- Added shell-e2e test for admin-app redirect to login when unauthenticated
+
+**Files changed:**
+- `apps/admin-app/` — new MFE application (module-federation.config.ts, entry.ts, entry.routes.ts, entry.spec.ts, project.json, webpack configs, vite.config.mts, tsconfig files, bootstrap.ts, test-setup.ts)
+- `apps/admin-app-e2e/` — new Playwright e2e test project (playwright.config.ts, eks.spec.ts)
+- `apps/shell/module-federation.config.ts` — added `admin-app` remote
+- `apps/shell/webpack.prod.config.ts` — added `admin-app` production remote URL
+- `apps/shell/src/app/app.routes.ts` — added `admin-app` route with `adminAuthGuard`
+- `apps/shell/src/app/app.html` — added Admin nav link
+- `apps/shell/src/app/auth/auth.guard.ts` — added `adminAuthGuard`
+- `apps/shell/src/app/auth/auth.service.ts` — added `ADMIN_ROLES` and `canAccessAdmin()`
+- `apps/shell/src/app/auth/auth.guard.spec.ts` — new: 3 tests for adminAuthGuard
+- `apps/shell/src/app/auth/auth.service.spec.ts` — new: 11 tests for AuthService
+- `apps/shell/project.json` — added `admin-app` to build-all target
+- `apps/shell-e2e/src/eks.spec.ts` — added admin-app redirect test
+- `Containerfile.nginx` — added `admin-app` to build and COPY steps
+- `nginx/nginx.conf` — added `/admin-app/` location block
+- `apps/ory/kratos.yml` — added admin-app to allowed return URLs
+
+---
+
+## Step 87: Refactor — Rename adminApp to admin-app for consistency
+
+**Root cause:** The `@nx/angular:remote` generator rejected `admin-app` as a Module Federation name (hyphens not allowed per its regex). The workaround used `adminApp` as the MF/project name, but the existing remotes (`weather-app`, `weatheredit-app`) already use hyphenated names successfully.
+
+**Fix:** Renamed all occurrences of `adminApp` to `admin-app` across project names, MF config, build targets, import paths, tsconfig paths, Containerfile, and e2e configs.
+
+**Files changed:**
+- `apps/admin-app/module-federation.config.ts` — `name: 'admin-app'`
+- `apps/admin-app/project.json` — `"name": "admin-app"`, all build targets
+- `apps/admin-app/vite.config.mts` — test name
+- `apps/admin-app/src/index.html` — title and root selector
+- `apps/admin-app-e2e/project.json` — project name and implicit dependency
+- `apps/admin-app-e2e/package.json` — package and nx name
+- `apps/admin-app-e2e/playwright.config.ts` — serve command
+- `apps/shell/module-federation.config.ts` — remote name
+- `apps/shell/webpack.prod.config.ts` — remote tuple
+- `apps/shell/src/app/app.routes.ts` — import path
+- `apps/shell/project.json` — build-all command
+- `tsconfig.base.json` — path alias
+- `Containerfile.nginx` — build projects list
+
+---
+
+## Step 88: Fix — ory-kratos-init container restart loop
+
+**Root cause:** The `ory-kratos-init` container runs as a sidecar (not a Kubernetes init container) because it needs Kratos to be serving before it can seed users via the admin API. Once `init-users.sh` finishes creating identities, the container exits with code 0. Podman's pod-level restart policy then restarts the exited container, causing a restart loop.
+
+**Fix:** Added `exec sleep infinity` at the end of `init-users.sh` so the container stays alive after seeding completes.
+
+**Files changed:**
+- `apps/ory/init-users.sh` — added `exec sleep infinity` after user creation
+
+---
+
+## Step 89: Fix — Add missing weather-api:podman-build dependency to shell kube-up
+
+**Root cause:** The shell `kube-up` target deploys `k8s/apps-pod.yaml` which references `localhost/weather-api:latest`, but the target's `dependsOn` did not include `weather-api:podman-build`. This caused `podman play kube` to fail when the weather-api image had not been built beforehand.
+
+**Fix:** Added `weather-api:podman-build` to the `dependsOn` array of the shell `kube-up` target.
+
+**Files changed:**
+- `apps/shell/project.json` — added `weather-api:podman-build` to `kube-up.dependsOn`
+
+---
+
+## Step 90: Fix — Admin dashboard tiles (Swagger, Kratos, Grafana, Traefik)
+
+**Issues:**
+1. Weather API Swagger link pointed to wrong port (5220) and Swagger/Scalar was dev-only, so it returned nothing in production.
+2. Ory Kratos Admin link returned raw JSON — not an admin UI — and lacked context.
+3. Ory Kratos Health was a plain link; user wanted a status badge instead.
+4. Grafana Dashboard tile didn't show login credentials (admin/admin).
+5. Traefik Dashboard link (port 8081) didn't work because the Traefik API/dashboard was not enabled.
+
+**Fixes:**
+- **Weather API**: Enabled `MapOpenApi()` and `MapScalarApiReference()` in all environments (removed dev-only guard). Updated link to `http://localhost:5221/scalar/v1`.
+- **Ory Kratos**: Removed separate Health link. Added an inline health status badge to the Kratos Admin API tile that fetches `/health/alive` on load and shows Healthy/Down.
+- **Grafana**: Added credentials display (`admin` / `admin`) to the Grafana tile.
+- **Traefik**: Added `traefik` entrypoint on port 8081 and enabled `api.dashboard` + `api.insecure` in `traefik.yml`. Exposed port 8081 in `apps-pod.yaml`.
+- **Admin component**: Added `HttpClient` injection, `OnInit` health check, `NgClass` for badge styling, and credential display. Updated tests with `provideHttpClient`/`provideHttpClientTesting`.
+
+**Files changed:**
+- `apps/weather-api/Program.cs` — removed dev-only guard around OpenAPI/Scalar
+- `traefik/traefik.yml` — added `traefik` entrypoint (8081) and `api.dashboard`/`api.insecure`
+- `k8s/apps-pod.yaml` — exposed container port 8081 for Traefik dashboard
+- `apps/admin-app/src/app/remote-entry/entry.ts` — rewrote tiles, added health badge and credentials
+- `apps/admin-app/src/app/remote-entry/entry.spec.ts` — updated tests for new tile structure
+- `apps/admin-app/src/app/app.config.ts` — added `provideHttpClient()`
+
+---
+
+## Step 91: Fix — Shell unit test coverage below 80% threshold
+
+**Root cause:** The shell app's `auth.guard.ts` only had tests for `adminAuthGuard`; `weatherEditAuthGuard` was completely untested. In `auth.service.ts`, the methods `getSession()`, `initiateLogin()`, `logout()`, and `getLoginFlow()` had no test coverage. Overall coverage was ~58% lines, ~37% functions — well below the 80% threshold.
+
+**Fix:** Added tests for `weatherEditAuthGuard` (login redirect, unauthorized redirect, allow access). Rewrote `auth.service.spec.ts` to use `HttpTestingController` and added tests for `getSession()` (success + error), `initiateLogin()` (window.location redirect), `logout()` (success + error), and `getLoginFlow()` (success + error). Coverage is now 100% across all metrics.
+
+**Files changed:**
+- `apps/shell/src/app/auth/auth.guard.spec.ts` — added `weatherEditAuthGuard` describe block with 3 tests
+- `apps/shell/src/app/auth/auth.service.spec.ts` — switched to `HttpTestingController`, added tests for `getSession`, `initiateLogin`, `logout`, `getLoginFlow`
+
+---
+
+## Step 92: Feat — Add Ory Kratos identity management page in admin-app
+
+**What:** Replaced the raw Kratos Admin API JSON link on the admin dashboard with an in-app identity management page at `/admin-app/kratos`. The new page provides a full CRUD interface for Ory Kratos identities.
+
+**Features:**
+- **List identities** — table showing email, role, state, and creation date, fetched from `GET /admin/identities`
+- **Create identity** — form with email, password, and role (admin / weather_admin / none), calls `POST /admin/identities`
+- **Edit role** — inline role dropdown per row, calls `PUT /admin/identities/:id`
+- **Delete identity** — per-row delete button, calls `DELETE /admin/identities/:id`
+- **Health badge** — checks `GET /health/alive` on load and displays Healthy/Down status
+- **Back to Dashboard** link via Angular routerLink
+
+**Dashboard tile change:** The "Ory Kratos Admin" tile now uses an Angular `routerLink` to `/admin-app/kratos` instead of an external `href` to `http://localhost:4434/admin/identities`. The health badge remains on the dashboard tile.
+
+**Tests:** 37 admin-app tests pass (13 entry, 18 component, 6 service). Coverage: 97.72% statements, 87.5% branches, 94.28% functions, 97.59% lines.
+
+**Files changed:**
+- `apps/admin-app/src/app/kratos-admin/kratos-admin.service.ts` — new service wrapping Kratos Admin API (list, get, create, update, delete, health)
+- `apps/admin-app/src/app/kratos-admin/kratos-admin.component.ts` — new standalone component with identity table, create form, inline role editing, delete, health badge
+- `apps/admin-app/src/app/kratos-admin/kratos-admin.service.spec.ts` — 6 unit tests for the service
+- `apps/admin-app/src/app/kratos-admin/kratos-admin.component.spec.ts` — 18 unit tests for the component
+- `apps/admin-app/src/app/remote-entry/entry.routes.ts` — added `kratos` child route
+- `apps/admin-app/src/app/remote-entry/entry.ts` — changed Kratos tile from external `url` to internal `routerLink`, added `RouterLink` import, updated template to conditionally render `<a routerLink>` vs `<a href>`
+- `apps/admin-app/src/app/remote-entry/entry.spec.ts` — updated tests for routerLink tile, added `provideRouter`
+
+---
+
+## Step 93: Fix — Add image prune and podman-build dependency to shell kube-up
+
+**What:** The shell `podman-build` target was hitting "no space left on device" errors because old images accumulated. The `kube-up` target also didn't depend on `podman-build`, so the shell container image could be stale.
+
+**Changes:**
+- `apps/shell/project.json` — changed `podman-build` from single `command` to `commands` array, adding `podman image prune -af` before the build to reclaim disk space; added `"podman-build"` to `kube-up` `dependsOn` so the shell image is always rebuilt before starting pods
+
+**Files changed:**
+- `apps/shell/project.json`
+
+---
+
+## Step 94: Fix — CORS errors on Kratos admin API calls from admin-app
+
+**Root cause:** The admin-app's `KratosAdminService` called `http://localhost:4434` directly from the browser. Since the app is served from `https://localhost:8443`, the browser blocked these cross-origin requests. The Kratos admin API has no CORS configuration, and Traefik had no route to proxy admin API traffic.
+
+**Fix:** Proxy the Kratos admin API through Traefik at `/.ory/kratos/admin/`, matching the existing pattern for the public API. Updated the admin-app service to use the relative proxied path instead of the hardcoded localhost URL.
+
+**Changes:**
+- `traefik/traefik-dynamic.yml` — added `kratos-admin-router` (priority 31, path prefix `/.ory/kratos/admin`), `kratos-admin` service (pointing to `host.containers.internal:4434`), and `strip-ory-admin-prefix` middleware
+- `apps/admin-app/src/app/kratos-admin/kratos-admin.service.ts` — changed `KRATOS_ADMIN_URL` from `http://localhost:4434` to `/.ory/kratos/admin`
+- `apps/shell/project.json` — added `-f` flag to `podman image prune -a` to prevent interactive prompt hang
+- `README.md` — added admin-app to architecture diagram, Traefik routes, nginx routes, and service URL table
+
+---
+
+## Step 95: Fix — CORS error on admin dashboard health badge
+
+**Root cause:** The admin dashboard entry component (`remote-entry/entry.ts`) had the Kratos health badge endpoint hardcoded to `http://localhost:4434/health/alive`. Since the page is served from `https://localhost:8443`, the browser blocked this cross-origin request. The Traefik proxy at `/.ory/kratos/admin/` was already available but not being used here.
+
+**Fix:** Changed the health badge endpoint from the direct `http://localhost:4434/health/alive` URL to the proxied `/.ory/kratos/admin/health/alive` path, matching how the `KratosAdminService` already makes its calls. Also fixed the test files whose `ADMIN_URL` constants still referenced the old `http://localhost:4434` URL.
+
+**Files changed:**
+- `apps/admin-app/src/app/remote-entry/entry.ts` — health badge endpoint now uses proxied path
+- `apps/admin-app/src/app/kratos-admin/kratos-admin.service.spec.ts` — updated `ADMIN_URL` constant to `/.ory/kratos/admin`
+- `apps/admin-app/src/app/kratos-admin/kratos-admin.component.spec.ts` — updated `ADMIN_URL` constant to `/.ory/kratos/admin`
+
+**Files changed:**
+- `traefik/traefik-dynamic.yml`
+- `apps/admin-app/src/app/kratos-admin/kratos-admin.service.ts`
+- `apps/shell/project.json`
+- `README.md`
+
+---
+
+## Step 96: Fix — Identities section stuck on Loading in Module Federation
+
+**Root cause:** The `KratosAdminComponent` used plain class properties (`loading = false`, `identities: KratosIdentity[] = []`, etc.) for template-bound state. In the Module Federation setup, HTTP subscribe callbacks can run outside Angular's zone, so zone-based change detection never triggers — the template stays stale even after data arrives. The working `weather-app` remote avoided this by using Angular signals.
+
+**Fix:** Converted all template-bound reactive properties in `KratosAdminComponent` to Angular `signal()` values with `.set()` updates. Signals push change notifications directly, bypassing zone.js. Form-model properties (`newEmail`, `newPassword`, `newRole`, `editRole`) remain plain properties since they're bound via `ngModel`. Updated the component spec to read signal values as function calls.
+
+**Files changed:**
+- `apps/admin-app/src/app/kratos-admin/kratos-admin.component.ts` — properties → signals, template → signal reads
+- `apps/admin-app/src/app/kratos-admin/kratos-admin.component.spec.ts` — assertions updated for signal accessors
+
+---
+
+## Step 97: Fix — Remove expired Nx Cloud connection
+
+**Root cause:** `nx.json` contained an `nxCloudId` for an unclaimed workspace. After 3 days without claiming, Nx Cloud returns a 401 error on every `nx` command.
+
+**Fix:** Removed the `nxCloudId` property from `nx.json`. No `nx-cloud` package was installed, so no dependency removal was needed.
+
+**Files changed:**
+- `nx.json` — removed `nxCloudId` line
+
+---
+
+## Step 98: Fix — tsconfig non-relative path error in admin-app and weather-app
+
+**Root cause:** `tsconfig.base.json` defined `paths` entries (e.g., `"weather-app/Routes"`, `"admin-app/Routes"`) but did not set `baseUrl`. TypeScript requires `baseUrl` to resolve non-relative path mappings.
+
+**Fix:** Added `"baseUrl": "."` to `tsconfig.base.json` so all path mappings resolve relative to the workspace root.
+
+**Files changed:**
+- `tsconfig.base.json` — added `"baseUrl": "."`
+
+---
+
+## Step 99: Feat — Full observability pipeline with logs, metrics, and system health dashboard
+
+**What:** Ship all logs to Loki, all metrics to Prometheus, and provide a Grafana dashboard covering system health, running pods, container count/health, top IP+User-Agent combinations, and error counts.
+
+**Changes:**
+
+1. **Traefik access logs + Prometheus metrics** — enabled JSON access logs at `/var/log/traefik/access.log` (captures client IP, User-Agent, status, route, service) and Prometheus metrics endpoint on the Traefik entrypoint (`:8081/metrics`) with entrypoint, router, and service labels.
+
+2. **nginx JSON access logs** — added `json_combined` log format to `nginx.conf` outputting structured JSON to `/var/log/nginx/access.log` (remote_addr, request, status, user_agent, request_time).
+
+3. **Prometheus scrape targets** — added `traefik` job scraping `host.containers.internal:8081/metrics` for Traefik request counts, error rates, and latency histograms.
+
+4. **Promtail log pipelines** — added two new scrape jobs: `traefik-access` (parses JSON access logs, extracts `status`, `method`, `service`, `router`, `client_ip` labels) and `nginx-access` (parses JSON access logs, extracts `status`, `remote_addr` labels).
+
+5. **Shared log volumes** — apps pod mounts `hostPath` volumes for `/var/log/traefik` and `/var/log/nginx`; observability pod mounts the same paths read-only so Promtail can tail them.
+
+6. **System Health dashboard** (`system-health.json`) with 12 panels:
+   - System Health % (stat — % of scrape targets UP)
+   - Running Pods (stat — count of targets with `up == 1`)
+   - Total Containers (stat — total scrape target count)
+   - Containers Down (stat — `up == 0` count, red when > 0)
+   - Container Health table (per-target UP/DOWN with color mapping)
+   - HTTP Request Rate by Service (timeseries from Traefik metrics)
+   - HTTP Error Rate 4xx+5xx (bar chart from Traefik metrics)
+   - Total 5xx / 4xx / All Requests (stat panels, 1h window)
+   - Top IP + User-Agent table (Loki LogQL `topk` over `traefik-access` logs)
+   - Recent Error Logs (Loki log panel filtering `status >= 400`)
+
+**Files changed:**
+- `traefik/traefik.yml` — added `accessLog` and `metrics.prometheus` sections
+- `traefik/Containerfile` — create `/var/log/traefik` directory
+- `nginx/nginx.conf` — added `json_combined` log format and access_log directive
+- `apps/observability/prometheus/prometheus.yml` — added `traefik` scrape job
+- `apps/observability/promtail/promtail.yml` — added `traefik-access` and `nginx-access` scrape jobs
+- `k8s/apps-pod.yaml` — added hostPath volume mounts for traefik and nginx logs
+- `k8s/observability-pod.yaml` — added read-only volume mounts for traefik and nginx logs
+- `apps/observability/grafana/provisioning/dashboards/system-health.json` — new dashboard
+
+---
+
+## Step 100: Feat — Grafana SSO via Ory Kratos (no password login)
+
+**What:** Grafana is now accessible at `https://localhost:8443/grafana/` with automatic SSO through the existing Ory Kratos authentication. Authenticated users are signed in automatically; unauthenticated users are redirected to the Kratos login page.
+
+**Architecture:**
+1. Traefik routes `/grafana` requests through a `forwardAuth` middleware
+2. The `auth-proxy` container (Python, port 4180) receives the forwarded request, reads the session cookie, and calls Kratos `/sessions/whoami`
+3. If valid → returns `200` with `X-Webauth-User: <email>` header; Traefik copies this to the proxied request
+4. If invalid → returns `302` redirect to Kratos login with `return_to` pointing back to Grafana
+5. Grafana's `auth.proxy` trusts the `X-Webauth-User` header and auto-signs-up/logs in the user
+6. Password login form and sign-out menu are disabled since auth is handled externally
+
+**Files created:**
+- `apps/observability/auth-proxy/auth-proxy.py` — lightweight HTTP server that validates Kratos sessions
+- `apps/observability/auth-proxy/Containerfile` — Python 3.13 alpine image
+
+**Files changed:**
+- `traefik/traefik-dynamic.yml` — added `grafana-router` (priority 25), `grafana` service, `grafana-auth` forwardAuth middleware, `strip-grafana-prefix` middleware
+- `k8s/observability-pod.yaml` — added `auth-proxy` container (port 4180), Grafana env vars for `auth.proxy` + sub-path serving
+- `apps/observability/project.json` — added `podman-build-auth-proxy` target and dependency
+- `apps/ory/kratos.yml` — added `https://localhost:8443/grafana` to `allowed_return_urls`
+
+---
+
+## Step 101: Fix — Resolve kube-up failures from missing host volumes and corrupted container images
+
+**Root cause:** `podman play kube` fails with "no such file or directory" when hostPath volumes (`/var/log/traefik`, `/var/log/nginx`) don't exist inside the Podman VM. Separately, CI builds fail when Podman's local image store has corrupted base images (e.g. `node:20-alpine` with missing layer blobs).
+
+**Fix:**
+1. Added `podman machine ssh 'sudo mkdir -p /var/log/traefik /var/log/nginx'` as the first command in the `kube-up` target so required host directories are always created before pod startup.
+2. Added a `.containerignore` file to exclude `node_modules`, `dist`, `.git`, `.nx`, and `tmp` from container builds — prevents OOM errors during `COPY . .` in `Containerfile.nginx`.
+3. Added a "Remove potentially corrupted base images" step to both CI workflows that force-removes base images before builds, ensuring clean re-pulls.
+4. Added Traefik health e2e tests to `shell-e2e` that verify the Traefik dashboard API and router configuration are operational.
+
+**Files created:**
+- `.containerignore` — excludes heavy/unnecessary directories from container build context
+
+**Files changed:**
+- `apps/shell/project.json` — `kube-up` target now creates hostPath directories inside Podman VM before starting pods
+- `apps/shell-e2e/src/eks.spec.ts` — added "Traefik reverse proxy – health" test suite (dashboard API + routers)
+- `.github/workflows/eks-e2e.yml` — added pre-build step to remove potentially corrupted base images
+- `.github/workflows/eks-e2e-full.yml` — same pre-build step added
+
+---
+
+## Step 102: Fix — Reset Podman storage, create nginx log dir, and verify images before kube-up
+
+**Root cause:** Three separate issues: (1) `podman image rm` only removes image references but leaves corrupted layer blobs behind, so CI builds still fail on re-pull; (2) nginx container crashes because `/var/log/nginx` doesn't exist with correct ownership; (3) `kube-up` fails silently when required container images haven't been built yet.
+
+**Fix:**
+1. Replaced `podman image rm -f` with `podman system reset --force` in both CI workflows to fully wipe Podman's storage (including broken layers) before rebuilding.
+2. Added `RUN mkdir -p /var/log/nginx && chown nginx:nginx /var/log/nginx` to `Containerfile.nginx` so the log directory exists with correct ownership at runtime.
+3. Added an image-existence pre-check loop to the `kube-up` target that verifies all six required images (`postgres`, `ory-kratos`, `ory-kratos-init`, `traefik`, `weather-api`, `claude-hello-world`) exist before starting pods, failing fast with a clear error if any are missing.
+4. Updated `kube-up` to `chmod 777` the host log directories so containers can write regardless of UID.
+
+**Files changed:**
+- `.github/workflows/eks-e2e.yml` — replaced `podman image rm` with `podman system reset --force`
+- `.github/workflows/eks-e2e-full.yml` — same storage reset change
+- `Containerfile.nginx` — added nginx log directory creation with correct ownership
+- `apps/shell/project.json` — `kube-up` target now verifies all required images exist and sets log directory permissions
+
+---
+
+## Step 103: Fix — Remove `podman image prune -af` from shell:podman-build to prevent parallel build corruption
+
+**Root cause:** `shell:podman-build` ran `podman image prune -af` before building the nginx image. Since `kube-up` depends on all podman-build targets, Nx runs them in parallel. The prune in one build deletes images and layers that other concurrent builds (ory, postgres, traefik, weather-api) have just created, corrupting Podman's storage and causing "image not known" errors.
+
+**Fix:** Removed `podman image prune -af` from the `shell:podman-build` target. Storage cleanup is already handled by `podman system reset --force` in the CI workflow before any builds start, so the per-build prune was redundant and harmful.
+
+**Files changed:**
+- `apps/shell/project.json` — removed `podman image prune -af` from `podman-build` commands
+
+---
+
+## Step 104: Fix — Make kube-up log directory creation work on both macOS and Linux CI
+
+**Root cause:** The `kube-up` target used `podman machine ssh` to create host log directories (`/var/log/traefik`, `/var/log/nginx`). This only works on macOS/Windows where Podman runs inside a VM. On GitHub Actions Linux runners, Podman runs natively without a VM, so `podman machine ssh` fails with "VM does not exist".
+
+**Fix:** Replaced the unconditional `podman machine ssh` call with a conditional: if `podman machine inspect` succeeds (macOS/Windows), use `podman machine ssh`; otherwise (Linux/CI), create the directories directly with `sudo mkdir`.
+
+**Files changed:**
+- `apps/shell/project.json` — `kube-up` log directory command now detects whether a Podman VM exists and falls back to direct `mkdir` on Linux
+
+---
+
+## Step 105: Fix — Add SELinux relabeling for hostPath log volumes
+
+**Root cause:** The `claude-hello-world` pod's nginx container crashed in a loop with `open() "/var/log/nginx/access.log" failed (13: Permission denied)`. The hostPath volumes (`/var/log/traefik`, `/var/log/nginx`) had `chmod 777` permissions, but SELinux on the Podman VM (Fedora CoreOS) was `Enforcing` with the directories labeled `var_log_t`. Containers run under the `container_t` domain and can only write to paths labeled `container_file_t`, so SELinux denied all writes regardless of Unix permissions.
+
+**Fix:** Added `sudo chcon -Rt container_file_t /var/log/traefik /var/log/nginx` to the `kube-up` directory-creation step, for both the Podman VM (macOS) and native Linux paths. This relabels the directories so containers are allowed to write log files.
+
+**Files changed:**
+- `apps/shell/project.json` — `kube-up` log directory command now applies `container_file_t` SELinux label after creating directories
+
+---
+
+## Step 106: Fix — Escape JMESPath hyphen in Promtail JSON stage expression
+
+**Root cause:** The `observability-promtail` container was crash-looping with `invalid json stage config: could not compile JMES expression: SyntaxError: Unexpected token at the end of the expression: tNumber`. The Promtail config's Traefik access log pipeline had `user_agent: 'request_User-Agent'` — the hyphen in `User-Agent` was parsed by JMESPath as a subtraction operator, causing a syntax error.
+
+**Fix:** Wrapped the field name in JMESPath double-quote syntax: `'"request_User-Agent"'`. This tells JMESPath to treat the entire string (including the hyphen) as a single key identifier.
+
+**Files changed:**
+- `apps/observability/promtail/promtail.yml` — quoted `request_User-Agent` as a JMESPath identifier
+
+---
+
+## Step 107: Fix — Remove strip-grafana-prefix middleware to fix ERR_TOO_MANY_REDIRECTS
+
+**Root cause:** Grafana was configured with `GF_SERVER_SERVE_FROM_SUB_PATH=true` and `GF_SERVER_ROOT_URL=https://localhost:8443/grafana/`, which means Grafana expects to receive requests with the `/grafana` prefix and handles the sub-path routing internally. However, Traefik's `grafana-router` applied a `strip-grafana-prefix` middleware that removed `/grafana` before forwarding. Grafana then saw a bare `/` path, and since it was configured to serve from `/grafana/`, it redirected back to `/grafana/` — which Traefik stripped again, creating an infinite redirect loop.
+
+**Fix:** Removed `strip-grafana-prefix` from the `grafana-router` middleware chain. Traefik now forwards the full `/grafana/...` path to Grafana, which handles it correctly via `serve_from_sub_path`.
+
+**Files changed:**
+- `traefik/traefik-dynamic.yml` — removed `strip-grafana-prefix` from `grafana-router` middlewares
+
+---
+
+## Step 108: Fix — Use ThreadingHTTPServer in auth-proxy to handle concurrent Grafana requests
+
+**Root cause:** Grafana loaded its initial HTML and a few assets successfully, but then returned HTTP 500 for the majority of JS bundles, fonts, and plugin modules. Traefik's access log showed `OriginStatus=0` (backend never reached) with short durations (~50-70ms, not timeouts). The `grafana-auth` forwardAuth middleware sends every Grafana request to the auth-proxy at port 4180 first. The auth-proxy used Python's `HTTPServer`, which is single-threaded and can only process one request at a time. When the browser fired 30+ concurrent requests to load Grafana's assets, the auth-proxy's listen backlog filled up, connections were dropped, and Traefik returned 500 for those failed forwardAuth checks.
+
+**Fix:** Replaced `HTTPServer` with `ThreadingHTTPServer` (available since Python 3.7). This spawns a new thread per incoming request, allowing the auth-proxy to handle all concurrent forwardAuth checks from Traefik without dropping connections.
+
+**Files changed:**
+- `apps/observability/auth-proxy/auth-proxy.py` — switched from `HTTPServer` to `ThreadingHTTPServer`
+
+---
+
+## Step 109: Fix — Add explicit UIDs to Grafana provisioned datasources
+
+**Root cause:** The System Health dashboard showed "No data" for all panels despite Prometheus scraping all targets successfully. The dashboard JSON referenced datasources by `uid: 'prometheus'` and `uid: 'loki'`, but the provisioning YAML files did not specify a `uid` field. Grafana auto-generated random UIDs (`PBFA97CFB590B2093`, `P8E80F9AEF21F6940`), which didn't match the dashboard references, so every panel query silently failed to find its datasource.
+
+**Fix:** Added `uid: prometheus` and `uid: loki` to the respective datasource provisioning files so the UIDs match the dashboard panel references.
+
+**Files changed:**
+- `apps/observability/grafana/provisioning/datasources/prometheus.yml` — added `uid: prometheus`
+- `apps/observability/grafana/provisioning/datasources/loki.yml` — added `uid: loki`
+
+---
+
+## Step 110: Fix — Recursive chmod on host log dirs to fix nginx crash in CI
+
+**Root cause:** The GitHub Actions e2e smoke tests timed out (exit 124) because the `claude-hello-world-nginx` container crashed immediately on startup with `open() "/var/log/nginx/access.log" failed (13: Permission denied)`. Ubuntu runners have nginx pre-installed, so `/var/log/nginx/` already contains `access.log` and `error.log` owned by `root:adm` (mode 640). The kube-up command ran `sudo chmod 777 /var/log/nginx` which set the **directory** permissions, but the pre-existing **files** inside remained root-owned and unwritable. When podman mounted this hostPath volume into the container, the nginx process (uid 101) couldn't open the log files. With nginx dead, Traefik's backend returned 502 Bad Gateway, and the health-check loop timed out.
+
+**Fix:** Changed `chmod 777` to `chmod -R 777` (recursive) in both the podman-machine and bare-metal branches of the kube-up target so pre-existing log files inside the directories are also made writable.
+
+**Files changed:**
+- `apps/shell/project.json` — added `-R` flag to both `chmod 777` commands in the kube-up target
+
+---
+
+## Step 111: Docs — Update README.md and RUN.md with observability stack documentation
+
+**What:** README.md and RUN.md were missing documentation for the full observability pipeline added in steps 76–109: Traefik/nginx access log collection, the System Health dashboard, Grafana SSO via Ory Kratos (auth-proxy + forwardAuth), and the auth-proxy container image.
+
+**Changes:**
+- README.md: added Observability section covering components, scraped metrics, collected logs, dashboards, and Grafana SSO architecture; added observability to Architecture diagram; added Grafana/Prometheus/Loki URLs to the service table
+- RUN.md: expanded the Observability section with auth-proxy image, Traefik metrics scrape target, access log collection (traefik + nginx), System Health dashboard details, Grafana SSO flow, datasource UIDs, and prerequisite note about apps pod
+
+**Files changed:**
+- `README.md`
+- `RUN.md`
+
+---
+
+## Step 112: Feature — Add Kafka CDC pod with Debezium, Kafka UI, and slot-guard
+
+**What:** Added a lightweight Kafka pod for Change Data Capture (CDC) on the weather-api PostgreSQL database. Kafka runs in KRaft mode (no Zookeeper). Debezium Connect captures row-level changes from Postgres and publishes to Kafka topics. Kafka UI provides a web interface for browsing topics and managing connectors. A slot-guard sidecar monitors replication slot lag and drops stale slots as a safety net against WAL disk exhaustion.
+
+**Changes:**
+- Enabled logical replication in Postgres (`wal_level=logical`, `max_replication_slots=4`, `max_wal_senders=4`)
+- Created `apps/kafka/` project with Nx build targets for debezium-connect, debezium-init, and slot-guard images
+- Debezium Connect image extends `quay.io/debezium/connect:2.7` with Prometheus JMX exporter agent for metrics on port 9404
+- debezium-init sidecar waits for Connect REST API, then registers the Postgres CDC connector targeting `public.*` tables
+- slot-guard sidecar periodically checks `pg_replication_slots` and drops inactive Debezium slots exceeding a 5 GB lag threshold
+- Kafka UI (`provectus/kafka-ui`) configured with Kafka Connect integration for connector management
+- Added Traefik route `/kafka-ui` → Kafka UI at `host.containers.internal:8090`
+- Kafka pod runs independently (like observability): `npx nx run kafka:kube-up` / `npx nx run kafka:kube-down`
+
+**Files changed:**
+- `apps/postgres/Containerfile` — added CMD with `wal_level=logical`
+- `apps/kafka/project.json` (new)
+- `apps/kafka/debezium/Containerfile` (new)
+- `apps/kafka/debezium/jmx-exporter-config.yml` (new)
+- `apps/kafka/debezium-init/Containerfile` (new)
+- `apps/kafka/debezium-init/register-connector.sh` (new)
+- `apps/kafka/slot-guard/Containerfile` (new)
+- `apps/kafka/slot-guard/slot-guard.sh` (new)
+- `k8s/kafka-pod.yaml` (new)
+- `traefik/traefik-dynamic.yml` — added kafka-ui router and service
+
+---
+
+## Step 113: Feature — Add Kafka/CDC observability (postgres-exporter, Debezium scrape, dashboard)
+
+**What:** Extended the observability stack to monitor the Kafka CDC pipeline. postgres-exporter scrapes replication slot metrics from Postgres. Debezium JMX metrics are scraped from the kafka pod. A new Grafana dashboard visualizes replication slot lag, Debezium time lag, event throughput, queue capacity, and connector task status.
+
+**Changes:**
+- Added `postgres-exporter` container (port 9187) to the observability pod
+- Added `postgres` and `debezium` scrape jobs to Prometheus config
+- Created `kafka-cdc.json` Grafana dashboard with PostgreSQL Replication, Debezium CDC, and Kafka Connect panels
+
+**Files changed:**
+- `k8s/observability-pod.yaml`
+- `apps/observability/prometheus/prometheus.yml`
+- `apps/observability/grafana/provisioning/dashboards/kafka-cdc.json` (new)
+
+---
+
+## Step 114: Docs — Update README.md and RUN.md with Kafka CDC infrastructure
+
+**Root cause:** Steps 112 and 113 added the Kafka pod and CDC observability but left README.md and RUN.md without any documentation of the new infrastructure.
+
+**Fix:** Updated both docs to cover the Kafka pod and its components, the three-layer monitoring strategy, alerting thresholds, and all new service URLs.
+
+**Files changed:**
+- `README.md` — added Kafka CDC entry to architecture diagram, postgres-exporter to observability components table, new `postgres` and `debezium` Prometheus scrape targets, "Kafka & CDC" Grafana dashboard to dashboards list, new "Kafka & CDC" section (components, CDC flow, monitoring, alerting), kafka build command in Build section, and four new service URL entries
+- `RUN.md` — added "Kafka & CDC" section with build instructions, startup prerequisites, what gets captured, service URLs, three-layer monitoring explanation, alerting thresholds, and stop/resume behavior
+
+---
+
+## Step 115: Feature — Add Kafka UI link to admin dashboard
+
+**What:** Added a Kafka UI tile to the admin-app dashboard so admins can navigate to the Kafka topic browser and Debezium connector management directly from the admin page.
+
+**Files changed:**
+- `apps/admin-app/src/app/remote-entry/entry.ts` — added Kafka UI entry to ADMIN_LINKS under the Infrastructure category
+
+---
+
+## Step 116: Feature — Add Confluent Schema Registry and Avro serialization
+
+**What:** Replaced Debezium's default JSON converter with Avro serialization backed by Confluent Schema Registry. CDC events on Kafka topics are now Avro-encoded with schemas stored in the registry, enabling schema evolution and compact wire format.
+
+**Changes:**
+- Added `confluentinc/cp-schema-registry:7.7.1` container to the kafka pod (container port 8081, host port 8085 to avoid conflict with Traefik admin on 8081)
+- Extended Debezium Containerfile with a multi-stage build that copies the Confluent Avro converter JARs from `confluentinc/cp-kafka-connect:7.7.1` into `/kafka/connect/avro-converter/`
+- Configured Debezium Connect to use `AvroConverter` for both key and value serialization, pointing at the co-located Schema Registry (`http://localhost:8081`)
+- Added `KAFKA_CLUSTERS_0_SCHEMAREGISTRY` to Kafka UI so it can browse registered Avro schemas
+
+**Files changed:**
+- `apps/kafka/debezium/Containerfile` — added multi-stage build with Confluent Avro converter
+- `k8s/kafka-pod.yaml` — added schema-registry container; added Avro converter env vars to debezium-connect; added schema registry URL to kafka-ui
+
+---
+
+## Step 117: Fix — Correct Avro converter path, Kafka image tag, and Kafka UI image
+
+**Root cause:** Three issues prevented `kube-up kafka` from starting:
+1. The Debezium Containerfile copied Avro converter JARs from `/usr/share/java/kafka-connect-avro-converter/` which doesn't exist in the Confluent image — the actual path is `/usr/share/java/kafka-serde-tools/`
+2. The Kafka image tag `apache/kafka:3.9` doesn't exist — the correct tag is `apache/kafka:3.9.0`
+3. The `provectus/kafka-ui:latest` image was deprecated and returns "access denied" — the actively maintained fork is `kafbat/kafka-ui:latest`
+
+**Fix:**
+- Changed COPY source path to `/usr/share/java/kafka-serde-tools/`
+- Changed Kafka image tag to `3.9.0`
+- Replaced `provectus/kafka-ui` with `kafbat/kafka-ui` in pod manifest and README
+
+**Files changed:**
+- `apps/kafka/debezium/Containerfile` — fixed COPY source path
+- `k8s/kafka-pod.yaml` — fixed Kafka image tag and Kafka UI image
+- `README.md` — updated Kafka UI image references
+
+---
+
+## Step 118: Fix — Add JVM heap limits to Kafka pod containers
+
+**Root cause:** The four JVM containers in the kafka pod (Kafka, Schema Registry, Debezium Connect, Kafka UI) each default to grabbing ~25% of available memory, starving the existing services (Traefik, nginx, weather-api) and causing slow responses.
+
+**Fix:** Added explicit heap limits: Kafka 256m, Schema Registry 128m, Debezium Connect 256m, Kafka UI 128m — capping total JVM usage at ~768 MB.
+
+**Files changed:**
+- `k8s/kafka-pod.yaml` — added KAFKA_HEAP_OPTS, SCHEMA_REGISTRY_HEAP_OPTS, HEAP_OPTS, JAVA_OPTS
+
+---
+
+## Step 119: Fix — Add schema.registry.url to connector config for Avro serialization
+
+**Root cause:** Debezium connector task failed with `ConfigException: Missing required configuration "schema.registry.url"`. The Avro converter was configured at the Connect worker level but the connector-level config also requires the Schema Registry URL.
+
+**Fix:** Added `key.converter`, `key.converter.schema.registry.url`, `value.converter`, and `value.converter.schema.registry.url` to the connector registration payload.
+
+**Files changed:**
+- `apps/kafka/debezium-init/register-connector.sh` — added Avro converter and schema registry URL to connector config
+
+---
+
+## Step 120: Fix — Correct Grafana dashboard metrics to match actual JMX exporter output
+
+**Root cause:** The Kafka & CDC Grafana dashboard used metric names (`debezium_metrics_millisecondsbehindsource`, `kafka_connect_connector_status`) that don't exist. The JMX exporter's regex rules were too restrictive and didn't match Debezium's actual MBean names. With a catch-all rule, the real metrics are under `kafka_connect_source_task_metrics_*` and `kafka_connect_connector_task_metrics_*`.
+
+**Fix:**
+- Simplified JMX exporter config to a catch-all pattern so all MBeans are exported
+- Rewrote the dashboard to use actual metric names: `source_record_write_total` (rate), `poll_batch_avg_time_ms`, `source_record_active_count`, `running_ratio`, `connector_count`, `connector_failed_task_count`
+
+**Files changed:**
+- `apps/kafka/debezium/jmx-exporter-config.yml` — replaced restrictive regex rules with catch-all
+- `apps/observability/grafana/provisioning/dashboards/kafka-cdc.json` — rewrote all Debezium CDC and Kafka Connect panels with correct metric names
+
+---
+
+## Step 121: Add — Shared UI Library with PrimeNG for Consistent Design
+
+Created a shared Angular UI library (`@org/ui`) at `libs/shared/ui/` using PrimeNG with the Aura theme preset for a professional, minimal design. Integrated the library into all four Angular applications (shell, weather-app, weatheredit-app, admin-app) for a consistent look and feel.
+
+**What was added:**
+
+1. **Shared UI library** (`libs/shared/ui/`) with reusable components:
+   - `LayoutComponent` — app shell with collapsible sidebar navigation and router outlet
+   - `PageHeaderComponent` — consistent page titles with subtitle and action slot
+   - `CardComponent` — minimal card container with subtle shadow and border
+   - `StatusBadgeComponent` — color-coded badges for temperature ranges and status indicators
+   - `provideSharedUI()` — provider function that configures PrimeNG with the Aura theme
+   - Shared global styles for typography, reset, and page containers
+
+2. **Shell app** redesigned with sidebar navigation replacing the plain `<ul>` menu, and a new dashboard home page showing user session info and quick-link cards to each app.
+
+3. **All remote apps** (weather-app, weatheredit-app, admin-app) updated to import and use shared `PageHeaderComponent`, `CardComponent`, and `StatusBadgeComponent` for consistent styling. Inline SVG icons replaced with PrimeIcons (`pi pi-*`).
+
+4. **Dependencies installed:** `primeng`, `@primeng/themes`, `primeicons`, `@angular/animations`
+
+5. **TypeScript configuration** updated: all app `tsconfig.app.json` files include the shared library sources and use the workspace root as `baseUrl` so the `@org/ui` path alias resolves correctly in Module Federation remote builds.
+
+**Files changed:**
+- `libs/shared/ui/` — new shared UI library (layout, page-header, card, status-badge, theme-provider, shared-styles)
+- `libs/shared/ui/src/index.ts` — barrel export for all shared components and providers
+- `apps/shell/src/app/app.ts` — replaced NxWelcome + router with LayoutComponent shell
+- `apps/shell/src/app/app.config.ts` — added provideSharedUI() providers
+- `apps/shell/src/app/app.routes.ts` — replaced NxWelcome with HomeComponent
+- `apps/shell/src/app/home/home.component.ts` — new dashboard home page
+- `apps/shell/project.json` — added primeicons and shared-styles to global styles array
+- `apps/weather-app/src/app/remote-entry/entry.ts` — uses shared PageHeader, Card, StatusBadge
+- `apps/weatheredit-app/src/app/remote-entry/entry.ts` — uses shared components, PrimeIcons
+- `apps/weatheredit-app/src/app/remote-entry/entry.css` — updated to match shared design system
+- `apps/admin-app/src/app/remote-entry/entry.ts` — uses shared Card, PageHeader, StatusBadge
+- `apps/*/tsconfig.app.json` — added shared library includes and fixed baseUrl
+- `tsconfig.base.json` — added `@org/ui` path alias (auto-generated by nx)
+- `package.json` — added primeng, @primeng/themes, primeicons, @angular/animations
+
+
+---
+
+## Step 122: Fix — unit test failures after @org/ui shared library integration
+
+**Root cause:** After integrating the `@org/ui` shared library, three test suites broke:
+
+1. **shell** — `app.spec.ts` imported a deleted `./nx-welcome` component; the App component now uses `LayoutComponent` from `@org/ui`.
+2. **weather-app & weatheredit-app** — Vite could not resolve the `@org/ui` path alias because the vite configs lacked `resolve.alias`; tests also lacked `overrideComponent` to avoid JIT-compiling signal-input child components.
+3. **weatheredit-app** — `tempClass()` test expectations used `badge-*` prefixes but the implementation returns plain variants (`cold`, `cool`, etc.); the external `styleUrl` caused unresolvable resources in test mode.
+
+**Fix:**
+
+- Added `resolve.alias` for `@org/ui` in all three vite configs (`shell`, `weather-app`, `weatheredit-app`).
+- Rewrote `shell/app.spec.ts` to remove the deleted `NxWelcome` import and use `overrideComponent` to skip `@org/ui` child rendering.
+- Updated `weather-app/entry.spec.ts` to use `overrideComponent` (remove UI imports, add `CUSTOM_ELEMENTS_SCHEMA`) and fixed the loading text assertion (`Loading forecasts...` instead of `Loading...`) and temperature cell assertions (`5°` not `5`).
+- Updated `weatheredit-app/entry.spec.ts` with the same `overrideComponent` pattern and corrected `tempClass()` expectations to match implementation return values.
+- Converted `weatheredit-app` entry component from external `styleUrl: ./entry.css` to inline `styles` to avoid JIT resource resolution failures in tests.
+
+**Files changed:**
+- `apps/shell/vite.config.mts` — added `@org/ui` resolve alias
+- `apps/weather-app/vite.config.mts` — added `@org/ui` resolve alias
+- `apps/weatheredit-app/vite.config.mts` — added `@org/ui` resolve alias
+- `apps/shell/src/app/app.spec.ts` — rewrote to work with current App component
+- `apps/weather-app/src/app/remote-entry/entry.spec.ts` — added overrideComponent, fixed assertions
+- `apps/weatheredit-app/src/app/remote-entry/entry.spec.ts` — added overrideComponent, fixed tempClass expectations
+- `apps/weatheredit-app/src/app/remote-entry/entry.ts` — converted styleUrl to inline styles
+
+
+---
+
+## Step 123: Add — demo screenshots to README.md
+
+**What:** Added a "Demo" section to the README with screenshots of all four Angular apps: shell home dashboard, weather forecast table, forecast management CRUD, and admin dashboard.
+
+**How:** Created a Playwright-based screenshot script (`scripts/take-screenshots.mjs`) that builds and serves each Angular app with mocked API data, then captures 2x retina screenshots. The script handles Module Federation base href routing and mocks the weather API, Kratos session, and Kratos admin endpoints.
+
+**Files changed:**
+- `README.md` — added Demo section with four inline screenshot images
+- `docs/screenshots/shell-home.png` — shell app home dashboard screenshot
+- `docs/screenshots/weather-app.png` — weather forecast table screenshot
+- `docs/screenshots/weatheredit-app.png` — forecast CRUD management screenshot
+- `docs/screenshots/admin-app.png` — admin dashboard screenshot
+- `scripts/take-screenshots.mjs` — Playwright screenshot capture script
+
+
+---
+
+## Step 124: Fix — GitHub Actions CI warnings and lint errors
+
+**Root cause:** Two issues in the CI pipeline: (1) `actions/setup-dotnet@v4` runs on Node.js 20, which is deprecated on GitHub Actions runners (EOL April 2026). (2) The shell app's `home.component.ts` used a `(click)` handler on an `<a>` tag without keyboard event support, causing two accessibility lint errors (`click-events-have-key-events` and `interactive-supports-focus`).
+
+**Fix:** Updated `actions/setup-dotnet` from v4 to v5 (which uses Node.js 24) in both CI jobs. Replaced the imperative `(click)="navigate(link.route)"` with declarative `[routerLink]="link.route"` on the dashboard link cards, which natively provides keyboard accessibility. Removed the now-unused `Router` injection and `navigate()` method.
+
+**Files changed:**
+- `.github/workflows/ci.yml` — upgraded `actions/setup-dotnet` from v4 to v5
+- `apps/shell/src/app/home/home.component.ts` — replaced `(click)` with `[routerLink]`, removed unused `Router` import/injection
+
+
+---
+
+## Step 125: Fix — e2e tests to match current Dashboard UI
+
+**Root cause:** The e2e tests in `example.spec.ts` and `eks.spec.ts` were written for the original Nx welcome page (expecting `#welcome h1` with "Welcome shell" text and a `#hero` banner). The home page was redesigned to use a `PageHeaderComponent` with a "Dashboard" heading and "Welcome to the NxWeather application." subtitle, so these selectors and assertions no longer matched.
+
+**Fix:** Updated `example.spec.ts` to assert `h1` contains "Dashboard" instead of "Welcome". Updated `eks.spec.ts` home page tests to check for the `h1` "Dashboard" heading and `.page-subtitle` containing the welcome message, replacing the obsolete `#welcome` and `#hero` selectors.
+
+**Files changed:**
+- `apps/shell-e2e/src/example.spec.ts` — updated h1 assertion from "Welcome" to "Dashboard"
+- `apps/shell-e2e/src/eks.spec.ts` — rewrote home page tests to match Dashboard UI selectors
+
+
+---
+
+## Step 126: Fix — e2e test selector for weather-app heading
+
+**Root cause:** The `eks.spec.ts` e2e test for the weather-app MFE navigation used `page.locator('h2')` to find the "Weather Forecast" heading. However, the `PageHeaderComponent` renders the title in an `<h1>` element, not `<h2>`, causing the test to time out.
+
+**Fix:** Changed the locator from `h2` to `h1` in the weather-app navigation test.
+
+**Files changed:**
+- `apps/shell-e2e/src/eks.spec.ts` — updated heading locator from `h2` to `h1`
+
+## Step 127: Add — WeatherStream Angular app and Lightning Electron host
+
+Added two new applications to the workspace:
+
+**Root cause / motivation:** Need a real-time weather event streaming dashboard with native Kafka integration, leveraging Electron's Node.js runtime for direct Kafka consumer access.
+
+**What was built:**
+
+1. **weatherstream-app** (Angular) — Real-time weather event streaming dashboard
+   - Weather dashboard component with live event cards (temperature, humidity, wind, conditions)
+   - `KafkaStreamService` using Angular signals for reactive state management
+   - Electron IPC bridge integration — receives Kafka events from the main process
+   - Simulated event fallback when running standalone in the browser
+   - Dark-themed responsive UI with animated card grid
+   - Dev server on port 4203
+
+2. **lightning-app** (Electron) — Desktop host for weatherstream-app with native Kafka
+   - Main process: Kafka consumer via `kafkajs`, connects to configurable brokers/topic
+   - Preload script: `contextBridge`-based IPC API (`electronKafka`) with context isolation
+   - Loads weatherstream-app (dev server or production build)
+   - Environment-variable-driven configuration (KAFKA_BROKERS, KAFKA_TOPIC, KAFKA_GROUP_ID)
+   - Nx targets: `serve` (prod build), `serve-dev` (hot reload), `build-angular`, `package`
+
+**Dependencies added:** `electron`, `kafkajs`
+
+**Files changed:**
+- `apps/weatherstream-app/` — new Angular app (generated via `@nx/angular:application`)
+- `apps/weatherstream-app/src/app/services/kafka-stream.service.ts` — Kafka stream service with signals
+- `apps/weatherstream-app/src/app/weather-dashboard/` — dashboard component (ts, html, css)
+- `apps/lightning-app/project.json` — Nx project config with serve/serve-dev/package targets
+- `apps/lightning-app/src/main.js` — Electron main process with Kafka consumer
+- `apps/lightning-app/src/preload.js` — context-isolated IPC bridge
+- `apps/lightning-app/src/kafka-consumer.js` — KafkaWeatherConsumer EventEmitter wrapper
+- `package.json` — added electron and kafkajs dependencies
+- `README.md`, `RUN.md`, `SUMMARY.md` — updated documentation
+
+---
+
+## Step 128: Update — devops-sre-lean agent to reflect project architecture
+
+The generic DevOps/SRE agent definition was updated to accurately represent this project's specific infrastructure and tooling.
+
+**Root cause / motivation:** The agent referenced generic tools (Docker, docker-compose, pnpm) instead of the actual stack (Podman, `podman play kube` with K8s manifests, npm). It also lacked knowledge of the project's observability stack, Traefik routing, Ory Kratos auth, pod startup ordering, and Nx container lifecycle targets.
+
+**What changed:**
+- Replaced generic container/orchestration guidance with Podman + K8s pod manifest specifics
+- Added full architecture reference: pod manifests, startup order, networking, Traefik routing, health check endpoints
+- Updated examples to use project-specific scenarios (weather-api, pod manifests, GitHub Actions)
+- Updated anti-patterns to prevent recommending Docker/docker-compose/pnpm
+- Added self-verification checklist items for pod manifests, Traefik config, and Nx targets
+- Documented all CI/CD workflows and their triggers
+- Removed the persistent memory section (path was incorrect and not relevant to the agent's core purpose)
+
+**Files changed:**
+- `.claude/agents/devops-sre-lean.md` — rewritten to match project architecture
+- `SUMMARY.md` — added this step
+
+---
+
+## Step 129: Refactor — split devops-sre-lean agent into separate DevOps and SRE agents
+
+Split the combined `devops-sre-lean` agent into two focused agents with clear domain boundaries.
+
+**Root cause / motivation:** A single agent covering both DevOps and SRE conflated build/ship/deploy concerns with runtime reliability/observability. Splitting them gives each agent a tighter scope, better examples, and more relevant checklists.
+
+**What changed:**
+- **devops agent** (`.claude/agents/devops.md`) — CI/CD pipelines, container builds, K8s pod manifests, Traefik routing, Nx targets, deployment automation. Owns the "build and ship" domain.
+- **sre agent** (`.claude/agents/sre.md`) — Prometheus/Grafana/Loki observability, alerting rules, SLOs/error budgets, health checks, incident response, performance diagnosis. Owns the "keep it running" domain.
+- Both agents maintain lean principles and reference the project's exact stack (Podman, `podman play kube`, npm, etc.)
+- Deleted the combined `devops-sre-lean.md`
+
+**Files changed:**
+- `.claude/agents/devops.md` — new DevOps agent
+- `.claude/agents/sre.md` — new SRE agent
+- `.claude/agents/devops-sre-lean.md` — deleted
+- `SUMMARY.md` — added this step
+
+---
+
+## Step 130: Add — security engineer Claude agent
+
+Created a dedicated security engineer agent tailored to this project's auth, scanning, and infrastructure security stack.
+
+**Root cause / motivation:** The DevOps and SRE agents cover build/deploy and runtime reliability, but neither owns application security concerns like auth hardening, vulnerability scanning tuning, security headers, CORS/CSRF policy, or production readiness audits.
+
+**What changed:**
+- New agent covers: Ory Kratos auth hardening, KratosAuthMiddleware and Angular guard review, Traefik security middleware (headers, rate limiting), CodeQL/OWASP Dependency-Check/Dependabot pipeline tuning, TLS config, CORS/CSRF policy, secret management, and OWASP Top 10 analysis
+- Documents all known dev-only security shortcuts with `DEV-ONLY:` labeling convention
+- Severity classification system (Critical/High/Medium/Low) for all findings
+- Lean philosophy: prefer Traefik middleware over WAFs, CodeQL over commercial SAST, tight config over complex token schemes
+
+**Files changed:**
+- `.claude/agents/security.md` — new security engineer agent
+- `SUMMARY.md` — added this step
+
+---
+
+## Step 131: Add — Nx monorepo specialist Claude agent
+
+Created a dedicated Nx agent focused on build performance optimization and developer flow state.
+
+**Root cause / motivation:** The existing agents (devops, sre, security) don't own Nx-specific concerns like cache configuration, target dependency graphs, affected commands, generator usage, or build performance tuning. Developers need consistent, fast commands to stay in flow.
+
+**What changed:**
+- New agent documents the full Nx target graph, caching strategy, named inputs, and plugin configuration
+- Flow-state command reference with consistent `npx nx` patterns for daily dev, build/verify, container/stack, and investigation workflows
+- Build performance optimization checklist (cache correctness -> affected scope -> parallelism -> target granularity -> dev server performance)
+- Requires consulting official Nx docs (`nx_docs` or `--help`) before recommending flags — never guesses
+- Anti-patterns: guessing flags, npm wrappers, `run-many` when `affected` suffices, serializing parallel work
+
+**Files changed:**
+- `.claude/agents/nx.md` — new Nx monorepo specialist agent
+- `SUMMARY.md` — added this step
+
+---
+
+## Step 132: Add — PostgreSQL database engineer Claude agent
+
+Created a dedicated PostgreSQL agent focused on performance, health, backups, and replication management.
+
+**Root cause / motivation:** No existing agent owns database concerns — query performance, schema migrations, backup strategy, replication slot health, or vacuum tuning. The single PostgreSQL instance serves four consumers (weather-api, Ory Kratos, Debezium CDC, postgres-exporter) and needs focused expertise.
+
+**What changed:**
+- New agent documents the full database topology: schema, all consumers and their connection strings, WAL/replication config, CDC setup (Debezium slot, publication, slot-guard), and health check patterns
+- Tiered backup strategy guidance (dev -> staging -> production) with specific tools at each tier
+- Performance expertise: EXPLAIN ANALYZE workflow, index strategy, vacuum tuning, connection management, lock diagnosis
+- Hard rule to consult official PostgreSQL 17 docs before recommending any GUC parameter
+- Output markers: `BACKUP:`, `PERF:`, `LOCK:`, `WAL:` for change impact visibility
+- Anti-patterns: blind GUC tuning, VACUUM FULL in production, ignoring co-tenant impact
+
+**Files changed:**
+- `.claude/agents/postgres.md` — new PostgreSQL database engineer agent
+- `SUMMARY.md` — added this step
+
+---
+
+## Step 133: Add — Kafka event streaming Claude agent
+
+Created a dedicated Kafka agent covering the full CDC pipeline from PostgreSQL through Debezium to KafkaJS consumers.
+
+**Root cause / motivation:** No existing agent owns event streaming concerns — Debezium connector configuration, Avro schema management, Schema Registry compatibility, KafkaJS consumer tuning, topic design, or replication slot coordination with PostgreSQL.
+
+**What changed:**
+- New agent documents the complete event streaming architecture: Kafka 3.9 (KRaft), Schema Registry 7.7.1, Debezium 2.7, Kafka UI, slot-guard, KafkaJS consumer (lightning-app), and Angular Kafka service (weatherstream-app)
+- Avro schema workflow: auto-generation from DDL via Debezium, manual management via Schema Registry REST API, and evolution safety rules (add/remove/change/rename columns)
+- Full connector config reference (`weather-api-connector`) with all properties documented
+- Output markers: `SCHEMA:`, `REPLICATION:`, `CONSUMER:` for change impact visibility
+- Hard rule to consult official Kafka, Debezium, Schema Registry, and KafkaJS docs before recommending config
+- Anti-patterns: guessing config keys, ignoring schema compatibility, JSON converters when Avro is configured
+
+**Files changed:**
+- `.claude/agents/kafka.md` — new Kafka event streaming agent
+- `SUMMARY.md` — added this step
+
+---
+
+## Step 134: Add — Entity Framework Core Claude agent
+
+Created a dedicated EF Core agent focused on model design, query performance, migration safety, and cross-agent coordination with postgres and kafka agents.
+
+**Root cause / motivation:** Schema changes in EF Core cascade downstream — a column addition generates a PostgreSQL DDL change and a new Avro schema in Kafka's Schema Registry. No existing agent owned this coordination or EF Core-specific concerns like query optimization, migration safety, or Npgsql provider configuration.
+
+**What changed:**
+- New agent documents the full EF Core setup: WeatherDbContext, entity model, repository pattern, migration history, NuGet packages, and API endpoints
+- Cross-agent coordination protocol: model changes flagged with `POSTGRES:` markers (DDL, locks, indexes) and `KAFKA:` markers (Avro schema compatibility, consumer impact)
+- Query performance expertise: `.ToQueryString()` review, `AsNoTracking()`, projection, split queries, compiled queries
+- Migration safety: non-blocking DDL, concurrent index creation, rollback via `Down()`, script preview
+- Hard rule to consult official EF Core 9, Npgsql, and .NET 9 docs before recommending APIs
+
+**Files changed:**
+- `.claude/agents/efcore.md` — new Entity Framework Core agent
+- `SUMMARY.md` — added this step
+
+---
+
+## Step 135: Refactor — replace unit-test-writer agent with comprehensive test agent
+
+Replaced the generic `unit-test-writer.md` agent with a project-specific `test.md` agent covering unit tests (Vitest + xUnit), E2E tests (Playwright), and test suite architecture.
+
+**Root cause / motivation:** The old agent was generic (Jest/Vitest only, no E2E, no .NET tests, wrong package manager reference). It didn't address E2E testing with Playwright, .NET xUnit tests, test execution time as a developer experience concern, or the separation of full test suites from feature-level tests.
+
+**What changed:**
+- New agent covers all three test frameworks: Vitest (Angular unit), xUnit (.NET unit), Playwright (E2E)
+- Test suite architecture: feature-level tests (fast feedback, per-PR) vs. full suites (comprehensive, separate runs)
+- Separation rules: smoke tests (`eks-e2e.yml`) stay fast; feature E2E tests go in new spec files, not `eks.spec.ts`
+- Execution time awareness: unit tests <1s per file, E2E <30s per test; `SLOW:` and `FLAKY:` markers
+- Documents all established test patterns (mock factories, auth helpers, dynamic test data, TestBed setup)
+- Complete command reference for developer flow (single file, affected) vs. full validation (coverage, all E2E)
+- Hard rule to consult official Vitest, Playwright, xUnit, and Angular testing docs
+- Deleted the old `unit-test-writer.md` with its generic content and incorrect memory path
+
+**Files changed:**
+- `.claude/agents/test.md` — new comprehensive test agent
+- `.claude/agents/unit-test-writer.md` — deleted
+- `SUMMARY.md` — added this step
+
+---
+
+## Step 136: Add — data science Claude agent
+
+Created a data science agent for Python-based analytics, visualization, and pipeline work on top of this project's existing data sources.
+
+**Root cause / motivation:** The project has rich data sources (PostgreSQL weather data, Kafka CDC streams, Prometheus metrics) but no data science tooling. A dedicated agent provides guidance for EDA, visualization, Airflow pipelines, and ML while connecting to the established infrastructure.
+
+**What changed:**
+- New agent maps all project data sources: PostgreSQL `WeatherForecasts` table, Ory Kratos identity tables (read-only), Kafka CDC topics (Avro), Prometheus metrics, and Grafana dashboards
+- Covers pandas, NumPy, matplotlib, seaborn, plotly, scikit-learn, Apache Airflow, SQLAlchemy, and confluent-kafka
+- Includes Python environment setup guide (virtual env, pinned deps) and recommended project structure for notebooks/pipelines
+- Visualization best practices: titles, labels, appropriate chart types, accessible colors
+- Airflow DAG design: idempotent tasks, retry logic, Podman-compatible containerized deployment
+- Hard rule to consult official docs for all library APIs
+- Read-only access to production tables — no writes to EF Core or Kratos managed data
+
+**Files changed:**
+- `.claude/agents/data-science.md` — new data science agent
+- `SUMMARY.md` — added this step
+
+---
+
+## Step 137: Add — business analyst Claude agent with weather domain expertise
+
+Created a business analyst agent that turns vague requirements into detailed, implementable specifications using deep weather domain knowledge.
+
+**Root cause / motivation:** Developers receiving imprecise requirements like "add wind data" or "we need alerts" waste time guessing intent. A dedicated BA agent asks the right clarifying questions (sustained vs. gust speed? what alert channels? what thresholds?) and produces structured specs with acceptance criteria, data model changes, and cross-agent coordination flags.
+
+**What changed:**
+- New agent documents the full current product state (CRUD model, streaming events, auth roles, temperature classification, UI capabilities, what's missing)
+- Comprehensive weather vocabulary: temperature (air, feels-like, wind chill, heat index, dew point), precipitation (rate, accumulation, PoP, type, freezing level), wind (sustained, gust, direction, Beaufort), pressure (SLP, tendency), humidity (RH, dew point, wet bulb), visibility/clouds (oktas, ceiling, fog types), UV, severe weather (scales, thresholds), and forecast terminology (nowcast through seasonal)
+- Clarifying question framework (Who/What-Data/What-Behavior/When/Where/Why)
+- Structured spec template with data requirements, acceptance criteria, API changes, model changes, and cross-agent flags
+- Output markers: `MODEL:`, `CDC:`, `AUTH:`, `UI:` for cross-cutting concerns
+
+**Files changed:**
+- `.claude/agents/business-analyst.md` — new business analyst agent
+- `SUMMARY.md` — added this step
+
+---
+
+## Step 138: Add — architect Claude agent with agent ecosystem governance
+
+Created a software architect agent that owns the system architecture and is responsible for keeping all Claude agent definitions in sync when the architecture evolves.
+
+**Root cause / motivation:** With 12 specialized agents, each embedding architecture knowledge (tech stack, pod topology, data flows, file paths), architectural changes can cause documentation drift across agent definitions. A dedicated architect agent owns the big picture, evaluates technology decisions, and enforces an agent update protocol when the architecture changes.
+
+**What changed:**
+- New agent documents the full system architecture: ASCII topology diagram, technology stack table, pod topology with startup order, 5 data flow paths, and 10 architectural decision records with rationale
+- Agent ecosystem table listing all 12 agents with their files and ownership domains
+- Agent update protocol: identify affected agents, classify change (additive/replacement/removal/restructuring), update definitions, verify consistency
+- Triggers for agent updates: new containers, technology swaps, new Nx projects, schema changes, CI/CD changes, new agents
+- Trade-off evaluation framework: decision matrices, migration paths, rollback plans
+- Output markers: `BREAKING:`, `AGENTS:`, `MIGRATION:` for architectural change impact
+
+**Files changed:**
+- `.claude/agents/architect.md` — new architect agent
+- `SUMMARY.md` — added this step
+
+---
+
+## Step 139: Reorganize — README.md for scannability and navigation
+
+The README was 569 lines with no table of contents, no anchor links, and sections ordered so that the ~60-line security disclaimer appeared before the reader even knew what the project was.
+
+**Root cause / motivation:** New visitors had to scroll past security warnings to reach the project description. Verbose per-OS SSL instructions (~80 lines) and observability/Kafka details made the page hard to scan. No TOC meant no way to jump to a section.
+
+**What changed:**
+- Moved project description and demo screenshots above the security disclaimer (which is now at the end, linked from the intro)
+- Added a clickable Table of Contents grouping sections into: Getting Started, Applications, Infrastructure, Testing, API Reference, and Security Disclaimer
+- Condensed SSL install/uninstall/regenerate from ~80 lines of per-OS code blocks into a single 3-row table with a collapsible `<details>` block for regeneration prerequisites
+- Collapsed Prometheus metrics, Promtail logs, Grafana SSO flow, Kafka monitoring/alerting thresholds, and Lightning App environment variables into `<details>` blocks
+- Converted bullet lists to compact tables where appropriate
+
+**Files changed:**
+- `README.md` — reorganized sections, added TOC, condensed verbose content
+- `SUMMARY.md` — added this step
+
+---
+
+## Step 140: Fix — increase unit test coverage to 100% across all apps
+
+CI failed because weather-app branch coverage was 50% (threshold: 80%). The `tempVariant()` method had 5 branches but only 3 were tested. Investigation revealed coverage gaps in all three apps.
+
+**Root cause / motivation:** Tests only exercised happy-path data, leaving conditional branches uncovered: `tempVariant()` warm/hot paths in weather-app, `healthVariant()`/`checkHealth()` in admin-app, `summary ?? ''` null coalescing in weatheredit-app, and `role || ''` falsy branch in kratos-admin.
+
+**What changed:**
+
+*weather-app* — Added 6 tests: all 5 `tempVariant()` branches (cold/cool/mild/warm/hot) + null summary dash rendering. Added mock data with temps 30 and 40 to hit warm/hot paths. Coverage: 50% → 100% branches.
+
+*admin-app remote-entry* — Fixed broken test setup: added `resolve.alias` for `@org/ui` in `vite.config.mts`, replaced `resolveComponentResources` (Angular private API) with `overrideComponent` + `CUSTOM_ELEMENTS_SCHEMA` pattern, added `HttpTestingController` with `afterEach` verification, fixed 3 DOM tests with wrong selectors. Added 6 new tests for `healthVariant()` (3 branches) and `checkHealth()` HTTP flow (init request, success, error).
+
+*weatheredit-app* — Added test calling `openEdit()` with `summary: null` to cover the `??` operator's falsy branch. Coverage: 91.66% → 100% branches.
+
+*kratos-admin* — Added test calling `startEdit()` with identity lacking a role to cover `role || ''` falsy branch. Coverage: 83.33% → 100% branches.
+
+*test agent definition* — Added "Code Coverage" section with threshold documentation, branch coverage guidance, diagnostic workflow, and common patterns needing explicit branch tests.
+
+**Files changed:**
+- `apps/weather-app/src/app/remote-entry/entry.spec.ts` — added tempVariant + null summary tests
+- `apps/admin-app/vite.config.mts` — added `resolve.alias` for `@org/ui`
+- `apps/admin-app/src/app/remote-entry/entry.spec.ts` — fixed setup, added healthVariant/checkHealth tests
+- `apps/admin-app/src/app/kratos-admin/kratos-admin.component.spec.ts` — added no-role startEdit test
+- `apps/weatheredit-app/src/app/remote-entry/entry.spec.ts` — added null-summary openEdit test
+- `.claude/agents/test.md` — added Code Coverage guidance section
+- `SUMMARY.md` — added this step
+
+---
+
+## Step 141: Add — user signup with magic links and admin approval
+
+**Root cause:** Users had no way to self-register. Only pre-seeded admin accounts existed, requiring manual identity creation via the Kratos Admin API.
+
+**What changed:**
+
+*Kratos config* — Enabled recovery flow with `link` strategy and added `link` selfservice method. Added recovery/settings return URLs and SMTP `from_address`. This allows the admin to generate one-time magic links via the Kratos Admin API.
+
+*Signup API + page* — Added `POST /signup` endpoint to weather-api that creates inactive Kratos identities with a random password (user never sees it). Added Traefik route for `/signup`. Excluded `/signup` from KratosAuthMiddleware. Created Angular signup component at `/auth/signup` with email-only form and success/error messaging. Added "Request Access" link to the login page.
+
+*Admin user management* — Enhanced KratosAdminService with `activateIdentity()`, `deactivateIdentity()`, and `generateRecoveryLink()` methods. Updated KratosAdminComponent with: Approve button (for inactive users, with role selector), Deactivate button (for active users), Generate Magic Link button (with copy-to-clipboard), and removed password requirement from the create form (auto-generates random password).
+
+*Auth flow polish* — Created RecoveryComponent that checks for an active session and redirects to home (handles magic link callback). Added `/auth/recovery` and `/auth/settings` routes. Updated unauthorized page with "Request Access" link and improved messaging.
+
+**Architecture:** New users are created with Kratos `state: "inactive"`, which prevents them from obtaining sessions at the Kratos level (no custom guard changes needed). Admin approves by setting state to active and assigning a role. Magic links are Kratos recovery links generated via the Admin API — clicking one creates a valid session.
+
+**Files changed:**
+- `apps/ory/kratos.yml` — enabled link method, recovery flow, return URLs, from_address
+- `apps/weather-api/Program.cs` — added POST /signup endpoint
+- `apps/weather-api/Models/SignupRequest.cs` — new request DTO
+- `apps/weather-api/appsettings.json` — added OryKratosAdminUrl
+- `apps/weather-api/Middleware/KratosAuthMiddleware.cs` — skip auth for /signup
+- `traefik/traefik-dynamic.yml` — added signup-router
+- `apps/shell/src/app/auth/signup/signup.component.ts` — new signup page
+- `apps/shell/src/app/auth/recovery/recovery.component.ts` — new recovery handler
+- `apps/shell/src/app/auth/login/login.component.ts` — added Request Access link
+- `apps/shell/src/app/auth/unauthorized/unauthorized.component.ts` — added Request Access link
+- `apps/shell/src/app/app.routes.ts` — added signup, recovery, settings routes
+- `apps/admin-app/src/app/kratos-admin/kratos-admin.service.ts` — added activate, deactivate, generateRecoveryLink
+- `apps/admin-app/src/app/kratos-admin/kratos-admin.component.ts` — approve/deactivate/magic link UI
+- `SUMMARY.md` — added this step
+
+## Step 142: Add — Minion Manager for automated weather event generation
+
+**Root cause / motivation:** Admin users needed a way to automate weather event creation on a schedule without manual intervention. Minions are configurable automated agents that create random weather forecasts at specified intervals, cron schedules, or daily times.
+
+**What changed:**
+
+*Backend model & migration* — Added `Minion` entity (Name, ScheduleType, ScheduleValue, IsActive, LastRunAt, CreatedAt, UpdatedAt) with `ScheduleType` enum (Interval, Cron, DailyAt). Created EF Core migration for the Minions table. Added `IMinionRepository` interface and `EfMinionRepository` implementation with CRUD + active/scheduling support.
+
+*API endpoints* — Added `/minions` route group with GET (list/detail), POST (create), PUT (update), DELETE, and POST start/stop endpoints. Added Traefik router and dev proxy for the new path. Added Cronos NuGet package for cron expression parsing.
+
+*Background scheduler* — Added `MinionSchedulerService` (BackgroundService) that ticks every 30 seconds, checks active minions against their schedule, and creates random weather forecasts when due. Supports interval (every N minutes), cron expressions (via Cronos), and daily-at (HH:mm UTC) scheduling. Generated forecasts are prefixed with `[Minion: name]` in the summary.
+
+*Frontend UI* — Created `MinionsComponent` in admin-app with full CRUD, start/stop controls, and three schedule input modes: interval (number input), cron expression (text input with hint), and daily time (native time picker). Includes inline editing, relative time display for last run, and status badges. Added `MinionsService` for API calls.
+
+*Routing & dashboard* — Added `/admin-app/minions` route. Added "Minion Manager" card under new "Automation" category on the admin dashboard.
+
+**Files changed:**
+- `apps/weather-api/Models/Minion.cs` — Minion entity and ScheduleType enum
+- `apps/weather-api/Repositories/IMinionRepository.cs` — repository interface
+- `apps/weather-api/Repositories/EfMinionRepository.cs` — EF Core implementation
+- `apps/weather-api/Data/WeatherDbContext.cs` — added Minions DbSet
+- `apps/weather-api/Migrations/20260326000000_AddMinions*.cs` — EF Core migration
+- `apps/weather-api/Migrations/WeatherDbContextModelSnapshot.cs` — updated snapshot
+- `apps/weather-api/Program.cs` — minion endpoints, DI registration, hosted service
+- `apps/weather-api/Services/MinionSchedulerService.cs` — background scheduler
+- `apps/weather-api/WeatherApi.csproj` — added Cronos package
+- `traefik/traefik-dynamic.yml` — added minions-router
+- `apps/shell/proxy.conf.json` — added /minions dev proxy
+- `apps/admin-app/src/app/minions/minions.service.ts` — API service
+- `apps/admin-app/src/app/minions/minions.component.ts` — management UI
+- `apps/admin-app/src/app/minions/minions.component.spec.ts` — unit tests
+- `apps/admin-app/src/app/remote-entry/entry.routes.ts` — added minions route
+- `apps/admin-app/src/app/remote-entry/entry.ts` — added dashboard card
+- `SUMMARY.md` — added this step
+
+## Step 143: Add — Data science stack with Airflow, Jupyter, MinIO, and DuckDB
+
+**Root cause / motivation:** The project needed a data science stack for pipeline orchestration, interactive notebooks, and object storage. Apache Airflow handles DAG-based workflow orchestration, Jupyter Lab provides interactive analysis with DuckDB (an embedded analytical database), and MinIO offers S3-compatible object storage for datasets and artifacts.
+
+**What changed:**
+
+*Pod definition* — Created `k8s/datascience-pod.yaml` with three containers: Airflow (port 8280), Jupyter (port 8888), and MinIO (ports 9000 API + 9001 console). All three mount hostPath volumes under `/tmp/datascience/` for development. MinIO uses the upstream `quay.io/minio/minio:latest` image directly; Airflow and Jupyter use custom lightweight builds.
+
+*Airflow container* — Built from `apache/airflow:slim-2.10.4-python3.11` with DuckDB, duckdb-engine, and minio pip packages. Custom entrypoint runs `airflow db migrate`, creates admin user, starts scheduler in background and webserver in foreground. Uses SequentialExecutor with SQLite for lightweight local development.
+
+*Jupyter container* — Built from `quay.io/jupyter/minimal-notebook` with duckdb, pandas, pyarrow, minio, and boto3 pre-installed. Token-based auth (`datascience`).
+
+*Nx targets* — Created `apps/datascience/project.json` with `podman-build-airflow`, `podman-build-jupyter`, `podman-build` (aggregator), `kube-up` (`podman play kube k8s/datascience-pod.yaml`), and `kube-down`.
+
+*Admin dashboard* — Added Airflow, Jupyter Lab, and MinIO Console links under new "Data Science" category with credentials displayed.
+
+*MinIO data persistence* — hostPath volume defaults to `/tmp/datascience/minio/data`. To persist across restarts, change the hostPath to a permanent local directory (e.g., `/home/joe/datascience/minio/data`). Instructions are documented as inline YAML comments in the pod definition.
+
+**Usage:**
+```bash
+npm exec nx run datascience:kube-up    # Build images and start the stack
+npm exec nx run datascience:kube-down  # Stop the stack
+```
+
+**Files changed:**
+- `k8s/datascience-pod.yaml` — pod definition with Airflow, Jupyter, MinIO containers
+- `apps/datascience/project.json` — Nx project with build and kube targets
+- `apps/datascience/airflow/Containerfile` — slim Airflow image with DuckDB
+- `apps/datascience/airflow/entrypoint.sh` — db migrate, user creation, scheduler + webserver
+- `apps/datascience/jupyter/Containerfile` — minimal Jupyter with DuckDB and data science libs
+- `apps/datascience/jupyter/requirements.txt` — pip dependency reference
+- `apps/admin-app/src/app/remote-entry/entry.ts` — added Data Science admin links
+- `SUMMARY.md` — added this step
+
+## Step 144: Add — E2E and unit tests for lightning-app and weatherstream-app
+
+**Root cause / motivation:** The lightning-app (Electron + Kafka weather streamer) and weatherstream-app (Angular streaming dashboard) had minimal test coverage — only a basic `app.spec.ts` that wasn't passing due to `@analogjs/vite-plugin-angular` incompatibility with vitest 4.x test suite discovery.
+
+**What changed:**
+
+*Fixed vitest configuration* — Removed the `angular()` vite plugin that broke test discovery and added `esbuild.tsconfigRaw` with `experimentalDecorators` support (matching the working shell app pattern). Unit tests instantiate services directly with mock dependencies instead of relying on TestBed component resolution.
+
+*weatherstream-app unit tests (37 tests):*
+- `kafka-stream.service.spec.ts` — 20 tests covering simulation mode (event generation, 100-event cap, timer lifecycle, clear/reconnect) and Electron mode (IPC listener registration, weather event forwarding, status/error handling, reconnect, cleanup)
+- `weather-dashboard.spec.ts` — 16 tests for `conditionIcon()` (all 10 weather conditions + unknown fallback) and `tempColor()` (5 temperature ranges with boundary values)
+- `app.spec.ts` — fixed pre-existing broken test
+
+*lightning-app unit tests (9 tests):*
+- `kafka-consumer.spec.mjs` — tests for connect/subscribe/run lifecycle, `connected` event emission, connect failure error handling, message parsing with metadata enrichment, null message skipping, invalid JSON error emission, disconnect with `disconnected` event, and graceful disconnect error handling
+- Added `vitest.config.mjs` and `test` target to `project.json`
+
+*weatherstream-app-e2e (Playwright):*
+- Page load tests (200 status, heading, Simulated badge, Connected status)
+- Simulation event tests (empty state, event card rendering, temperature/humidity/wind display, condition icons, event count increment, card accumulation)
+- Interaction tests (Clear button, no Reconnect in simulation, no error banner)
+
+*lightning-app-e2e (Playwright):*
+- Dashboard structure tests (page load, header, status bar, mode badge)
+- Real-time streaming tests (auto-start, condition icons, known locations, three metrics, timestamps, newest-first ordering)
+- Control tests (Clear button clears and events resume)
+
+**Files changed:**
+- `apps/weatherstream-app/src/app/services/kafka-stream.service.spec.ts` — new service unit tests
+- `apps/weatherstream-app/src/app/weather-dashboard/weather-dashboard.spec.ts` — new component unit tests
+- `apps/weatherstream-app/src/app/app.spec.ts` — fixed broken test
+- `apps/weatherstream-app/vite.config.mts` — removed angular() plugin, added esbuild config
+- `apps/weatherstream-app/src/test-setup.ts` — removed incompatible snapshot import
+- `apps/lightning-app/src/kafka-consumer.spec.mjs` — new Kafka consumer unit tests
+- `apps/lightning-app/vitest.config.mjs` — new vitest configuration
+- `apps/lightning-app/project.json` — added test target
+- `apps/weatherstream-app-e2e/` — new Playwright E2E project (6 files)
+- `apps/lightning-app-e2e/` — new Playwright E2E project (6 files)
+- `SUMMARY.md` — added this step
+
+## Step 145: Add — CI coverage for lightning-app and weatherstream-app unit tests
+
+**Root cause / motivation:** The new unit tests for lightning-app (9 tests) and weatherstream-app (37 tests) were not included in the GitHub Actions CI pipeline and had no code coverage reporting.
+
+**What changed:**
+
+*CI workflow* — Added `weatherstream-app` to the existing `nx run-many --target=test` command in the `unit-tests` job. Added a separate step for `lightning-app` using `npx vitest run` directly (it uses `nx:run-commands` executor, not `@nx/vitest:test`, so it needs its own invocation to pass `--coverage`).
+
+*Coverage configuration* — Updated both vitest configs to output coverage reports to the standard `coverage/apps/{app-name}/` directory (matching shell, weather-app, etc.). Provider: v8.
+
+*Coverage results:*
+- **lightning-app** (`kafka-consumer.js`): 100% statements, 100% branches, 100% functions, 100% lines
+- **weatherstream-app**: 96.97% statements, 100% branches, 92.3% functions, 96.07% lines
+  - `kafka-stream.service.ts`: 100% across all metrics
+  - `weather-dashboard.ts`: 92.85% statements, 88.88% lines (the `inject()` field initializer isn't exercised in unit tests — covered by E2E)
+
+*Test approach fix (lightning-app)* — Replaced the recreated test class (which gave 0% coverage) with importing the real `kafka-consumer.js` module and patching its internal `consumer` property with a mock before any async operations. This achieves full coverage of the actual source code.
+
+**Files changed:**
+- `.github/workflows/ci.yml` — added weatherstream-app to test matrix, added lightning-app coverage step
+- `apps/lightning-app/vitest.config.mjs` — updated coverage output path
+- `apps/lightning-app/project.json` — added cwd to test target
+- `apps/lightning-app/src/kafka-consumer.spec.mjs` — import real module for coverage
+- `apps/weatherstream-app/vite.config.mts` — updated coverage output path
+- `SUMMARY.md` — added this step
+
+---
+
+## Step 147: Implement — Jupyter notebooks, Airflow DAGs, and shared helpers for the weather data science stack
+
+Added concrete, runnable implementations for the data science infrastructure.
+
+**Shared helpers (`apps/datascience/shared/`):**
+- `minio_helper.py` — reusable MinIO client factory, `object_exists()` check, `upload_file()`, `upload_dataframe()`, `read_csv()`, `read_parquet()`. Works identically in Jupyter and Airflow.
+- `weather_sources.py` — download functions for NOAA GHCN-Daily per-station CSVs (`download_ghcn_station()`) and Open-Meteo historical API (`download_open_meteo()`). Includes curated station/location lists with long records: New York Central Park, LA LAX, London Heathrow, Tokyo, Melbourne.
+
+**Airflow DAGs (`apps/datascience/airflow/dags/`):**
+- `dag_download_weather.py` — DAG 1. Daily at 02:00 UTC. One `ShortCircuitOperator` per data source checks MinIO before downloading; if the object already exists the download is skipped. Downloads GHCN-Daily CSVs for 5 stations and Open-Meteo daily data for 5 cities. Uploads results to `weather-raw/` bucket.
+- `dag_kafka_cdc_to_duckdb.py` — DAG 2. Runs every 5 minutes. Consumes Avro-encoded Debezium CDC events from `weather.public.WeatherForecasts`, decodes them via confluent-kafka + Schema Registry, upserts into a DuckDB file stored in `weather-analytics/` in MinIO. Handles create/update/delete/snapshot ops. Manual offset commit after batch write.
+
+**DuckDB schema (defined in DAG 2):**
+- `weather_forecasts_cdc` — primary CDC table (id, date, temperature_c, summary, op, event_ts, loaded_at)
+- `weather_observations_raw` — GHCN observation table for cross-source joins
+- `daily_summary` — view aggregating CDC rows by date (count, avg/min/max temp)
+
+**Jupyter notebooks (`apps/datascience/jupyter/notebooks/`):**
+- `01_eda_open_meteo.ipynb` — 14-cell EDA notebook. Data quality checks, descriptive stats, histogram, monthly line chart with fill_between, box plot by month, correlation heatmap, multi-location pivot_table heatmap, DuckDB SQL window function query, grouped bar chart.
+- `02_cdc_duckdb_analysis.ipynb` — 10-cell notebook. Downloads DuckDB from MinIO (read-only), inspects CDC schema, operation breakdown bar chart, violin plot by Summary label, daily_summary time-series, cross-source scatter vs Open-Meteo reference data.
+
+**Infrastructure changes:**
+- `apps/datascience/jupyter/Containerfile` — added `matplotlib seaborn requests confluent-kafka fastavro`
+- `apps/datascience/airflow/Containerfile` — added `requests confluent-kafka fastavro`
+- `apps/datascience/jupyter/requirements.txt` — updated to match
+- `k8s/datascience-pod.yaml` — added `datascience-shared` and `jupyter-notebooks` volumes; shared helpers mounted at `/opt/airflow/dags/shared` and `/home/jovyan/work/shared`
+- `apps/datascience/project.json` — added `sync-files` target
+- `scripts/sync-datascience.sh` — copies DAGs, shared helpers, and notebooks into `/tmp/datascience/` host paths for the pod mounts
+
+**Files changed:**
+- `apps/datascience/shared/minio_helper.py` — new
+- `apps/datascience/shared/weather_sources.py` — new
+- `apps/datascience/airflow/dags/dag_download_weather.py` — new
+- `apps/datascience/airflow/dags/dag_kafka_cdc_to_duckdb.py` — new
+- `apps/datascience/jupyter/notebooks/01_eda_open_meteo.ipynb` — new
+- `apps/datascience/jupyter/notebooks/02_cdc_duckdb_analysis.ipynb` — new
+- `apps/datascience/jupyter/Containerfile` — updated
+- `apps/datascience/jupyter/requirements.txt` — updated
+- `apps/datascience/airflow/Containerfile` — updated
+- `apps/datascience/project.json` — updated
+- `k8s/datascience-pod.yaml` — updated
+- `scripts/sync-datascience.sh` — new
+- `SUMMARY.md` — added this step
+
+---
+
+## Step 146: Specify — data science initiative for realistic minion weather profiles
+
+Authored a full product specification for using open historical weather datasets to replace the uniform-random forecast generator in `MinionSchedulerService.cs` with statistically realistic profiles.
+
+**Datasets selected:**
+- NOAA GSOD (daily station data, public domain, direct CSV download, no API key)
+- Open-Meteo historical archive API (daily aggregates in Celsius, CC-BY 4.0, no API key for batch use)
+- NOAA CDO monthly normals (30-year averages for validation cross-checks, free API key)
+
+**Jupyter notebooks specified (4):**
+1. `01_getting_started.ipynb` — download GSOD, load into pandas, save to MinIO
+2. `02_cleaning_and_munging.ipynb` — handle NOAA sentinel values, normalize units, map temps to Summary labels using `temp_to_summary()` thresholds aligned with the existing UI color scheme
+3. `03_visualizing_patterns.ipynb` — seasonal cycle line plots, temperature box plots, city-month heatmap, DuckDB-over-MinIO queries
+4. `04_building_profiles.ipynb` — Gaussian temperature profiles per city/month, conditional summary label probabilities, `generate_forecast()` function, output `weather_profiles_v1.json`
+
+**Airflow DAGs specified (3):**
+1. `weather_dataset_ingestion` — daily 03:00 UTC; MinIO-check-before-download pattern; idempotent
+2. `weather_kafka_to_duckdb` — every 15 min; polls `weather.public.WeatherForecasts` Kafka topic; at-least-once upsert into DuckDB
+3. `weather_quality_report` — daily 06:00 UTC; z-score anomaly detection against NOAA norms; label consistency checks; quality score 0–100
+
+**MinIO bucket structure defined:** `raw-weather/`, `clean-weather/`, `analytics/`, `notebooks/`
+
+**Files changed:**
+- `docs/spec-data-science-initiative.md` — new specification document
+- `SUMMARY.md` — added this step
+
+---
+
+## Step 148: Add — Notebook 03: Weather Data Cleaning & Munging
+
+Educational notebook teaching data cleaning fundamentals with real GHCN-Daily and Open-Meteo weather data.
+
+**What it covers:**
+- Loading raw GHCN-Daily CSVs (long format with tenths-of-degree units)
+- Pivoting from long to wide format using `pivot_table()`
+- Missing value detection with `isnull()`, linear interpolation for temperatures, zero-fill for precipitation
+- Unit conversion (GHCN tenths of °C → actual °C)
+- Mapping temperatures to the app's 10 Summary labels using `pd.cut()` with defined thresholds
+- Processing all 5 GHCN stations and 5 Open-Meteo cities
+- Saving cleaned Parquet files to MinIO `clean-weather/` bucket
+- Loading cleaned data into DuckDB `weather_observations_clean` table
+
+**Visualizations:** missing data heatmap, before/after histograms, label distribution bar chart, temperature-by-label box plot, cross-location label frequency heatmap.
+
+**Files changed:**
+- `apps/datascience/jupyter/notebooks/03_cleaning_and_munging.ipynb` — new
+- `SUMMARY.md` — added this step
+
+---
+
+## Step 149: Add — Notebook 04: Building Realistic Weather Profiles
+
+Capstone notebook that builds statistical weather profiles from cleaned historical data for use by the minion scheduler.
+
+**What it covers:**
+- Computing monthly temperature statistics (`groupby` + `agg`) per location
+- Building Summary label probability distributions with Laplace smoothing
+- Visualizing profiles with heatmaps, stacked bar charts, violin plots, and radar charts
+- Validating profiles by sampling and overlaying against real data distributions
+- Exporting the profile as JSON to MinIO (`weather-analytics/profiles/weather_profiles_v1.json`)
+- Documentation of how `MinionSchedulerService` can consume the profile
+
+**Profile structure:** `{location: {month: {temp_mean, temp_std, temp_min, temp_max, labels: {Freezing: prob, ...}}}}`
+
+**Files changed:**
+- `apps/datascience/jupyter/notebooks/04_weather_profiles.ipynb` — new
+- `SUMMARY.md` — added this step
+
+---
+
+## Step 150: Add — DAG 3: Weather Quality Report
+
+Daily Airflow DAG that compares minion-generated forecasts against historical weather profiles to produce a quality score.
+
+**Tasks:**
+1. `load_profile` — Downloads weather profile JSON from MinIO
+2. `load_recent_forecasts` — Queries DuckDB CDC table for last 24h forecasts
+3. `generate_quality_report` — Computes temperature z-scores, checks label-temperature consistency, produces quality score (0-100)
+4. `save_report` — Uploads report JSON to MinIO `weather-analytics/reports/quality_YYYY-MM-DD.json`
+
+**Quality checks:**
+- Temperature z-score: how many standard deviations from the historical mean
+- Label consistency: does the Summary label match the temperature thresholds (e.g., "Scorching" should only appear above 40°C)
+- Overall score: 100 = all realistic, <50 = mostly anomalous (expected before profile integration)
+
+**Schedule:** daily at 06:00 UTC, after the download DAG runs at 02:00 UTC.
+
+**Files changed:**
+- `apps/datascience/airflow/dags/dag_quality_report.py` — new
+- `SUMMARY.md` — added this step
+
+---
+
+## Step 151: Fix — CI container build fails with "workspace is out of sync"
+
+**Root cause:** The `Containerfile.nginx` runs `nx run-many --target=build` inside a fresh container where TypeScript project references have never been synced. Locally this works because `nx sync` was previously run (or auto-applied in interactive mode), but in CI the container starts from a clean `npm ci` with no prior sync state.
+
+**Fix:** Added `RUN npx nx sync` before the build step in `Containerfile.nginx` to ensure TypeScript project references are up to date before building.
+
+**Files changed:**
+- `Containerfile.nginx` — added `npx nx sync` step before the production build
+- `SUMMARY.md` — added this step

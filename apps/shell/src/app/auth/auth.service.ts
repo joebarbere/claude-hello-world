@@ -18,6 +18,7 @@ export interface KratosSession {
 }
 
 const ALLOWED_ROLES = ['admin', 'weather_admin'];
+const ADMIN_ROLES = ['admin'];
 
 @Injectable({ providedIn: 'root' })
 export class AuthService {
@@ -36,6 +37,12 @@ export class AuthService {
     if (!session?.active) return false;
     const role = session.identity?.traits?.role;
     return role !== undefined && ALLOWED_ROLES.includes(role);
+  }
+
+  canAccessAdmin(session: KratosSession | null): boolean {
+    if (!session?.active) return false;
+    const role = session.identity?.traits?.role;
+    return role !== undefined && ADMIN_ROLES.includes(role);
   }
 
   initiateLogin(returnTo: string): void {

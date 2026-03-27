@@ -1,0 +1,8 @@
+{
+  "name": "@org/admin-app-e2e",
+  "version": "0.0.1",
+  "private": true,
+  "nx": {
+    "name": "admin-app-e2e"
+  }
+}

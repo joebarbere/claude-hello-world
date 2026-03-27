@@ -20,7 +20,7 @@ Starts the Module Federation dev server for the shell on port 4200. `--devRemote
 | weather-app (remote) | http://localhost:4201 |
 | weatheredit-app (remote) | http://localhost:4202 |
 
-> **Auth in dev mode:** The Angular auth guard calls `/.ory/kratos/public/sessions/whoami`. In dev mode there is no nginx proxy, so this request goes directly to `http://localhost:4200/.ory/kratos/public/` — which the webpack dev server does not proxy by default. To test the auth guard locally, either run a Kratos instance on port 4433 and add a proxy rule for `/.ory/kratos/public/` in `apps/shell/proxy.conf.json`, or temporarily bypass the guard during frontend development.
+> **Auth in dev mode:** The Angular auth guard calls `/.ory/kratos/public/sessions/whoami`. In dev mode there is no Traefik proxy, so this request goes directly to `http://localhost:4200/.ory/kratos/public/` — which the webpack dev server does not proxy by default. To test the auth guard locally, either run a Kratos instance on port 4433 and add a proxy rule for `/.ory/kratos/public/` in `apps/shell/proxy.conf.json`, or temporarily bypass the guard during frontend development.
 
 ### Serve shell only (remotes served as static builds)
 
@@ -130,7 +130,7 @@ First runs `build-all` (production builds for all three apps), then runs:
 podman build -t claude-hello-world -f Containerfile.nginx .
 ```
 
-The multi-stage `Containerfile.nginx` compiles the apps inside a `node:20-alpine` container and copies the outputs into an `nginx:alpine` image. The resulting image is tagged `localhost/claude-hello-world:latest`.
+The multi-stage `Containerfile.nginx` compiles the apps inside a `node:20-alpine` container and copies the outputs into an `nginx:alpine` image. The resulting image is tagged `localhost/claude-hello-world:latest`. This image only serves static files — SSL termination and reverse proxying are handled by Traefik.
 
 To verify the image was created:
 
@@ -144,20 +144,15 @@ podman images | grep claude-hello-world
 npx nx podman-up shell
 ```
 
-Runs `podman run -d` to start the `claude-hello-world` container in detached mode, mapping:
-- port 8080 on the host to port 80 (HTTP, redirects to HTTPS)
-- port 8443 on the host to port 443 (HTTPS with SSL termination)
+Runs `podman run -d` to start the `claude-hello-world` container in detached mode, mapping port 8080 on the host to port 8080 in the container (static files only, no SSL). For the full setup with Traefik SSL termination, use `kube-up` instead.
 
 The image must have been built first with `podman-build`.
 
 | URL | Serves |
 |-----|--------|
-| https://localhost:8443 | Shell (host app, HTTPS) |
-| https://localhost:8443/weather-app/ | weather-app remote |
-| https://localhost:8443/weatheredit-app/ | weatheredit-app remote (login required) |
-| https://localhost:8443/weather-app/remoteEntry.mjs | weather-app Module Federation entry point |
-| https://localhost:8443/weatheredit-app/remoteEntry.mjs | weatheredit-app Module Federation entry point |
-| http://localhost:8080 | Redirects to https://localhost:8443 |
+| http://localhost:8080 | Shell (host app, HTTP only — no Traefik) |
+| http://localhost:8080/weather-app/ | weather-app remote |
+| http://localhost:8080/weatheredit-app/ | weatheredit-app remote |
 
 > **Browser trust:** The first time you open `https://localhost:8443` your browser will warn about the self-signed certificate. To suppress this, run the install script for your OS (see `ssl/` directory and the SSL section of `README.md`).
 
@@ -202,18 +197,19 @@ The init container calls `POST /admin/identities` on the Kratos Admin API for ea
 | 4433 | Public API (sessions, self-service login flows) |
 | 4434 | Admin API (identity management) |
 
-The nginx container proxies `/.ory/kratos/public/` → `http://host.containers.internal:4433/` so the Angular app can reach Kratos without cross-origin issues.
+Traefik proxies `/.ory/kratos/public/` → `http://host.containers.internal:4433/` so the Angular app can reach Kratos without cross-origin issues.
 
 ---
 
 ## Kubernetes (podman play kube)
 
-Runs the nginx MFE, weather-api, postgres, and Ory Kratos containers together using a Kubernetes Pod manifest (`k8s/pod.yaml`) and `podman play kube`. All images must be built before running.
+Runs the Traefik reverse proxy, nginx static file server, weather-api, postgres, and Ory Kratos containers together using Kubernetes Pod manifests and `podman play kube`. Traefik handles SSL termination and proxying; nginx only serves Angular static files. All images must be built before running.
 
 ### Prerequisites — build all images
 
 ```bash
 npx nx podman-build shell
+npx nx podman-build traefik
 npx nx podman-build weather-api
 npx nx podman-build ory
 # postgres is built automatically via dependsOn
@@ -246,6 +242,180 @@ npx nx kube-down shell
 ```
 
 Runs `podman play kube k8s/pod.yaml --down`, stopping and removing all pods defined in the manifest.
+
+---
+
+## Observability (Prometheus, Loki, Grafana)
+
+The observability stack runs as a separate pod — it is **not** started by `kube-up shell` and is never activated during e2e tests. Stand it up independently when you want metrics and logs locally.
+
+### Build observability images
+
+```bash
+npx nx run observability:podman-build
+```
+
+Builds five images in parallel:
+
+| Image | Base | Purpose |
+|-------|------|---------|
+| `localhost/prometheus:latest` | `prom/prometheus` | Metrics scraping and storage |
+| `localhost/loki:latest` | `grafana/loki` | Log aggregation and storage |
+| `localhost/promtail:latest` | `grafana/promtail` | Log collection from pod/container logs and access logs |
+| `localhost/grafana:latest` | `grafana/grafana` | Dashboards for metrics and logs |
+| `localhost/auth-proxy:latest` | `python:3.13-alpine` | Kratos session validation for Grafana SSO |
+
+### Start the observability pod
+
+```bash
+npx nx run observability:kube-up
+```
+
+Builds images (if not already built) then runs `podman play kube k8s/observability-pod.yaml`.
+
+> **Prerequisite:** The apps pod (`kube-up shell`) must be running first so that Prometheus can scrape metrics and Promtail can read log volumes.
+
+| Service | URL | Purpose |
+|---------|-----|---------|
+| Grafana | https://localhost:8443/grafana/ | Dashboards (SSO via Kratos — no separate login needed) |
+| Grafana (direct) | http://localhost:3000 | Direct access (bypasses SSO) |
+| Prometheus | http://localhost:9090 | Metrics query UI |
+| Loki | http://localhost:3100 | Log query API (used by Grafana) |
+| Promtail | — | No external port; ships logs to Loki |
+| auth-proxy | http://localhost:4180 | Kratos forwardAuth endpoint (used by Traefik internally) |
+
+### What gets scraped
+
+**Metrics (Prometheus):**
+- `weather-api` — ASP.NET Core HTTP metrics via `prometheus-net` at `host.containers.internal:5221/metrics`
+- `nginx` — connection stats via the `nginx-prometheus-exporter` sidecar at `host.containers.internal:9113`
+- `traefik` — request counts, error rates, and latency histograms at `host.containers.internal:8081/metrics`
+- `prometheus` — self-scrape at `localhost:9090`
+
+**Logs (Promtail → Loki):**
+- `/var/log/pods/*/*/*.log` — CRI-format logs written by the container runtime for all running pods
+- `/var/lib/containers/storage/overlay-containers/*/userdata/ctr.log` — raw Podman container logs (fallback)
+- `/var/log/traefik/access.log` — Traefik JSON access logs (client IP, User-Agent, status, route, service)
+- `/var/log/nginx/access.log` — nginx JSON access logs (remote_addr, request, status, request_time)
+
+> **macOS note:** Podman containers run inside a Linux VM. The `hostPath` volume mounts (`/var/log`, `/var/lib/containers`) refer to paths inside that VM, not the macOS host filesystem. Log collection works automatically when `kube-up shell` and `kube-up observability` are both running inside the same Podman Machine.
+
+### Grafana datasources (auto-provisioned)
+
+Both datasources are provisioned at startup with explicit UIDs — no manual setup required.
+
+| Datasource | Type | UID | URL |
+|-----------|------|-----|-----|
+| Prometheus | Prometheus | `prometheus` | `http://localhost:9090` |
+| Loki | Loki | `loki` | `http://localhost:3100` |
+
+### Grafana dashboards
+
+Two pre-provisioned dashboards are available under the Default folder:
+
+**Weather API** — HTTP request rate, p99 latency, in-flight requests, process memory, and nginx active connections.
+
+**System Health** — 12 panels covering:
+- System health % (percentage of scrape targets UP)
+- Running pods count and total container count
+- Container health table (per-target UP/DOWN with color mapping)
+- HTTP request rate by service and HTTP error rate (4xx + 5xx) from Traefik metrics
+- Total 5xx / 4xx / all requests (1h stat panels)
+- Top IP + User-Agent table (Loki LogQL `topk` over traefik-access logs)
+- Recent error logs (Loki log panel filtering status >= 400)
+
+Use **Explore → Loki** to query container logs interactively.
+
+### Grafana SSO via Ory Kratos
+
+Grafana is served at `https://localhost:8443/grafana/` through Traefik with automatic SSO:
+
+1. Traefik routes `/grafana` requests through a `forwardAuth` middleware to the auth-proxy container (port 4180)
+2. The auth-proxy reads the Kratos session cookie (`ory_kratos_session`) and calls Kratos `/sessions/whoami`
+3. If the session is valid, it returns `200` with an `X-Webauth-User: <email>` header; Traefik copies this to the proxied request
+4. If the session is invalid, it returns a `302` redirect to the Kratos login page with `return_to` pointing back to Grafana
+5. Grafana's `auth.proxy` trusts the `X-Webauth-User` header and auto-signs-up/logs in the user
+6. The login form and sign-out menu are disabled in Grafana since auth is handled externally
+
+> **Note:** Grafana SSO only works when accessing via `https://localhost:8443/grafana/` (through Traefik). Direct access at `http://localhost:3000` bypasses authentication entirely.
+
+### Stop the observability pod
+
+```bash
+npx nx run observability:kube-down
+```
+
+---
+
+## Kafka & CDC (Change Data Capture)
+
+The Kafka pod runs as a separate pod — it is **not** started by `kube-up shell`. It captures row-level changes from PostgreSQL via Debezium and publishes them to Kafka topics.
+
+### Build Kafka images
+
+```bash
+npx nx run kafka:podman-build
+```
+
+Builds three images in parallel:
+
+| Image | Purpose |
+|-------|---------|
+| `localhost/debezium-connect:latest` | Debezium Connect extended with Prometheus JMX exporter agent (metrics on port 9404) |
+| `localhost/debezium-init:latest` | One-shot container that registers the Postgres CDC connector via the Connect REST API |
+| `localhost/slot-guard:latest` | Periodic monitor that drops inactive Debezium replication slots exceeding 5 GB lag |
+
+### Start the Kafka pod
+
+```bash
+npx nx run kafka:kube-up
+```
+
+> **Prerequisite:** The apps pod (`kube-up shell`) must be running first — Debezium connects to the PostgreSQL instance in that pod.
+
+On startup, `debezium-init` waits for the Connect REST API on port 8083, then registers the Postgres connector. The connector creates the `debezium_weather` replication slot and `dbz_publication` publication on the `appdb` database if they do not already exist.
+
+### What gets captured
+
+The connector captures all tables in the `public` schema of the `appdb` database. Topics follow the naming pattern `weather.<schema>.<table>` (e.g., `weather.public.WeatherForecasts`). The Postgres instance must be running with `wal_level=logical` (this is set in the PostgreSQL image's default command).
+
+### Service URLs
+
+| Service | URL | Purpose |
+|---------|-----|---------|
+| Kafka UI | https://localhost:8443/kafka-ui/ | Topic and connector browser (via Traefik) |
+| Kafka UI (direct) | http://localhost:8090 | Direct access (bypasses Traefik) |
+| Kafka broker | http://localhost:9092 | Kafka broker |
+| Debezium Connect REST | http://localhost:8083 | Connect REST API for connector management |
+| Debezium JMX metrics | http://localhost:9404/metrics | Prometheus-format CDC metrics |
+
+### Monitoring
+
+Three layers of CDC monitoring are active when both the apps pod and kafka pod are running:
+
+**1. postgres-exporter → Prometheus → Grafana** — scrapes `pg_replication_slots` from PostgreSQL (port 9187 in the observability pod). Shows byte lag accumulating in the WAL on the producer side.
+
+**2. Debezium JMX → Prometheus → Grafana** — the `debezium-connect` container runs a Prometheus JMX exporter agent on port 9404. Shows time-behind-source lag and event throughput on the consumer side.
+
+**3. slot-guard automated cleanup** — periodically checks `pg_replication_slots` and drops any inactive Debezium slot whose lag exceeds 5 GB. This is a last-resort safety net against WAL disk exhaustion.
+
+The **Kafka & CDC** Grafana dashboard (in the observability pod) visualizes all three layers: slot lag in bytes, slot active status, Debezium time-behind-source, events processed rate, queue capacity, and connector task status.
+
+### Alerting thresholds
+
+| Severity | Condition |
+|----------|-----------|
+| Warning | Slot lag >500 MB or slot inactive >10 min |
+| Critical | Slot lag >2 GB or slot inactive >30 min |
+| Emergency (slot-guard triggers) | Slot lag >5 GB (slot is dropped automatically) |
+
+### Stop the Kafka pod
+
+```bash
+npx nx run kafka:kube-down
+```
+
+> **Note:** Stopping the kafka pod does not remove the replication slot or publication from PostgreSQL. On the next `kube-up`, the connector re-uses the existing slot and resumes from its last committed offset.
 
 ---
 
@@ -311,6 +481,46 @@ Runs `podman rm -f weather-api`, forcibly stopping and removing the container. T
 
 ---
 
+## WeatherStream + Lightning (Electron)
+
+### Serve weatherstream-app standalone (browser)
+
+```bash
+npx nx serve weatherstream-app
+```
+
+Opens at http://localhost:4203 with simulated weather events.
+
+### Serve lightning-app (Electron, dev mode)
+
+```bash
+npx nx serve-dev lightning-app
+```
+
+Starts Angular dev server + Electron window with hot reload.
+
+### Serve lightning-app (Electron, production build)
+
+```bash
+npx nx serve lightning-app
+```
+
+Builds Angular app first, then opens Electron with the production bundle.
+
+### Build weatherstream-app
+
+```bash
+npx nx build weatherstream-app
+```
+
+### Kafka configuration (optional)
+
+```bash
+KAFKA_BROKERS=broker1:9092,broker2:9092 KAFKA_TOPIC=weather-events npx nx serve lightning-app
+```
+
+---
+
 ## Nx Workspace Utilities
 
 ### View all targets for a project
@@ -358,10 +568,11 @@ Three Playwright suites (`shell-e2e`, `weather-app-e2e`, `weatheredit-app-e2e`) 
 
 ```bash
 npx nx podman-build shell        # builds Angular MFEs + nginx image
+npx nx podman-build traefik      # builds Traefik reverse proxy image
 npx nx podman-build weather-api  # builds .NET API image
 npx nx podman-build ory          # builds ory-kratos and ory-kratos-init images
 # postgres is built automatically via dependsOn
-npx nx kube-up shell             # starts all pods (nginx :8080, weather-api :5221, postgres :5432, kratos :4433/:4434)
+npx nx kube-up shell             # starts all pods (traefik :8080/:8443, nginx internal, weather-api :5221, postgres :5432, kratos :4433/:4434)
 ```
 
 > **Auth note:** `weatheredit-app-e2e` navigates to `/weatheredit-app/` which triggers the Ory auth guard. The guard redirects to Kratos if no valid session cookie is present. The e2e suite expects Kratos to be running (included in the pod manifest) and tests cover the redirect behaviour.
@@ -419,9 +630,9 @@ Two workflows cover EKS E2E testing at different levels of coverage.
 
 `eks-e2e.yml` runs on every push to `main` (i.e., every merged PR). It runs only the `shell-e2e` suite, which is enough to confirm all pods are healthy:
 
-1. Builds all container images (nginx, weather-api, postgres, ory) inside the runner
+1. Builds all container images (nginx, traefik, weather-api, postgres, ory) inside the runner
 2. Starts all pods with `podman play kube` — including the Ory Kratos init container that seeds default users
-3. Waits for the nginx and weather-api pods to pass health checks (parallel)
+3. Waits for the Traefik and weather-api pods to pass health checks (parallel)
 4. Runs `shell-e2e` — verifies the shell host, MFE navigation to `/weather-app` and `/weatheredit-app`, and the `/weather` API proxy
 5. Stops the pods
 6. Publishes JUnit XML as a GitHub Check Run (`dorny/test-reporter`)

@@ -1,10 +1,11 @@
-import { Component, OnInit, inject } from '@angular/core';
-import { ActivatedRoute } from '@angular/router';
+import { ChangeDetectorRef, Component, OnInit, inject } from '@angular/core';
+import { ActivatedRoute, RouterLink } from '@angular/router';
 import { AuthService, KratosFlowNode, KratosLoginFlow } from '../auth.service';
 
 @Component({
   selector: 'app-login',
   standalone: true,
+  imports: [RouterLink],
   template: `
     <div class="login-wrapper">
       <div class="login-card">
@@ -14,24 +15,22 @@ import { AuthService, KratosFlowNode, KratosLoginFlow } from '../auth.service';
           <div class="login-error" role="alert">{{ errorMessage }}</div>
         }
 
-        @if (flowId) {
-          @if (flow?.ui?.messages?.length) {
+        @if (flow) {
+          @if (flow.ui.messages?.length) {
             <div class="login-error" role="alert">
-              @for (msg of flow!.ui.messages!; track msg.id) {
+              @for (msg of flow.ui.messages!; track msg.id) {
                 <div>{{ msg.text }}</div>
               }
             </div>
           }
 
-          <form [attr.action]="formAction" [attr.method]="flow?.ui?.method ?? 'post'" class="login-form">
-            @if (flow) {
-              @for (node of hiddenNodes(flow.ui.nodes); track node.attributes.name) {
-                <input
-                  [type]="node.attributes.type"
-                  [name]="node.attributes.name"
-                  [value]="node.attributes.value ?? ''"
-                />
-              }
+          <form [attr.action]="flow.ui.action" [attr.method]="flow.ui.method" class="login-form">
+            @for (node of hiddenNodes(flow.ui.nodes); track node.attributes.name) {
+              <input
+                [type]="node.attributes.type"
+                [name]="node.attributes.name"
+                [value]="node.attributes.value ?? ''"
+              />
             }
 
             <div class="form-group">
@@ -44,10 +43,8 @@ import { AuthService, KratosFlowNode, KratosLoginFlow } from '../auth.service';
                 autocomplete="email"
                 required
               />
-              @if (flow) {
-                @for (node of fieldMessages('identifier', flow.ui.nodes); track node.id) {
-                  <span class="field-error">{{ node.text }}</span>
-                }
+              @for (node of fieldMessages('identifier', flow.ui.nodes); track node.id) {
+                <span class="field-error">{{ node.text }}</span>
               }
             </div>
 
@@ -61,10 +58,8 @@ import { AuthService, KratosFlowNode, KratosLoginFlow } from '../auth.service';
                 autocomplete="current-password"
                 required
               />
-              @if (flow) {
-                @for (node of fieldMessages('password', flow.ui.nodes); track node.id) {
-                  <span class="field-error">{{ node.text }}</span>
-                }
+              @for (node of fieldMessages('password', flow.ui.nodes); track node.id) {
+                <span class="field-error">{{ node.text }}</span>
               }
             </div>
 
@@ -73,8 +68,10 @@ import { AuthService, KratosFlowNode, KratosLoginFlow } from '../auth.service';
             <button type="submit" class="btn-submit">Sign in</button>
           </form>
         } @else if (!errorMessage) {
-          <p class="login-loading">Redirecting to login&hellip;</p>
+          <p class="login-loading">Loading&hellip;</p>
         }
+
+        <p class="signup-link">Don't have an account? <a routerLink="/auth/signup">Request Access</a></p>
       </div>
     </div>
   `,
@@ -155,20 +152,29 @@ import { AuthService, KratosFlowNode, KratosLoginFlow } from '../auth.service';
     .btn-submit:hover {
       background: #4f46e5;
     }
+    .signup-link {
+      text-align: center;
+      margin-top: 1.25rem;
+      font-size: 0.875rem;
+      color: #6b7280;
+    }
+    .signup-link a {
+      color: #6366f1;
+      text-decoration: none;
+    }
+    .signup-link a:hover {
+      text-decoration: underline;
+    }
   `],
 })
 export class LoginComponent implements OnInit {
   private readonly route = inject(ActivatedRoute);
   private readonly authService = inject(AuthService);
+  private readonly cdr = inject(ChangeDetectorRef);
 
   flowId: string | null = null;
   flow: KratosLoginFlow | null = null;
   errorMessage: string | null = null;
-
-  get formAction(): string {
-    if (this.flow?.ui?.action) return this.flow.ui.action;
-    return `/.ory/kratos/public/self-service/login?flow=${this.flowId}`;
-  }
 
   ngOnInit(): void {
     this.flowId = this.route.snapshot.queryParamMap.get('flow');
@@ -182,14 +188,14 @@ export class LoginComponent implements OnInit {
 
     this.authService.getLoginFlow(this.flowId).subscribe((flow) => {
       if (!flow) {
-        // Do not redirect — show the form anyway so the user isn't stuck in a
-        // redirect loop. The form will still render; CSRF hidden fields won't
-        // be populated until the flow loads, but the inputs are visible.
-        this.errorMessage = 'Login session could not be loaded. You can still try signing in.';
+        // Flow could not be loaded (e.g. stale CSRF cookie). Start a fresh
+        // login flow so the browser gets a new CSRF cookie that matches.
+        this.authService.initiateLogin(returnTo);
         return;
       }
       this.errorMessage = null;
       this.flow = flow;
+      this.cdr.detectChanges();
     });
   }
 

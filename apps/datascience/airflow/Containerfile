@@ -1,0 +1,12 @@
+FROM apache/airflow:slim-2.10.4-python3.11
+USER airflow
+RUN pip install --no-cache-dir \
+        apache-airflow-providers-common-sql \
+        duckdb \
+        duckdb-engine \
+        minio \
+        requests \
+        confluent-kafka \
+        fastavro
+COPY entrypoint.sh /entrypoint.sh
+ENTRYPOINT ["/entrypoint.sh"]

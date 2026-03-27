@@ -1,0 +1,95 @@
+server:
+  http_listen_port: 9080
+  grpc_listen_port: 0
+
+positions:
+  filename: /tmp/positions.yaml
+
+clients:
+  - url: http://localhost:3100/loki/api/v1/push
+
+scrape_configs:
+  # Scrape pod logs written by the container runtime (CRI format)
+  - job_name: pod-logs
+    static_configs:
+      - targets:
+          - localhost
+        labels:
+          job: pod-logs
+          __path__: /var/log/pods/*/*/*.log
+    pipeline_stages:
+      - cri: {}
+      - labeldrop:
+          - filename
+
+  # Scrape Podman container logs (fallback for non-k8s managed containers)
+  - job_name: container-logs
+    static_configs:
+      - targets:
+          - localhost
+        labels:
+          job: container-logs
+          __path__: /var/lib/containers/storage/overlay-containers/*/userdata/ctr.log
+    pipeline_stages:
+      - regex:
+          expression: '^(?P<timestamp>\S+) (?P<stream>stdout|stderr) .+ (?P<content>.*)$'
+      - labels:
+          stream:
+      - timestamp:
+          source: timestamp
+          format: RFC3339Nano
+          action_on_failure: skip
+      - output:
+          source: content
+
+  # Traefik JSON access logs
+  - job_name: traefik-access
+    static_configs:
+      - targets:
+          - localhost
+        labels:
+          job: traefik-access
+          __path__: /var/log/traefik/access.log
+    pipeline_stages:
+      - json:
+          expressions:
+            status: StatusCode
+            method: RequestMethod
+            path: RequestPath
+            client_ip: ClientHost
+            user_agent: '"request_User-Agent"'
+            duration: Duration
+            service: ServiceName
+            router: RouterName
+            entrypoint: entryPointName
+      - labels:
+          status:
+          method:
+          service:
+          router:
+          entrypoint:
+      - template:
+          source: client_ip
+          template: '{{ regexReplaceAll ":.*" .Value "" }}'
+      - labels:
+          client_ip:
+
+  # nginx JSON access logs
+  - job_name: nginx-access
+    static_configs:
+      - targets:
+          - localhost
+        labels:
+          job: nginx-access
+          __path__: /var/log/nginx/access.log
+    pipeline_stages:
+      - json:
+          expressions:
+            status: status
+            remote_addr: remote_addr
+            request: request
+            user_agent: http_user_agent
+            request_time: request_time
+      - labels:
+          status:
+          remote_addr:

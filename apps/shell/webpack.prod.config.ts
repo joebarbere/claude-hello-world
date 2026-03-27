@@ -12,6 +12,7 @@ export default withModuleFederation(
     remotes: [
       ['weather-app', '/weather-app/remoteEntry.mjs'],
       ['weatheredit-app', '/weatheredit-app/remoteEntry.mjs'],
+      ['admin-app', '/admin-app/remoteEntry.mjs'],
     ],
   },
   { dts: false }

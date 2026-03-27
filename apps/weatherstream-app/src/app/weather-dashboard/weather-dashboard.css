@@ -1,0 +1,184 @@
+.dashboard {
+  font-family: 'Segoe UI', system-ui, sans-serif;
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 1rem;
+  color: #e2e8f0;
+}
+
+.dashboard-header {
+  margin-bottom: 1.5rem;
+}
+
+.dashboard-header h1 {
+  font-size: 1.75rem;
+  margin: 0 0 0.75rem 0;
+  color: #f8fafc;
+}
+
+.status-bar {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.status-indicator {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.85rem;
+  color: #ef4444;
+}
+
+.status-indicator::before {
+  content: '';
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #ef4444;
+}
+
+.status-indicator.connected {
+  color: #22c55e;
+}
+
+.status-indicator.connected::before {
+  background: #22c55e;
+  box-shadow: 0 0 6px #22c55e;
+}
+
+.badge {
+  font-size: 0.7rem;
+  padding: 0.15rem 0.5rem;
+  border-radius: 9999px;
+  font-weight: 600;
+  text-transform: uppercase;
+}
+
+.badge.electron {
+  background: #7c3aed;
+  color: white;
+}
+
+.badge.simulated {
+  background: #0ea5e9;
+  color: white;
+}
+
+.event-count {
+  font-size: 0.85rem;
+  color: #94a3b8;
+}
+
+.btn {
+  padding: 0.3rem 0.75rem;
+  border: none;
+  border-radius: 6px;
+  font-size: 0.8rem;
+  cursor: pointer;
+  font-weight: 500;
+}
+
+.btn-clear {
+  background: #334155;
+  color: #e2e8f0;
+}
+
+.btn-clear:hover {
+  background: #475569;
+}
+
+.btn-reconnect {
+  background: #7c3aed;
+  color: white;
+}
+
+.btn-reconnect:hover {
+  background: #6d28d9;
+}
+
+.error-banner {
+  background: #7f1d1d;
+  color: #fca5a5;
+  padding: 0.5rem 1rem;
+  border-radius: 8px;
+  margin-bottom: 1rem;
+  font-size: 0.85rem;
+}
+
+.event-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 0.75rem;
+}
+
+.event-card {
+  background: #1e293b;
+  border: 1px solid #334155;
+  border-radius: 10px;
+  padding: 0.85rem;
+  animation: fadeIn 0.3s ease-out;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(-4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.event-header {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 0.6rem;
+}
+
+.condition-icon {
+  font-size: 1.4rem;
+}
+
+.location {
+  font-weight: 600;
+  font-size: 1rem;
+  flex: 1;
+}
+
+.condition {
+  font-size: 0.8rem;
+  color: #94a3b8;
+}
+
+.event-metrics {
+  display: flex;
+  gap: 1rem;
+  margin-bottom: 0.5rem;
+}
+
+.metric {
+  display: flex;
+  flex-direction: column;
+}
+
+.metric-label {
+  font-size: 0.65rem;
+  text-transform: uppercase;
+  color: #64748b;
+  letter-spacing: 0.05em;
+}
+
+.metric-value {
+  font-size: 1rem;
+  font-weight: 600;
+}
+
+.event-time {
+  font-size: 0.7rem;
+  color: #475569;
+}
+
+.empty-state {
+  grid-column: 1 / -1;
+  text-align: center;
+  padding: 3rem;
+  color: #64748b;
+}
