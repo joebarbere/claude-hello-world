@@ -76,6 +76,10 @@ import { AuthService } from '../auth.service';
       color: var(--text-primary);
     }
     .btn-secondary:hover { background: var(--border-color); }
+    @media (max-width: 480px) {
+      .unauth-wrapper { padding: 1rem; }
+      .unauth-card { padding: 1.5rem 1.25rem; }
+    }
   `],
 })
 export class UnauthorizedComponent {

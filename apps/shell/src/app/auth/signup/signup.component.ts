@@ -131,6 +131,10 @@ import { HttpClient } from '@angular/common/http';
       text-decoration: none;
     }
     .back-link:hover { text-decoration: underline; }
+    @media (max-width: 480px) {
+      .signup-wrapper { padding: 1rem; }
+      .signup-card { padding: 1.5rem 1.25rem; }
+    }
   `],
 })
 export class SignupComponent {

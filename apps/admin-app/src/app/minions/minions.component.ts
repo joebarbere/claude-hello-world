@@ -367,6 +367,12 @@ import { MinionsService, Minion, ScheduleType, MinionPayload } from './minions.s
       align-items: center;
     }
     .empty { color: var(--text-secondary); font-style: italic; }
+    @media (max-width: 640px) {
+      .page { padding: 1rem; }
+      .minion-table th, .minion-table td { padding: 0.4rem 0.5rem; font-size: 0.8rem; }
+      .create-form { flex-direction: column; }
+      .create-form .form-input, .create-form select, .create-form .btn { width: 100%; }
+    }
   `],
 })
 export class MinionsComponent implements OnInit {

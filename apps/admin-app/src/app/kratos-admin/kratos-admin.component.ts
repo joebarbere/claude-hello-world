@@ -317,6 +317,12 @@ import {
     .magic-link-input { flex: 1; font-size: 0.8rem; font-family: var(--font-mono); }
     .create-hint { color: var(--text-secondary); font-size: 0.8rem; margin-top: 0.5rem; }
     .empty { color: var(--text-secondary); font-style: italic; }
+    @media (max-width: 640px) {
+      .page { padding: 1rem; }
+      .identity-table th, .identity-table td { padding: 0.4rem 0.5rem; font-size: 0.8rem; }
+      .create-form { flex-direction: column; }
+      .create-form .form-input, .create-form .btn { width: 100%; }
+    }
   `],
 })
 export class KratosAdminComponent implements OnInit {

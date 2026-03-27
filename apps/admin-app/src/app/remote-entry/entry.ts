@@ -217,6 +217,10 @@ const ADMIN_LINKS: AdminLink[] = [
         font-family: var(--font-mono);
         font-size: 0.8125rem;
       }
+      @media (max-width: 640px) {
+        .page-container { padding: 16px; }
+        .link-grid { grid-template-columns: 1fr; }
+      }
     `,
   ],
 })

@@ -147,6 +147,9 @@ interface WeatherForecast {
         font-size: 1.5rem;
         color: var(--accent);
       }
+      @media (max-width: 640px) {
+        thead th, td { padding: 8px 10px; font-size: 0.8125rem; }
+      }
     `,
   ],
 })

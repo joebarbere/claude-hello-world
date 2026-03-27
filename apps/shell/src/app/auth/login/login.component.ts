@@ -171,6 +171,10 @@ import { AuthService, KratosFlowNode, KratosLoginFlow } from '../auth.service';
     .signup-link a:hover {
       text-decoration: underline;
     }
+    @media (max-width: 480px) {
+      .login-wrapper { padding: 1rem; }
+      .login-card { padding: 1.5rem 1.25rem; }
+    }
   `],
 })
 export class LoginComponent implements OnInit {

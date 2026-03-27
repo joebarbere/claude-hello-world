@@ -61,6 +61,10 @@ import { AuthService } from '../auth.service';
       font-weight: 600;
     }
     .btn-link:hover { background: #4f46e5; }
+    @media (max-width: 480px) {
+      .recovery-wrapper { padding: 1rem; }
+      .recovery-card { padding: 1.5rem 1.25rem; }
+    }
   `],
 })
 export class RecoveryComponent implements OnInit {
