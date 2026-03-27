@@ -3820,3 +3820,40 @@ Daily Airflow DAG that compares minion-generated forecasts against historical we
 **Files changed:**
 - `Containerfile.nginx` — added `npx nx sync` step before the production build
 - `SUMMARY.md` — added this step
+
+---
+
+## Step 152: Merge — Batch merge all open Dependabot dependency PRs
+
+Merged all 10 open Dependabot PRs with the `dependencies` label. Applied lessons from Step 68-69: merged in groups with `[skip ci]` on all but the last PR, then synced the lock file before the final merge.
+
+**Breaking change discovered and fixed:** Dependabot bumped `@angular/compiler` to 21.2.x independently, but left `@angular/compiler-cli`, `@angular/core`, and all other `@angular/*` packages at 21.1.x. This created an `ERESOLVE` peer dependency conflict. Fixed by aligning all Angular packages to `~21.2.0`.
+
+**Merged (GitHub Actions — major version bumps, Node 24 runtime):**
+- #42 — `dorny/test-reporter` v1 → v2
+- #43 — `actions/setup-dotnet` v4 → v5
+- #44 — `github/codeql-action` v3 → v4
+- #45 — `actions/upload-artifact` v4 → v7
+
+**Merged (Nx — patch, no breaking changes):**
+- #46 — `nx` 22.5.1 → 22.5.4
+- #47 — `@nx/webpack` 22.5.1 → 22.5.4
+- #48 — `@nx/module-federation` 22.5.1 → 22.5.4
+
+**Merged (Angular — minor, no breaking changes; required manual alignment):**
+- #49 — `@angular/build` 21.1.5 → 21.2.2
+- #51 — `@angular/compiler` 21.1.6 → 21.2.4
+- Manually aligned: `@angular/compiler-cli`, `@angular/core`, `@angular/common`, `@angular/forms`, `@angular/platform-browser`, `@angular/router`, `@angular/animations`, `@angular/language-service`, `@angular-devkit/build-angular`, `@angular-devkit/core`, `@angular-devkit/schematics`, `@schematics/angular` all bumped from `~21.1.0` to `~21.2.0`
+
+**Merged (NuGet — patch, no breaking changes):**
+- #60 — `Scalar.AspNetCore` 2.13.7 → 2.13.12
+
+**Verification:** All 7 Nx projects build successfully after merges. Pre-existing test failures (admin-app stale assertion, ui no test files, weather-api-tests missing .NET 9 SDK) are unrelated.
+
+**Files changed:**
+- `package.json` — aligned all Angular packages to `~21.2.0`
+- `package-lock.json` — regenerated after all npm merges
+- `tsconfig.json` — added missing project references (via `nx sync`)
+- `.github/workflows/` — updated action versions (via merged PRs)
+- `apps/weather-api/WeatherApi.csproj` — Scalar.AspNetCore 2.13.12 (via merged PR)
+- `SUMMARY.md` — added this step
