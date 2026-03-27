@@ -1,0 +1,91 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: observability
+  labels:
+    app: observability
+spec:
+  containers:
+    - name: prometheus
+      image: localhost/prometheus:latest
+      ports:
+        - containerPort: 9090
+          hostPort: 9090
+
+    - name: loki
+      image: localhost/loki:latest
+      ports:
+        - containerPort: 3100
+          hostPort: 3100
+
+    - name: grafana
+      image: localhost/grafana:latest
+      ports:
+        - containerPort: 3000
+          hostPort: 3000
+      env:
+        - name: GF_SECURITY_ADMIN_PASSWORD
+          value: admin
+        - name: GF_USERS_ALLOW_SIGN_UP
+          value: "false"
+        - name: GF_SERVER_ROOT_URL
+          value: "https://localhost:8443/grafana/"
+        - name: GF_SERVER_SERVE_FROM_SUB_PATH
+          value: "true"
+        - name: GF_AUTH_PROXY_ENABLED
+          value: "true"
+        - name: GF_AUTH_PROXY_HEADER_NAME
+          value: X-Webauth-User
+        - name: GF_AUTH_PROXY_HEADER_PROPERTY
+          value: email
+        - name: GF_AUTH_PROXY_AUTO_SIGN_UP
+          value: "true"
+        - name: GF_AUTH_DISABLE_LOGIN_FORM
+          value: "true"
+        - name: GF_AUTH_DISABLE_SIGNOUT_MENU
+          value: "true"
+
+    - name: auth-proxy
+      image: localhost/auth-proxy:latest
+      ports:
+        - containerPort: 4180
+          hostPort: 4180
+
+    - name: postgres-exporter
+      image: prometheuscommunity/postgres-exporter:latest
+      ports:
+        - containerPort: 9187
+          hostPort: 9187
+      env:
+        - name: DATA_SOURCE_NAME
+          value: "postgresql://appuser:apppassword@host.containers.internal:5432/appdb?sslmode=disable"
+
+    - name: promtail
+      image: localhost/promtail:latest
+      volumeMounts:
+        - name: varlog
+          mountPath: /var/log
+          readOnly: true
+        - name: varlibcontainers
+          mountPath: /var/lib/containers
+          readOnly: true
+        - name: traefik-logs
+          mountPath: /var/log/traefik
+          readOnly: true
+        - name: nginx-logs
+          mountPath: /var/log/nginx
+          readOnly: true
+
+  volumes:
+    - name: varlog
+      hostPath:
+        path: /var/log
+    - name: varlibcontainers
+      hostPath:
+        path: /var/lib/containers
+    - name: traefik-logs
+      hostPath:
+        path: /var/log/traefik
+    - name: nginx-logs
+      hostPath:
+        path: /var/log/nginx

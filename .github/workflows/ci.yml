@@ -30,6 +30,39 @@ jobs:
 
       - run: npm ci
 
-      - run: npx nx run-many --target=lint --projects=shell,weather-app,weatheredit-app --parallel=3
+      - uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: '9.0.x'
 
-      - run: npx nx run-many --target=build --projects=shell,weather-app,weatheredit-app --configuration=production --parallel=3
+      - run: npx nx run-many --target=lint --projects=shell,weather-app,weatheredit-app,weather-api --parallel=3
+
+      - run: npx nx run-many --target=build --projects=shell,weather-app,weatheredit-app,weather-api --configuration=production --parallel=3
+  
+  unit-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 20
+          cache: 'npm'
+
+      - uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: '9.0.x'
+
+      - name: Regenerate lock file (Dependabot only)
+        if: github.actor == 'dependabot[bot]'
+        run: npm install --package-lock-only --ignore-scripts
+
+      - run: npm ci
+
+      - name: Run Angular unit tests with coverage
+        run: npx nx run-many --target=test --projects=shell,weather-app,weatheredit-app,weatherstream-app --parallel=3 --coverage
+
+      - name: Run lightning-app unit tests with coverage
+        run: npx vitest run --config apps/lightning-app/vitest.config.mjs --coverage
+
+      - name: Run weather-api unit tests with coverage
+        run: npx nx run weather-api-tests:test

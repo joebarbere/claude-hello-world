@@ -10,7 +10,7 @@
     "emitDeclarationOnly": false,
     "baseUrl": "../../"
   },
-  "include": ["src/**/*.ts"],
+  "include": ["src/**/*.ts", "../../libs/shared/ui/src/index.ts", "../../libs/shared/ui/src/lib/**/*.ts"],
   "exclude": [
     "src/**/*.spec.ts",
     "src/**/*.test.ts",
@@ -25,5 +25,10 @@
     "src/**/*.test.jsx",
     "src/**/*.spec.jsx",
     "src/test-setup.ts"
+  ],
+  "references": [
+    {
+      "path": "../../libs/shared/ui/tsconfig.lib.json"
+    }
   ]
 }

@@ -1,13 +1,543 @@
 # claude-hello-world
 
+[![CI](https://github.com/joebarbere/claude-hello-world/actions/workflows/ci.yml/badge.svg)](https://github.com/joebarbere/claude-hello-world/actions/workflows/ci.yml)
 [![EKS E2E Tests](https://github.com/joebarbere/claude-hello-world/actions/workflows/eks-e2e.yml/badge.svg)](https://github.com/joebarbere/claude-hello-world/actions/workflows/eks-e2e.yml)
 [![OWASP Dependency-Check](https://github.com/joebarbere/claude-hello-world/actions/workflows/dependency-check.yml/badge.svg)](https://github.com/joebarbere/claude-hello-world/actions/workflows/dependency-check.yml)
 [![CodeQL](https://github.com/joebarbere/claude-hello-world/actions/workflows/codeql.yml/badge.svg)](https://github.com/joebarbere/claude-hello-world/actions/workflows/codeql.yml)
 [![Dependabot enabled](https://img.shields.io/badge/dependabot-enabled-blue?logo=dependabot)](https://github.com/joebarbere/claude-hello-world/blob/main/.github/dependabot.yml)
 
-> **This project is for learning [Claude Code](https://claude.ai/code) only. It is not intended for production use.**
+An Nx monorepo demonstrating Angular Module Federation micro-frontends with a .NET 9 Weather API backend and PostgreSQL, all containerized with Podman and orchestrated via `podman play kube`. Traefik handles SSL termination and reverse proxying, while nginx serves the Angular static files. Authentication is handled by [Ory Kratos](https://www.ory.sh/kratos/).
+
+> **This project is for learning [Claude Code](https://claude.ai/code) only. It is not intended for production use.** See the [Security Disclaimer](#security-disclaimer) for details.
 
 ---
+
+## Table of Contents
+
+- [Demo](#demo)
+- [Architecture](#architecture)
+- **Getting Started**
+  - [Prerequisites](#prerequisites)
+  - [SSL / HTTPS](#ssl--https)
+  - [Development](#development)
+  - [Build](#build)
+  - [Run (containers)](#run-containers)
+- **Applications**
+  - [Shared UI Library](#shared-ui-library)
+  - [WeatherStream App](#weatherstream-app-weatherstream-app)
+  - [Lightning App](#lightning-app-lightning-app)
+- **Infrastructure**
+  - [Authentication](#authentication)
+  - [Observability](#observability)
+  - [Kafka & CDC](#kafka--cdc)
+  - [Data Science](#data-science)
+- **Testing**
+  - [Test & Lint](#test--lint)
+  - [E2E Tests (Playwright)](#e2e-tests-playwright)
+  - [CI](#ci)
+- [Weather API Repository Mode](#weather-api-repository-mode)
+- [Security Disclaimer](#security-disclaimer)
+
+---
+
+## Demo
+
+### Shell — Home Dashboard
+
+The shell app is the Module Federation host. It provides the sidebar layout, navigation, and session-aware greeting banner.
+
+![Shell Home Dashboard](docs/screenshots/shell-home.png)
+
+### Weather Forecast (read-only)
+
+Displays weather data from the .NET API in a clean table with color-coded summary badges.
+
+![Weather Forecast App](docs/screenshots/weather-app.png)
+
+### Manage Forecasts (CRUD)
+
+Full create, edit, and delete workflow for weather forecasts. Requires authentication.
+
+![Manage Forecasts App](docs/screenshots/weatheredit-app.png)
+
+### Admin Dashboard
+
+Quick links to infrastructure and admin services — API docs, Kratos identity management, Grafana, Kafka UI, Traefik, and the data science stack (Airflow, Jupyter, MinIO).
+
+![Admin Dashboard](docs/screenshots/admin-app.png)
+
+## Architecture
+
+```
+Browser
+  └── Shell (Angular MFE host, :4200 / :8443 HTTPS / :8080 HTTP→redirect)
+        ├── weather-app (remote, :4201) — weather forecast table (public)
+        ├── weatheredit-app (remote, :4202) — weather forecast CRUD (admin/weather_admin only)
+        └── admin-app (remote, :4203) — admin UI (admin only)
+
+Traefik (reverse proxy, :8080 → redirects to HTTPS, :8443 SSL termination)
+  ├── /                        → nginx (static files) → shell app
+  ├── /weather-app/            → nginx (static files) → weather-app remote
+  ├── /weatheredit-app/        → nginx (static files) → weatheredit-app remote
+  ├── /admin-app/              → nginx (static files) → admin-app remote
+  ├── /weather                 → weather-api
+  ├── /.ory/kratos/public/     → Ory Kratos public API (:4433)
+  └── /.ory/kratos/admin/      → Ory Kratos admin API (:4434)
+
+nginx (container, :8080 internal — static file server only)
+  ├── /                        → shell app
+  ├── /weather-app/            → weather-app remote
+  ├── /weatheredit-app/        → weatheredit-app remote
+  └── /admin-app/              → admin-app remote
+
+weather-api (.NET 9, :5220 dev / :5221 container)
+  ├── GET endpoints — public
+  └── POST/PUT/DELETE endpoints — restricted to admin and weather_admin roles
+
+Ory Kratos (identity, :4433 public / :4434 admin)
+  └── PostgreSQL-backed user store with role-based access (seeded on start by ory-kratos-init)
+
+PostgreSQL 17 (:5432)
+
+Observability (separate pod, not started by kube-up shell)
+  ├── Prometheus (:9090) — metrics scraping and storage
+  ├── Loki (:3100) — log aggregation (tsdb/filesystem backend)
+  ├── Promtail — log collection from pod/container logs, traefik & nginx access logs
+  ├── Grafana (:3000 / https://localhost:8443/grafana/) — dashboards, SSO via Kratos
+  ├── auth-proxy (:4180) — Kratos session validation for Grafana forwardAuth
+  └── postgres-exporter (:9187) — scrapes pg_replication_slots metrics from PostgreSQL
+
+Kafka CDC (separate pod, not started by kube-up shell)
+  ├── Kafka (:9092) — KRaft single-node broker (no Zookeeper)
+  ├── Schema Registry (:8081 / :8085 host) — Confluent Avro schema storage
+  ├── Debezium Connect (:8083) — CDC from PostgreSQL → Kafka topics (Avro-encoded)
+  ├── Kafka UI (:8090 / https://localhost:8443/kafka-ui/) — topic, connector, and schema browser
+  └── slot-guard — replication slot lag monitor; drops stale slots >5 GB as a safety net
+
+Data Science (separate pod, not started by kube-up shell)
+  ├── Apache Airflow (:8280) — DAG-based workflow orchestration (slim image, SequentialExecutor + SQLite)
+  ├── Jupyter Lab (:8888) — interactive notebooks with DuckDB, pandas, pyarrow, boto3
+  └── MinIO (:9000 API / :9001 console) — S3-compatible object storage for datasets and artifacts
+```
+
+## Prerequisites
+
+| Tool | Version |
+|------|---------|
+| Node.js | 20+ |
+| .NET SDK | 9.0 |
+| Podman | any recent |
+| OpenSSL | any recent (for cert regeneration only) |
+
+```sh
+npm install
+```
+
+## SSL / HTTPS
+
+Traefik serves as the SSL termination reverse proxy using a self-signed certificate for `localhost`.
+HTTP on port 8080 automatically redirects to HTTPS on port 8443. nginx serves only static Angular files behind Traefik.
+
+The certificate and private key are pre-generated in `ssl/` (`localhost.crt` + `localhost.key`). Per-OS scripts handle trust, removal, and regeneration:
+
+| Action | Linux | macOS | Windows (PowerShell) |
+|--------|-------|-------|----------------------|
+| Trust cert | `sudo ./ssl/install-cert-linux.sh` | `./ssl/install-cert-macos.sh` | `.\ssl\install-cert-windows.ps1` |
+| Remove cert | `sudo ./ssl/uninstall-cert-linux.sh` | `./ssl/uninstall-cert-macos.sh` | `.\ssl\uninstall-cert-windows.ps1` |
+| Regenerate cert | `./ssl/generate-cert-linux.sh` | `./ssl/generate-cert-macos.sh` | `.\ssl\generate-cert-windows.ps1` |
+
+<details>
+<summary>Regeneration prerequisites & post-steps</summary>
+
+- **Linux:** Requires `openssl` (`sudo apt install openssl` / `sudo dnf install openssl`)
+- **macOS:** Uses the system `openssl`; Homebrew `openssl` also works
+- **Windows:** Requires OpenSSL for Windows (`winget install ShiningLight.OpenSSL`, `choco install openssl`, or Git for Windows which bundles `openssl.exe`)
+
+After regenerating, rebuild the Traefik image and re-trust the new cert:
+```sh
+npx nx podman-build traefik
+# then run the appropriate install-cert script for your OS
+```
+</details>
+
+## Development
+
+```sh
+# Start all apps with hot reload (Angular on :4200, remotes on :4201/:4202)
+npx nx serve shell --devRemotes=weather-app,weatheredit-app
+
+# Start weather API (required for weather data in dev)
+NX_DAEMON=false npx nx serve weather-api
+```
+
+## Build
+
+```sh
+# Build all Angular apps (production)
+npx nx build-all shell
+
+# Build weather API
+NX_DAEMON=false npx nx build weather-api
+
+# Build container images
+npx nx podman-build shell          # nginx image (Angular MFE static files)
+npx nx podman-build traefik        # Traefik reverse proxy + SSL termination
+npx nx podman-build weather-api    # .NET API image
+npx nx podman-build postgres       # PostgreSQL image
+npx nx podman-build ory            # Ory Kratos image + init image
+npx nx run kafka:podman-build      # Kafka CDC images (debezium-connect, debezium-init, slot-guard)
+npx nx podman-build datascience    # Data science images (airflow, jupyter; MinIO uses upstream image)
+```
+
+## Run (containers)
+
+### All services via Kubernetes (recommended)
+
+```sh
+# Build images first, then start all pods
+npx nx podman-build shell
+npx nx podman-build traefik
+npx nx podman-build weather-api
+npx nx podman-build ory
+npx nx kube-up shell
+
+# Stop all pods
+npx nx kube-down shell
+```
+
+| URL | Service |
+|-----|---------|
+| https://localhost:8443 | Shell (HTTPS) |
+| https://localhost:8443/weather-app/ | Weather table (public, HTTPS) |
+| https://localhost:8443/weatheredit-app/ | Weather CRUD (login required, HTTPS) |
+| https://localhost:8443/admin-app/ | Kratos identity admin (admin only, HTTPS) |
+| http://localhost:8080 | Redirects to HTTPS |
+| http://localhost:5221/weatherforecast | Weather API (GET public, writes require auth) |
+| localhost:4433 | Ory Kratos public API |
+| localhost:4434 | Ory Kratos admin API |
+| localhost:5432 | PostgreSQL |
+| https://localhost:8443/grafana/ | Grafana (SSO via Kratos, requires observability pod) |
+| http://localhost:9090 | Prometheus (requires observability pod) |
+| http://localhost:3100 | Loki (requires observability pod) |
+| https://localhost:8443/kafka-ui/ | Kafka UI (requires kafka pod) |
+| http://localhost:8090 | Kafka UI direct (requires kafka pod) |
+| http://localhost:9092 | Kafka broker (requires kafka pod) |
+| http://localhost:8083 | Debezium Connect REST API (requires kafka pod) |
+| http://localhost:8085 | Schema Registry (requires kafka pod) |
+| http://localhost:8280 | Airflow webserver (requires datascience pod) |
+| http://localhost:8888 | Jupyter Lab (requires datascience pod) |
+| http://localhost:9000 | MinIO S3 API (requires datascience pod) |
+| http://localhost:9001 | MinIO Console (requires datascience pod) |
+
+### Individual containers
+
+```sh
+npx nx podman-up shell        # Angular MFE on :8080
+npx nx podman-up weather-api  # Weather API on :5221
+
+npx nx podman-down shell
+npx nx podman-down weather-api
+```
+
+## Shared UI Library
+
+All Angular applications share a common design system provided by the `@org/ui` library at `libs/shared/ui/`. It uses [PrimeNG](https://primeng.org/) with the Aura theme preset for a professional, minimal look.
+
+### Components
+
+| Component | Selector | Purpose |
+|-----------|----------|---------|
+| `LayoutComponent` | `<ui-layout>` | App shell with collapsible sidebar navigation and router outlet |
+| `PageHeaderComponent` | `<ui-page-header>` | Page title, optional subtitle, and action slot |
+| `CardComponent` | `<ui-card>` | Content card with subtle border and shadow |
+| `StatusBadgeComponent` | `<ui-status-badge>` | Color-coded badges (cold/cool/mild/warm/hot, success/danger/neutral) |
+
+### Usage
+
+Import components from `@org/ui` in any Angular standalone component:
+
+```typescript
+import { PageHeaderComponent, CardComponent } from '@org/ui';
+
+@Component({
+  imports: [PageHeaderComponent, CardComponent],
+  template: `
+    <ui-page-header title="My Page" subtitle="Description"></ui-page-header>
+    <ui-card>Content here</ui-card>
+  `,
+})
+export class MyComponent {}
+```
+
+Add `provideSharedUI()` to the app config for PrimeNG theme and animations:
+
+```typescript
+import { provideSharedUI } from '@org/ui';
+
+export const appConfig: ApplicationConfig = {
+  providers: [...provideSharedUI()],
+};
+```
+
+## WeatherStream App (`weatherstream-app`)
+
+![WeatherStream Demo](docs/weatherstream-demo.png)
+
+Angular application that displays a real-time weather event streaming dashboard. Features:
+
+- Live weather event cards showing temperature, humidity, wind speed, and conditions for cities worldwide
+- Dark-themed responsive UI with animated event cards
+- Kafka consumer integration via Electron IPC when running inside `lightning-app`
+- Falls back to simulated weather events when running standalone in the browser
+- Port: 4203 (dev server)
+
+**Serve standalone:** `npx nx serve weatherstream-app`
+
+## Lightning App (`lightning-app`)
+
+Electron desktop application that hosts `weatherstream-app` and provides native Kafka connectivity. Architecture:
+
+- **Main process** — Connects to Kafka via `kafkajs`, consumes from `weather-events` topic
+- **Preload script** — Exposes `electronKafka` API via `contextBridge` (context isolation enabled)
+- **Renderer** — Loads `weatherstream-app` Angular build, receives weather events over IPC
+
+**Serve (dev mode):** `npx nx serve-dev lightning-app`
+**Serve (production build):** `npx nx serve lightning-app`
+
+<details>
+<summary>Environment variables</summary>
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `KAFKA_BROKERS` | `localhost:9092` | Comma-separated Kafka broker addresses |
+| `KAFKA_TOPIC` | `weather-events` | Kafka topic to consume |
+| `KAFKA_GROUP_ID` | `lightning-app-group` | Consumer group ID |
+</details>
+
+## Authentication
+
+Access to the **weatheredit-app** and all **write operations** on the weather-api is restricted to users with `admin` or `weather_admin` roles, enforced by [Ory Kratos](https://www.ory.sh/kratos/).
+
+### Default users
+
+| User | Email | Password | Role |
+|------|-------|----------|------|
+| Admin | `admin@example.com` | `Admin1234!` | `admin` |
+| Weather Admin | `weatheradmin@example.com` | `WeatherAdmin1234!` | `weather_admin` |
+
+> **Note:** Change these credentials before deploying to any non-local environment.
+
+### Auth flow
+
+1. Navigate to `/weatheredit-app` — the Angular auth guard checks your Kratos session.
+2. If unauthenticated, you are redirected to `/auth/login` which initiates a Kratos browser login flow.
+3. After successful login, your session is set via a cookie and you are redirected back.
+4. The weather-api independently validates the session cookie on every write request.
+
+## Observability
+
+The observability stack runs as a **separate pod** and is never started by `kube-up shell` or during e2e tests. It provides metrics, log aggregation, and dashboards for local development.
+
+### Components
+
+| Component | Port | Purpose |
+|-----------|------|---------|
+| Prometheus | 9090 | Scrapes metrics from weather-api, nginx-exporter, traefik, postgres-exporter, Debezium, and itself |
+| Loki | 3100 | Log storage (single-instance, filesystem backend) |
+| Promtail | — | Collects CRI pod logs, Podman container logs, and Traefik/nginx access logs; ships to Loki |
+| Grafana | 3000 | Dashboards and log exploration; served at `https://localhost:8443/grafana/` via Traefik |
+| auth-proxy | 4180 | Validates Kratos sessions for Grafana SSO (Traefik forwardAuth middleware) |
+| postgres-exporter | 9187 | Scrapes `pg_replication_slots` metrics from PostgreSQL for CDC lag visibility |
+
+### Grafana dashboards
+
+Three pre-provisioned dashboards at `https://localhost:8443/grafana/` (SSO via Kratos):
+
+- **Weather API** — HTTP request rate, p99 latency, in-flight requests, process memory, nginx active connections
+- **System Health** — system health %, running pods, container health table, HTTP request/error rates by service, top IP + User-Agent, recent error logs (status >= 400)
+- **Kafka & CDC** — replication slot lag (bytes), slot active status, Debezium time-behind-source, events processed rate, queue capacity, connector task status (requires kafka pod)
+
+<details>
+<summary>Metrics scraped by Prometheus</summary>
+
+| Target | Endpoint | Metrics |
+|--------|----------|---------|
+| weather-api | `host.containers.internal:5221/metrics` | ASP.NET Core HTTP metrics via `prometheus-net` |
+| nginx | `host.containers.internal:9113` | Connection stats via `nginx-prometheus-exporter` sidecar |
+| traefik | `host.containers.internal:8081/metrics` | Request counts, error rates, latency histograms |
+| postgres | `localhost:9187` | Replication slot lag and status via `postgres-exporter` |
+| debezium | `host.containers.internal:9404` | CDC consumer lag and throughput via JMX Prometheus agent |
+| prometheus | `localhost:9090` | Self-scrape |
+</details>
+
+<details>
+<summary>Logs collected by Promtail</summary>
+
+| Source | Path |
+|--------|------|
+| CRI pod logs | `/var/log/pods/*/*/*.log` |
+| Podman container logs | `/var/lib/containers/storage/overlay-containers/*/userdata/ctr.log` |
+| Traefik access logs | `/var/log/traefik/access.log` (JSON — client IP, User-Agent, status, route) |
+| nginx access logs | `/var/log/nginx/access.log` (JSON — remote_addr, request, status, request_time) |
+</details>
+
+<details>
+<summary>Grafana SSO via Ory Kratos</summary>
+
+1. Traefik routes `/grafana` through a `forwardAuth` middleware to the auth-proxy
+2. The auth-proxy reads the Kratos session cookie and calls `/sessions/whoami`
+3. If valid, it returns `200` with `X-Webauth-User: <email>`; Traefik copies this header to the proxied request
+4. If invalid, it redirects to the Kratos login page with `return_to` pointing back to Grafana
+5. Grafana's `auth.proxy` trusts the `X-Webauth-User` header and auto-signs-up/logs in the user
+
+> **macOS note:** Podman containers run inside a Linux VM. The `hostPath` volume mounts (`/var/log`, `/var/lib/containers`) refer to paths inside that VM, not the macOS host filesystem. Log collection works automatically when `kube-up shell` and `kube-up observability` are both running inside the same Podman Machine.
+</details>
+
+## Kafka & CDC
+
+The Kafka pod runs as a **separate pod** and is never started by `kube-up shell`. It captures every row-level change from PostgreSQL (via Debezium logical replication) and publishes them to Kafka topics, enabling event-driven consumers to react to database mutations without polling.
+
+### Components
+
+| Container | Image | Port | Purpose |
+|-----------|-------|------|---------|
+| kafka | `apache/kafka:3.9` | 9092 | KRaft single-node broker (no Zookeeper) |
+| schema-registry | `confluentinc/cp-schema-registry:7.7.1` | 8081 (container), 8085 (host) | Confluent Schema Registry for Avro schema storage and evolution |
+| debezium-connect | `localhost/debezium-connect:latest` | 8083 (REST), 9404 (JMX metrics) | CDC connector; reads Postgres WAL, Avro-encodes, and publishes to Kafka |
+| debezium-init | `localhost/debezium-init:latest` | — | One-shot sidecar that registers the Postgres connector via REST |
+| kafka-ui | `kafbat/kafka-ui:latest` | 8090 | Web UI for topics, connectors, and Avro schemas |
+| slot-guard | `localhost/slot-guard:latest` | — | Periodically checks `pg_replication_slots`; drops inactive Debezium slots exceeding 5 GB lag |
+
+### CDC flow
+
+PostgreSQL has logical replication enabled (`wal_level=logical`). Debezium creates the `debezium_weather` replication slot and `dbz_publication` publication on the `appdb` database, then streams changes from all `public` schema tables. Topics are named with the prefix `weather` (e.g., `weather.public.WeatherForecasts`). Messages are Avro-encoded using Confluent Schema Registry — schemas are auto-registered on first write and can be browsed in Kafka UI.
+
+<details>
+<summary>Monitoring & alerting</summary>
+
+**Three monitoring layers:**
+
+| Layer | Source | What it measures |
+|-------|--------|-----------------|
+| `postgres_exporter` → Prometheus → Grafana | `pg_replication_slots` view | Byte lag accumulating in the WAL on the producer side |
+| Debezium JMX → Prometheus → Grafana | Debezium JMX exporter (port 9404) | Time-behind-source lag on the consumer side |
+| slot-guard | `pg_replication_slots` via `psql` | Last-resort automated cleanup — drops inactive slots >5 GB to prevent WAL disk exhaustion |
+
+**Alerting thresholds:** Warning at >500 MB / inactive >10 min · Critical at >2 GB / inactive >30 min · Emergency (slot-guard auto-drops) at >5 GB.
+
+> **macOS note:** The kafka pod uses `host.containers.internal` to reach the apps pod (Postgres). Both pods must be running inside the same Podman Machine.
+</details>
+
+## Data Science
+
+The data science stack runs as a **separate pod** and is never started by `kube-up shell`. It provides workflow orchestration, interactive notebooks, and S3-compatible object storage for local data science development.
+
+### Start / stop
+
+```sh
+npx nx run datascience:kube-up    # Build images and start the pod
+npx nx run datascience:kube-down  # Stop the pod
+```
+
+### Components
+
+| Component | Port | Image | Purpose |
+|-----------|------|-------|---------|
+| Apache Airflow | 8280 | `apache/airflow:slim-2.10.4-python3.11` | DAG-based workflow orchestration (SequentialExecutor + SQLite) |
+| Jupyter Lab | 8888 | `quay.io/jupyter/minimal-notebook` + DuckDB | Interactive notebooks with DuckDB, pandas, pyarrow, boto3 |
+| MinIO | 9000 (API), 9001 (Console) | `quay.io/minio/minio` | S3-compatible object storage for datasets, models, and artifacts |
+
+### Default credentials
+
+| Service | Username | Password |
+|---------|----------|----------|
+| Airflow | `admin` | `admin` |
+| Jupyter Lab | token | `datascience` |
+| MinIO Console | `minioadmin` | `minioadmin` |
+
+### Pre-installed libraries
+
+The Jupyter container ships with DuckDB (embedded analytical database), pandas, pyarrow, the MinIO Python client, and boto3 for S3 access. Airflow includes `duckdb-engine` (SQLAlchemy dialect) and the MinIO client.
+
+### Persisting MinIO data
+
+By default, MinIO data is stored in `/tmp/datascience/minio/data` which is lost on reboot. To persist objects across restarts:
+
+```sh
+# 1. Create a permanent directory
+mkdir -p ~/datascience/minio/data
+
+# 2. Edit k8s/datascience-pod.yaml — change the minio-data hostPath:
+#    from: /tmp/datascience/minio/data
+#    to:   /home/<your-user>/datascience/minio/data
+```
+
+The same pattern applies to `airflow-dags` and `jupyter-work` volumes if you want DAGs and notebooks to persist.
+
+## Test & Lint
+
+```sh
+npx nx run-many --target=test --all
+npx nx run-many --target=lint --all
+```
+
+## E2E Tests (Playwright)
+
+Three Playwright suites test the apps running inside the EKS pods (Traefik on `:8080`/`:8443`). Each suite targets its app via `BASE_URL`:
+
+| Suite | Default `BASE_URL` | Tests |
+|-------|--------------------|-------|
+| `shell-e2e` | `https://localhost:8443` | Home page, MFE navigation, `/weather` proxy |
+| `weather-app-e2e` | `https://localhost:8443/weather-app/` | Forecast table headers, data rows, temperatures |
+| `weatheredit-app-e2e` | `https://localhost:8443/weatheredit-app/` | Full CRUD — create, edit, delete, confirm/cancel |
+
+### Run against local EKS pods
+
+```sh
+# 1. Start the pods
+npx nx podman-build shell
+npx nx podman-build weather-api
+npx nx kube-up shell
+
+# 2. Run each suite (BASE_URL defaults to the pod URLs above)
+npx nx run shell-e2e:e2e
+npx nx run weather-app-e2e:e2e
+npx nx run weatheredit-app-e2e:e2e
+
+# 3. Tear down
+npx nx kube-down shell
+```
+
+### Run against a remote EKS cluster
+
+```sh
+BASE_URL=https://<eks-node>:8443                    npx nx run shell-e2e:e2e
+BASE_URL=https://<eks-node>:8443/weather-app/       npx nx run weather-app-e2e:e2e
+BASE_URL=https://<eks-node>:8443/weatheredit-app/   npx nx run weatheredit-app-e2e:e2e
+```
+
+## CI
+
+| Workflow | Trigger | What it does |
+|----------|---------|--------------|
+| **CI** (`.github/workflows/ci.yml`) | push / PR | Lint + production build for all Angular apps |
+| **EKS E2E Tests (Smoke)** (`.github/workflows/eks-e2e.yml`) | push to `main` | Builds all container images, starts EKS pods, runs `shell-e2e` only (verifies shell host, MFE navigation, and `/weather` API proxy), posts a result comment on the merged PR |
+| **EKS E2E Tests (Full)** (`.github/workflows/eks-e2e-full.yml`) | manual (`workflow_dispatch`) | Same pod setup, but runs all three Playwright suites including full CRUD coverage for `weather-app-e2e` and `weatheredit-app-e2e` |
+
+In CI, each Playwright config emits:
+- **GitHub annotations** — inline pass/fail markers on the diff
+- **HTML report** — uploaded as a 30-day artifact
+- **JUnit XML** — consumed by `dorny/test-reporter` to create a Check Run visible in the PR Checks tab
+
+## Weather API Repository Mode
+
+Change `"Repository"` in `apps/weather-api/appsettings.json`:
+
+| Value | Behavior |
+|-------|----------|
+| `"Random"` (default) | Read-only, no DB needed |
+| `"InMemory"` | Full CRUD, in-process |
+| `"EfCore"` | Full CRUD, PostgreSQL |
 
 ## Security Disclaimer
 
@@ -55,7 +585,7 @@
 
 ### No rate limiting or brute-force protection on the login endpoint
 
-- nginx does not apply `limit_req` or any other throttle to `/.ory/kratos/public/`. The Kratos login flow has no lockout policy configured, making credential stuffing and brute-force attacks trivial.
+- Traefik does not apply any rate limiting to `/.ory/kratos/public/`. The Kratos login flow has no lockout policy configured, making credential stuffing and brute-force attacks trivial.
 
 ### Kratos CORS allows all configured origins unconditionally
 
@@ -67,278 +597,4 @@
 
 ### No container image scanning
 
-- Container images are built from base images (`node:20-alpine`, `nginx:alpine`, `dotnet/sdk:9.0-alpine`, `postgres:17-alpine`, `oryd/kratos:v1.3.0-distroless`) with no CVE scanning, no image signing, and no dependency pinning beyond the tag.
-
----
-
-An Nx monorepo demonstrating Angular Module Federation micro-frontends with a .NET 9 Weather API backend and PostgreSQL, all containerized with Podman and orchestrated via `podman play kube`. Authentication is handled by [Ory Kratos](https://www.ory.sh/kratos/).
-
-## Architecture
-
-```
-Browser
-  └── Shell (Angular MFE host, :4200 / :8443 HTTPS / :8080 HTTP→redirect)
-        ├── weather-app (remote, :4201) — weather forecast table (public)
-        └── weatheredit-app (remote, :4202) — weather forecast CRUD (admin/weather_admin only)
-
-nginx (container, :8080 → redirects to HTTPS, :8443 SSL termination)
-  ├── /                        → shell app
-  ├── /weather-app/            → weather-app remote
-  ├── /weatheredit-app/        → weatheredit-app remote
-  ├── /weather                 → proxy → weather-api
-  └── /.ory/kratos/public/     → proxy → Ory Kratos public API (:4433)
-
-weather-api (.NET 9, :5220 dev / :5221 container)
-  ├── GET endpoints — public
-  └── POST/PUT/DELETE endpoints — restricted to admin and weather_admin roles
-
-Ory Kratos (identity, :4433 public / :4434 admin)
-  └── PostgreSQL-backed user store with role-based access (seeded on start by ory-kratos-init)
-
-PostgreSQL 17 (:5432)
-```
-
-## Authentication
-
-Access to the **weatheredit-app** and all **write operations** on the weather-api is restricted to users with `admin` or `weather_admin` roles, enforced by [Ory Kratos](https://www.ory.sh/kratos/).
-
-### Default users
-
-| User | Email | Password | Role |
-|------|-------|----------|------|
-| Admin | `admin@example.com` | `Admin1234!` | `admin` |
-| Weather Admin | `weatheradmin@example.com` | `WeatherAdmin1234!` | `weather_admin` |
-
-> **Note:** Change these credentials before deploying to any non-local environment.
-
-### Auth flow
-
-1. Navigate to `/weatheredit-app` — the Angular auth guard checks your Kratos session.
-2. If unauthenticated, you are redirected to `/auth/login` which initiates a Kratos browser login flow.
-3. After successful login, your session is set via a cookie and you are redirected back.
-4. The weather-api independently validates the session cookie on every write request.
-
-## Prerequisites
-
-| Tool | Version |
-|------|---------|
-| Node.js | 20+ |
-| .NET SDK | 9.0 |
-| Podman | any recent |
-| OpenSSL | any recent (for cert regeneration only) |
-
-```sh
-npm install
-```
-
-## SSL / HTTPS
-
-nginx serves all traffic over HTTPS using a self-signed certificate for `localhost`.
-HTTP on port 8080 automatically redirects to HTTPS on port 8443.
-
-The certificate and private key are pre-generated and stored in `ssl/`:
-
-| File | Description |
-|------|-------------|
-| `ssl/localhost.crt` | Self-signed X.509 certificate (CN=localhost, valid 10 years) |
-| `ssl/localhost.key` | RSA 2048 private key |
-| `ssl/generate-cert-linux.sh` | Regenerate the cert on Linux |
-| `ssl/generate-cert-macos.sh` | Regenerate the cert on macOS |
-| `ssl/generate-cert-windows.ps1` | Regenerate the cert on Windows |
-| `ssl/install-cert-linux.sh` | Trust the cert on Linux |
-| `ssl/install-cert-macos.sh` | Trust the cert on macOS |
-| `ssl/install-cert-windows.ps1` | Trust the cert on Windows |
-| `ssl/uninstall-cert-linux.sh` | Remove the trusted cert on Linux |
-| `ssl/uninstall-cert-macos.sh` | Remove the trusted cert on macOS |
-| `ssl/uninstall-cert-windows.ps1` | Remove the trusted cert on Windows |
-
-### Trust the certificate locally
-
-Run the appropriate script for your OS to add the certificate to your system's trusted CA store. Browsers and other tools will then accept `https://localhost:8443` without warnings.
-
-**Linux (Debian/Ubuntu or RHEL/Fedora):**
-```sh
-sudo ./ssl/install-cert-linux.sh
-```
-
-**macOS:**
-```sh
-./ssl/install-cert-macos.sh
-```
-
-**Windows (PowerShell as Administrator):**
-```powershell
-.\ssl\install-cert-windows.ps1
-```
-
-### Remove the trusted certificate
-
-**Linux:**
-```sh
-sudo ./ssl/uninstall-cert-linux.sh
-```
-
-**macOS:**
-```sh
-./ssl/uninstall-cert-macos.sh
-```
-
-**Windows (PowerShell as Administrator):**
-```powershell
-.\ssl\uninstall-cert-windows.ps1
-```
-
-### Regenerate the certificate
-
-Use the script for your OS — each generates `ssl/localhost.crt` and `ssl/localhost.key` in-place.
-
-**Linux:**
-```sh
-./ssl/generate-cert-linux.sh
-```
-Requires `openssl` (`sudo apt install openssl` / `sudo dnf install openssl`).
-
-**macOS:**
-```sh
-./ssl/generate-cert-macos.sh
-```
-Uses the `openssl` that ships with macOS; Homebrew `openssl` also works.
-
-**Windows (PowerShell):**
-```powershell
-.\ssl\generate-cert-windows.ps1
-```
-Requires OpenSSL for Windows (`winget install ShiningLight.OpenSSL`, `choco install openssl`, or Git for Windows which bundles `openssl.exe`).
-
-After regenerating, rebuild the container image and re-trust the new cert on each machine:
-```sh
-npx nx podman-build shell
-# then run the appropriate install-cert script for your OS
-```
-
-## Development
-
-```sh
-# Start all apps with hot reload (Angular on :4200, remotes on :4201/:4202)
-npx nx serve shell --devRemotes=weather-app,weatheredit-app
-
-# Start weather API (required for weather data in dev)
-NX_DAEMON=false npx nx serve weather-api
-```
-
-## Build
-
-```sh
-# Build all Angular apps (production)
-npx nx build-all shell
-
-# Build weather API
-NX_DAEMON=false npx nx build weather-api
-
-# Build container images
-npx nx podman-build shell          # nginx image (Angular MFE)
-npx nx podman-build weather-api    # .NET API image
-npx nx podman-build postgres       # PostgreSQL image
-npx nx podman-build ory            # Ory Kratos image + init image
-```
-
-## Run (containers)
-
-### All services via Kubernetes (recommended)
-
-```sh
-# Build images first, then start all pods
-npx nx podman-build shell
-npx nx podman-build weather-api
-npx nx podman-build ory
-npx nx kube-up shell
-
-# Stop all pods
-npx nx kube-down shell
-```
-
-| URL | Service |
-|-----|---------|
-| https://localhost:8443 | Shell (HTTPS) |
-| https://localhost:8443/weather-app/ | Weather table (public, HTTPS) |
-| https://localhost:8443/weatheredit-app/ | Weather CRUD (login required, HTTPS) |
-| http://localhost:8080 | Redirects to HTTPS |
-| http://localhost:5221/weatherforecast | Weather API (GET public, writes require auth) |
-| localhost:4433 | Ory Kratos public API |
-| localhost:4434 | Ory Kratos admin API |
-| localhost:5432 | PostgreSQL |
-
-### Individual containers
-
-```sh
-npx nx podman-up shell        # Angular MFE on :8080
-npx nx podman-up weather-api  # Weather API on :5221
-
-npx nx podman-down shell
-npx nx podman-down weather-api
-```
-
-## Test & Lint
-
-```sh
-npx nx run-many --target=test --all
-npx nx run-many --target=lint --all
-```
-
-## Weather API repository mode
-
-Change `"Repository"` in `apps/weather-api/appsettings.json`:
-
-| Value | Behavior |
-|-------|----------|
-| `"Random"` (default) | Read-only, no DB needed |
-| `"InMemory"` | Full CRUD, in-process |
-| `"EfCore"` | Full CRUD, PostgreSQL |
-
-## E2E Tests (Playwright)
-
-Three Playwright suites test the apps running inside the EKS pods (nginx on `:8080`). Each suite targets its app via `BASE_URL`:
-
-| Suite | Default `BASE_URL` | Tests |
-|-------|--------------------|-------|
-| `shell-e2e` | `https://localhost:8443` | Home page, MFE navigation, `/weather` proxy |
-| `weather-app-e2e` | `https://localhost:8443/weather-app/` | Forecast table headers, data rows, temperatures |
-| `weatheredit-app-e2e` | `https://localhost:8443/weatheredit-app/` | Full CRUD — create, edit, delete, confirm/cancel |
-
-### Run against local EKS pods
-
-```sh
-# 1. Start the pods
-npx nx podman-build shell
-npx nx podman-build weather-api
-npx nx kube-up shell
-
-# 2. Run each suite (BASE_URL defaults to the pod URLs above)
-npx nx run shell-e2e:e2e
-npx nx run weather-app-e2e:e2e
-npx nx run weatheredit-app-e2e:e2e
-
-# 3. Tear down
-npx nx kube-down shell
-```
-
-### Run against a remote EKS cluster
-
-```sh
-BASE_URL=https://<eks-node>:8443                    npx nx run shell-e2e:e2e
-BASE_URL=https://<eks-node>:8443/weather-app/       npx nx run weather-app-e2e:e2e
-BASE_URL=https://<eks-node>:8443/weatheredit-app/   npx nx run weatheredit-app-e2e:e2e
-```
-
-## CI
-
-| Workflow | Trigger | What it does |
-|----------|---------|--------------|
-| **CI** (`.github/workflows/ci.yml`) | push / PR | Lint + production build for all Angular apps |
-| **EKS E2E Tests (Smoke)** (`.github/workflows/eks-e2e.yml`) | push to `main` | Builds all container images, starts EKS pods, runs `shell-e2e` only (verifies shell host, MFE navigation, and `/weather` API proxy), posts a result comment on the merged PR |
-| **EKS E2E Tests (Full)** (`.github/workflows/eks-e2e-full.yml`) | manual (`workflow_dispatch`) | Same pod setup, but runs all three Playwright suites including full CRUD coverage for `weather-app-e2e` and `weatheredit-app-e2e` |
-
-In CI, each Playwright config emits:
-- **GitHub annotations** — inline pass/fail markers on the diff
-- **HTML report** — uploaded as a 30-day artifact
-- **JUnit XML** — consumed by `dorny/test-reporter` to create a Check Run visible in the PR Checks tab
+- Container images are built from base images (`node:20-alpine`, `nginx:alpine`, `traefik:v3.3-alpine`, `dotnet/sdk:9.0-alpine`, `postgres:17-alpine`, `oryd/kratos:v1.3.0-distroless`) with no CVE scanning, no image signing, and no dependency pinning beyond the tag.

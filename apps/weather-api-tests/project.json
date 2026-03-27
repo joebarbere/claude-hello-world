@@ -1,0 +1,16 @@
+{
+  "name": "weather-api-tests",
+  "$schema": "../../node_modules/nx/schemas/project-schema.json",
+  "projectType": "application",
+  "sourceRoot": "apps/weather-api-tests",
+  "targets": {
+    "test": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "dotnet test apps/weather-api-tests/WeatherApi.Tests.csproj --collect:\"XPlat Code Coverage\" --results-directory coverage/apps/weather-api-tests /p:ThresholdType=line /p:Threshold=80 /p:ThresholdStat=total",
+        "cwd": "{workspaceRoot}"
+      }
+    }
+  },
+  "tags": ["type:test", "platform:dotnet"]
+}

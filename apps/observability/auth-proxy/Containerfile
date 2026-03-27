@@ -1,0 +1,4 @@
+FROM python:3.13-alpine
+COPY auth-proxy.py /app/auth-proxy.py
+EXPOSE 4180
+CMD ["python", "/app/auth-proxy.py"]

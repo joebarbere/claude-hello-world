@@ -22,6 +22,14 @@
 
 <!-- nx configuration end-->
 
+## Module Federation
+
+This monorepo uses Angular Module Federation (shell + remotes). Key gotchas:
+
+- **Use signals, not plain properties, for reactive state in remote components.** HTTP subscribe callbacks can run outside Angular's zone in the MF context, so zone-based change detection won't trigger. Signals push notifications directly and always work. See `weather-app/src/app/remote-entry/entry.ts` for the correct pattern.
+- **Proxy all backend API calls through Traefik** (relative paths like `/.ory/kratos/admin/...`). Never call backend ports directly (e.g., `http://localhost:4434`) from browser code — this causes CORS errors since the app is served from `https://localhost:8443`.
+- Traefik routes and strip-prefix middleware are in `traefik/traefik-dynamic.yml`.
+
 ## SUMMARY.md
 
 - **Always update `SUMMARY.md` before committing.** Every non-trivial change (bug fix, feature, config change, workflow update) must be documented as a new numbered step.

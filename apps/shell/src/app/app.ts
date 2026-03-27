@@ -1,13 +1,17 @@
 import { Component } from '@angular/core';
-import { RouterModule } from '@angular/router';
-import { NxWelcome } from './nx-welcome';
+import { LayoutComponent } from '@org/ui';
 
 @Component({
-  imports: [NxWelcome, RouterModule],
+  imports: [LayoutComponent],
   selector: 'app-root',
-  templateUrl: './app.html',
-  styleUrl: './app.css',
+  template: `<ui-layout></ui-layout>`,
+  styles: [
+    `
+      :host {
+        display: block;
+        height: 100vh;
+      }
+    `,
+  ],
 })
-export class App {
-  protected title = 'shell';
-}
+export class App {}

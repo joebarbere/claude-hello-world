@@ -6,5 +6,10 @@
     },
     "secure": false,
     "changeOrigin": true
+  },
+  "/minions": {
+    "target": "http://localhost:5220",
+    "secure": false,
+    "changeOrigin": true
   }
 }

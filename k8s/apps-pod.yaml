@@ -27,10 +27,34 @@ metadata:
     app: claude-hello-world
 spec:
   containers:
-    - name: nginx
-      image: localhost/claude-hello-world:latest
+    - name: traefik
+      image: localhost/traefik:latest
       ports:
         - containerPort: 80
           hostPort: 8080
         - containerPort: 443
           hostPort: 8443
+        - containerPort: 8081
+          hostPort: 8081
+      volumeMounts:
+        - name: traefik-logs
+          mountPath: /var/log/traefik
+    - name: nginx
+      image: localhost/claude-hello-world:latest
+      volumeMounts:
+        - name: nginx-logs
+          mountPath: /var/log/nginx
+    - name: nginx-exporter
+      image: nginx/nginx-prometheus-exporter:latest
+      args:
+        - --nginx.scrape-uri=http://localhost:8080/nginx_status
+      ports:
+        - containerPort: 9113
+          hostPort: 9113
+  volumes:
+    - name: traefik-logs
+      hostPath:
+        path: /var/log/traefik
+    - name: nginx-logs
+      hostPath:
+        path: /var/log/nginx

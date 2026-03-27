@@ -1,0 +1,8 @@
+FROM alpine:3.21
+
+RUN apk add --no-cache wget
+
+COPY register-connector.sh /register-connector.sh
+RUN chmod +x /register-connector.sh
+
+CMD ["/register-connector.sh"]

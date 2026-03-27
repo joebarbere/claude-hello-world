@@ -1,0 +1,55 @@
+{
+  "name": "lightning-app",
+  "$schema": "../../node_modules/nx/schemas/project-schema.json",
+  "projectType": "application",
+  "sourceRoot": "apps/lightning-app/src",
+  "tags": ["type:electron"],
+  "targets": {
+    "build-angular": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "npx nx build weatherstream-app --configuration=production"
+      }
+    },
+    "serve": {
+      "executor": "nx:run-commands",
+      "options": {
+        "commands": [
+          "npx nx build weatherstream-app --configuration=development",
+          "npx electron apps/lightning-app/src/main.js"
+        ],
+        "parallel": false
+      }
+    },
+    "serve-dev": {
+      "executor": "nx:run-commands",
+      "options": {
+        "commands": [
+          "npx nx serve weatherstream-app --configuration=development &",
+          "sleep 5 && WEATHERSTREAM_DEV_SERVER=http://localhost:4203 npx electron apps/lightning-app/src/main.js"
+        ],
+        "parallel": false
+      }
+    },
+    "package": {
+      "executor": "nx:run-commands",
+      "options": {
+        "commands": [
+          "npx nx build weatherstream-app --configuration=production",
+          "npx electron-builder --config apps/lightning-app/electron-builder.json"
+        ],
+        "parallel": false
+      }
+    },
+    "test": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "npx vitest run --config apps/lightning-app/vitest.config.mjs",
+        "cwd": "{workspaceRoot}"
+      }
+    },
+    "lint": {
+      "executor": "@nx/eslint:lint"
+    }
+  }
+}

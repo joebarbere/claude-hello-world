@@ -20,7 +20,11 @@
             "input": "apps/shell/public"
           }
         ],
-        "styles": ["apps/shell/src/styles.css"],
+        "styles": [
+          "node_modules/primeicons/primeicons.css",
+          "libs/shared/ui/src/lib/styles/shared-styles.css",
+          "apps/shell/src/styles.css"
+        ],
         "customWebpackConfig": {
           "path": "apps/shell/webpack.config.ts"
         }
@@ -101,13 +105,15 @@
     "build-all": {
       "executor": "nx:run-commands",
       "options": {
-        "command": "npx nx run-many --target=build --projects=shell,weather-app,weatheredit-app --configuration=production --parallel=3"
+        "command": "npx nx run-many --target=build --projects=shell,weather-app,weatheredit-app,admin-app --configuration=production --parallel=3"
       }
     },
     "podman-build": {
       "executor": "nx:run-commands",
       "options": {
-        "command": "podman build -t claude-hello-world -f Containerfile.nginx .",
+        "commands": [
+          "podman build -t claude-hello-world -f Containerfile.nginx ."
+        ],
         "cwd": "{workspaceRoot}"
       },
       "dependsOn": ["build-all"]
@@ -115,7 +121,7 @@
     "podman-up": {
       "executor": "nx:run-commands",
       "options": {
-        "command": "podman run -d --name claude-hello-world -p 8080:80 localhost/claude-hello-world:latest",
+        "command": "podman run -d --name claude-hello-world -p 8080:8080 localhost/claude-hello-world:latest",
         "cwd": "{workspaceRoot}"
       }
     },
@@ -130,8 +136,9 @@
       "executor": "nx:run-commands",
       "options": {
         "commands": [
+          "for img in postgres ory-kratos ory-kratos-init traefik weather-api claude-hello-world; do podman image exists localhost/$img:latest || { echo \"ERROR: missing image localhost/$img:latest — run the podman-build targets first\"; exit 1; }; done",
+          "if podman machine inspect >/dev/null 2>&1; then podman machine ssh 'sudo mkdir -p /var/log/traefik /var/log/nginx && sudo chmod -R 777 /var/log/traefik /var/log/nginx && sudo chcon -Rt container_file_t /var/log/traefik /var/log/nginx'; else sudo mkdir -p /var/log/traefik /var/log/nginx && sudo chmod -R 777 /var/log/traefik /var/log/nginx && (command -v chcon >/dev/null && sudo chcon -Rt container_file_t /var/log/traefik /var/log/nginx || true); fi",
           "podman play kube k8s/postgres-pod.yaml",
-          "until pg_isready -h 127.0.0.1 -p 5432 -U appuser; do echo 'waiting for postgres'; sleep 2; done",
           "i=0; until podman run --rm localhost/postgres:latest pg_isready -h host.containers.internal -p 5432 -U appuser; do i=$((i+1)); [ $i -ge 30 ] && echo 'ERROR: postgres unreachable via host.containers.internal' && exit 1; echo 'waiting for postgres via host.containers.internal'; sleep 2; done",
           "podman play kube k8s/ory-kratos-pod.yaml",
           "podman play kube k8s/apps-pod.yaml"
@@ -139,7 +146,7 @@
         "parallel": false,
         "cwd": "{workspaceRoot}"
       },
-      "dependsOn": ["postgres:podman-build", "ory:podman-build"]
+      "dependsOn": ["postgres:podman-build", "ory:podman-build", "traefik:podman-build", "weather-api:podman-build", "podman-build"]
     },
     "kube-down": {
       "executor": "nx:run-commands",

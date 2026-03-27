@@ -1,0 +1,36 @@
+<div class="app-layout" [class.sidebar-collapsed]="sidebarCollapsed()">
+  <!-- Sidebar -->
+  <aside class="sidebar">
+    <div class="sidebar-header">
+      <span class="sidebar-logo">
+        <i class="pi pi-bolt"></i>
+        @if (!sidebarCollapsed()) {
+          <span class="sidebar-title">NxWeather</span>
+        }
+      </span>
+      <button class="sidebar-toggle" (click)="toggleSidebar()" aria-label="Toggle sidebar">
+        <i [class]="sidebarCollapsed() ? 'pi pi-angle-right' : 'pi pi-angle-left'"></i>
+      </button>
+    </div>
+    <nav class="sidebar-nav">
+      @for (item of navItems; track item.route) {
+        <a
+          class="nav-item"
+          [class.active]="isActive(item.route)"
+          [routerLink]="item.route"
+          [attr.title]="sidebarCollapsed() ? item.label : null"
+        >
+          <i [class]="item.icon"></i>
+          @if (!sidebarCollapsed()) {
+            <span>{{ item.label }}</span>
+          }
+        </a>
+      }
+    </nav>
+  </aside>
+
+  <!-- Main content -->
+  <main class="main-content">
+    <router-outlet></router-outlet>
+  </main>
+</div>

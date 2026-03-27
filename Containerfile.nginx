@@ -4,19 +4,17 @@ WORKDIR /app
 COPY package*.json ./
 RUN npm ci --ignore-scripts
 COPY . .
-RUN npx nx run-many --target=build --projects=shell,weather-app,weatheredit-app --configuration=production --parallel=3
+RUN npx nx sync
+RUN npx nx run-many --target=build --projects=shell,weather-app,weatheredit-app,admin-app --configuration=production --parallel=1
 
 # Stage 2: Serve
 FROM nginx:alpine AS runner
 COPY nginx/nginx.conf /etc/nginx/nginx.conf
+RUN mkdir -p /var/log/nginx && chown nginx:nginx /var/log/nginx
 RUN sed -i 's|application/javascript\s*js;|application/javascript js mjs;|' /etc/nginx/mime.types
-RUN mkdir -p /etc/nginx/ssl
-COPY ssl/localhost.crt /etc/nginx/ssl/localhost.crt
-COPY ssl/localhost.key /etc/nginx/ssl/localhost.key
-RUN chmod 600 /etc/nginx/ssl/localhost.key
 COPY --from=builder /app/dist/apps/shell /usr/share/nginx/html/shell
 COPY --from=builder /app/dist/apps/weather-app /usr/share/nginx/html/weather-app
 COPY --from=builder /app/dist/apps/weatheredit-app /usr/share/nginx/html/weatheredit-app
-EXPOSE 80
-EXPOSE 443
+COPY --from=builder /app/dist/apps/admin-app /usr/share/nginx/html/admin-app
+EXPOSE 8080
 CMD ["nginx", "-g", "daemon off;"]
