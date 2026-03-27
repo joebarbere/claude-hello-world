@@ -100,6 +100,54 @@ forecasts.MapDelete("/{id:int}", async (int id, IWeatherForecastRepository repo)
 })
 .WithName("DeleteWeatherForecast");
 
+var minions = app.MapGroup("/minions");
+
+minions.MapGet("/", async (IMinionRepository repo) =>
+    Results.Ok(await repo.GetAllAsync()))
+    .WithName("GetMinions");
+
+minions.MapGet("/{id:int}", async (int id, IMinionRepository repo) =>
+{
+    var result = await repo.GetByIdAsync(id);
+    return result is null ? Results.NotFound() : Results.Ok(result);
+})
+.WithName("GetMinionById");
+
+minions.MapPost("/", async (Minion input, IMinionRepository repo) =>
+{
+    var created = await repo.CreateAsync(input);
+    return Results.Created($"/minions/{created.Id}", created);
+})
+.WithName("CreateMinion");
+
+minions.MapPut("/{id:int}", async (int id, Minion input, IMinionRepository repo) =>
+{
+    var updated = await repo.UpdateAsync(id, input);
+    return updated is null ? Results.NotFound() : Results.Ok(updated);
+})
+.WithName("UpdateMinion");
+
+minions.MapDelete("/{id:int}", async (int id, IMinionRepository repo) =>
+{
+    var deleted = await repo.DeleteAsync(id);
+    return deleted ? Results.NoContent() : Results.NotFound();
+})
+.WithName("DeleteMinion");
+
+minions.MapPost("/{id:int}/start", async (int id, IMinionRepository repo) =>
+{
+    var result = await repo.SetActiveAsync(id, true);
+    return result is null ? Results.NotFound() : Results.Ok(result);
+})
+.WithName("StartMinion");
+
+minions.MapPost("/{id:int}/stop", async (int id, IMinionRepository repo) =>
+{
+    var result = await repo.SetActiveAsync(id, false);
+    return result is null ? Results.NotFound() : Results.Ok(result);
+})
+.WithName("StopMinion");
+
 app.MapPost("/signup", async (SignupRequest request, IConfiguration config) =>
 {
     if (string.IsNullOrWhiteSpace(request.Email))

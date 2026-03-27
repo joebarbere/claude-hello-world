@@ -74,6 +74,15 @@ http:
       priority: 22
       tls: {}
 
+    # Minions API — routed to weather-api
+    minions-router:
+      rule: "PathPrefix(`/minions`)"
+      entryPoints:
+        - websecure
+      service: weather-api
+      priority: 20
+      tls: {}
+
     # Angular apps — catch-all to nginx (static files)
     nginx-router:
       rule: "PathPrefix(`/`)"
