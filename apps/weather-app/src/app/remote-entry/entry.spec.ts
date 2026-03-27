@@ -23,6 +23,8 @@ interface WeatherForecast {
 const mockForecasts: WeatherForecast[] = [
   { date: '2024-01-01', temperatureC: 5, temperatureF: 41, summary: 'Chilly' },
   { date: '2024-01-02', temperatureC: 20, temperatureF: 68, summary: 'Warm' },
+  { date: '2024-01-03', temperatureC: 30, temperatureF: 86, summary: 'Hot' },
+  { date: '2024-01-04', temperatureC: 40, temperatureF: 104, summary: null },
 ];
 
 describe('RemoteEntry (weather-app)', () => {
@@ -158,5 +160,52 @@ describe('RemoteEntry (weather-app)', () => {
     fixture.detectChanges();
     const el = fixture.nativeElement as HTMLElement;
     expect(el.textContent).toContain('Failed to load weather data.');
+  });
+
+  describe('tempVariant', () => {
+    it('should return "cold" for temperatures below 0', () => {
+      const fixture = TestBed.createComponent(RemoteEntry);
+      fixture.detectChanges();
+      httpMock.expectOne('/weather').flush([]);
+      expect(fixture.componentInstance.tempVariant(-5)).toBe('cold');
+    });
+
+    it('should return "cool" for temperatures 0–14', () => {
+      const fixture = TestBed.createComponent(RemoteEntry);
+      fixture.detectChanges();
+      httpMock.expectOne('/weather').flush([]);
+      expect(fixture.componentInstance.tempVariant(10)).toBe('cool');
+    });
+
+    it('should return "mild" for temperatures 15–24', () => {
+      const fixture = TestBed.createComponent(RemoteEntry);
+      fixture.detectChanges();
+      httpMock.expectOne('/weather').flush([]);
+      expect(fixture.componentInstance.tempVariant(20)).toBe('mild');
+    });
+
+    it('should return "warm" for temperatures 25–34', () => {
+      const fixture = TestBed.createComponent(RemoteEntry);
+      fixture.detectChanges();
+      httpMock.expectOne('/weather').flush([]);
+      expect(fixture.componentInstance.tempVariant(30)).toBe('warm');
+    });
+
+    it('should return "hot" for temperatures 35+', () => {
+      const fixture = TestBed.createComponent(RemoteEntry);
+      fixture.detectChanges();
+      httpMock.expectOne('/weather').flush([]);
+      expect(fixture.componentInstance.tempVariant(40)).toBe('hot');
+    });
+  });
+
+  it('should render a dash for forecasts with null summary', () => {
+    const fixture = TestBed.createComponent(RemoteEntry);
+    fixture.detectChanges();
+    httpMock.expectOne('/weather').flush(mockForecasts);
+    fixture.detectChanges();
+    const dashes = fixture.nativeElement.querySelectorAll('.dash');
+    expect(dashes.length).toBe(1);
+    expect(dashes[0].textContent).toBe('—');
   });
 });

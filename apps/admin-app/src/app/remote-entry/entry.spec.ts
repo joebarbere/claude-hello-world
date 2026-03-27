@@ -1,20 +1,39 @@
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { TestBed } from '@angular/core/testing';
+import { CUSTOM_ELEMENTS_SCHEMA } from '@angular/core';
 import { provideHttpClient } from '@angular/common/http';
-import { provideHttpClientTesting } from '@angular/common/http/testing';
+import {
+  provideHttpClientTesting,
+  HttpTestingController,
+} from '@angular/common/http/testing';
 import { provideRouter } from '@angular/router';
-import { ɵresolveComponentResources as resolveComponentResources } from '@angular/core';
 import { RemoteEntry } from './entry';
+import {
+  PageHeaderComponent,
+  CardComponent,
+  StatusBadgeComponent,
+} from '@org/ui';
+
+const HEALTH_ENDPOINT = '/.ory/kratos/admin/health/alive';
 
 describe('RemoteEntry (admin-app)', () => {
+  let httpMock: HttpTestingController;
+
   beforeEach(async () => {
-    await resolveComponentResources(() =>
-      Promise.resolve({ text: () => Promise.resolve('') } as Response)
-    );
     await TestBed.configureTestingModule({
       imports: [RemoteEntry],
       providers: [provideHttpClient(), provideHttpClientTesting(), provideRouter([])],
-    }).compileComponents();
+    })
+      .overrideComponent(RemoteEntry, {
+        remove: { imports: [PageHeaderComponent, CardComponent, StatusBadgeComponent] },
+        add: { schemas: [CUSTOM_ELEMENTS_SCHEMA] },
+      })
+      .compileComponents();
+    httpMock = TestBed.inject(HttpTestingController);
+  });
+
+  afterEach(() => {
+    httpMock.verify();
   });
 
   it('should create the component', () => {
@@ -90,32 +109,38 @@ describe('RemoteEntry (admin-app)', () => {
     expect(traefik!.url).toContain('8081');
   });
 
-  it('should render the heading', () => {
+  it('should render the page-header element with the correct title attribute', () => {
     const fixture = TestBed.createComponent(RemoteEntry);
     fixture.detectChanges();
+    httpMock.expectOne(HEALTH_ENDPOINT).flush('OK');
     const compiled = fixture.nativeElement as HTMLElement;
-    expect(compiled.querySelector('h1')?.textContent).toContain('Admin Dashboard');
+    const header = compiled.querySelector('ui-page-header');
+    expect(header).toBeTruthy();
+    expect(header!.getAttribute('title')).toBe('Admin Dashboard');
   });
 
-  it('should render link cards', () => {
+  it('should render a link card inner for each admin link', () => {
     const fixture = TestBed.createComponent(RemoteEntry);
     fixture.detectChanges();
+    httpMock.expectOne(HEALTH_ENDPOINT).flush('OK');
     const compiled = fixture.nativeElement as HTMLElement;
-    const cards = compiled.querySelectorAll('.link-card');
-    expect(cards.length).toBe(4);
+    const cards = compiled.querySelectorAll('.link-card-inner');
+    expect(cards.length).toBe(5);
   });
 
   it('should render external links with target="_blank"', () => {
     const fixture = TestBed.createComponent(RemoteEntry);
     fixture.detectChanges();
+    httpMock.expectOne(HEALTH_ENDPOINT).flush('OK');
     const compiled = fixture.nativeElement as HTMLElement;
-    const externalCards = compiled.querySelectorAll('.link-card[target="_blank"]');
-    expect(externalCards.length).toBe(3);
+    const externalCards = compiled.querySelectorAll('a[target="_blank"]');
+    expect(externalCards.length).toBe(4);
   });
 
   it('should render category section titles', () => {
     const fixture = TestBed.createComponent(RemoteEntry);
     fixture.detectChanges();
+    httpMock.expectOne(HEALTH_ENDPOINT).flush('OK');
     const compiled = fixture.nativeElement as HTMLElement;
     const sections = compiled.querySelectorAll('.section-title');
     const sectionTexts = Array.from(sections).map((s) => s.textContent?.trim());
@@ -123,5 +148,48 @@ describe('RemoteEntry (admin-app)', () => {
     expect(sectionTexts).toContain('Identity');
     expect(sectionTexts).toContain('Observability');
     expect(sectionTexts).toContain('Infrastructure');
+  });
+
+  describe('healthVariant', () => {
+    it('should return "success" for status "up"', () => {
+      const fixture = TestBed.createComponent(RemoteEntry);
+      expect(fixture.componentInstance.healthVariant('up')).toBe('success');
+    });
+
+    it('should return "danger" for status "down"', () => {
+      const fixture = TestBed.createComponent(RemoteEntry);
+      expect(fixture.componentInstance.healthVariant('down')).toBe('danger');
+    });
+
+    it('should return "neutral" for status "pending" (default)', () => {
+      const fixture = TestBed.createComponent(RemoteEntry);
+      expect(fixture.componentInstance.healthVariant('pending')).toBe('neutral');
+    });
+  });
+
+  describe('checkHealth (via ngOnInit)', () => {
+    it('should GET the health endpoint on init', () => {
+      const fixture = TestBed.createComponent(RemoteEntry);
+      fixture.detectChanges();
+      const req = httpMock.expectOne(HEALTH_ENDPOINT);
+      expect(req.request.method).toBe('GET');
+      req.flush('OK');
+    });
+
+    it('should set healthStatus to "up" when health check succeeds', () => {
+      const fixture = TestBed.createComponent(RemoteEntry);
+      fixture.detectChanges();
+      httpMock.expectOne(HEALTH_ENDPOINT).flush('OK');
+      expect(fixture.componentInstance.healthStatus[HEALTH_ENDPOINT]).toBe('up');
+    });
+
+    it('should set healthStatus to "down" when health check fails', () => {
+      const fixture = TestBed.createComponent(RemoteEntry);
+      fixture.detectChanges();
+      httpMock
+        .expectOne(HEALTH_ENDPOINT)
+        .flush(null, { status: 503, statusText: 'Service Unavailable' });
+      expect(fixture.componentInstance.healthStatus[HEALTH_ENDPOINT]).toBe('down');
+    });
   });
 });

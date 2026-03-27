@@ -3471,3 +3471,32 @@ The README was 569 lines with no table of contents, no anchor links, and section
 **Files changed:**
 - `README.md` — reorganized sections, added TOC, condensed verbose content
 - `SUMMARY.md` — added this step
+
+---
+
+## Step 140: Fix — increase unit test coverage to 100% across all apps
+
+CI failed because weather-app branch coverage was 50% (threshold: 80%). The `tempVariant()` method had 5 branches but only 3 were tested. Investigation revealed coverage gaps in all three apps.
+
+**Root cause / motivation:** Tests only exercised happy-path data, leaving conditional branches uncovered: `tempVariant()` warm/hot paths in weather-app, `healthVariant()`/`checkHealth()` in admin-app, `summary ?? ''` null coalescing in weatheredit-app, and `role || ''` falsy branch in kratos-admin.
+
+**What changed:**
+
+*weather-app* — Added 6 tests: all 5 `tempVariant()` branches (cold/cool/mild/warm/hot) + null summary dash rendering. Added mock data with temps 30 and 40 to hit warm/hot paths. Coverage: 50% → 100% branches.
+
+*admin-app remote-entry* — Fixed broken test setup: added `resolve.alias` for `@org/ui` in `vite.config.mts`, replaced `resolveComponentResources` (Angular private API) with `overrideComponent` + `CUSTOM_ELEMENTS_SCHEMA` pattern, added `HttpTestingController` with `afterEach` verification, fixed 3 DOM tests with wrong selectors. Added 6 new tests for `healthVariant()` (3 branches) and `checkHealth()` HTTP flow (init request, success, error).
+
+*weatheredit-app* — Added test calling `openEdit()` with `summary: null` to cover the `??` operator's falsy branch. Coverage: 91.66% → 100% branches.
+
+*kratos-admin* — Added test calling `startEdit()` with identity lacking a role to cover `role || ''` falsy branch. Coverage: 83.33% → 100% branches.
+
+*test agent definition* — Added "Code Coverage" section with threshold documentation, branch coverage guidance, diagnostic workflow, and common patterns needing explicit branch tests.
+
+**Files changed:**
+- `apps/weather-app/src/app/remote-entry/entry.spec.ts` — added tempVariant + null summary tests
+- `apps/admin-app/vite.config.mts` — added `resolve.alias` for `@org/ui`
+- `apps/admin-app/src/app/remote-entry/entry.spec.ts` — fixed setup, added healthVariant/checkHealth tests
+- `apps/admin-app/src/app/kratos-admin/kratos-admin.component.spec.ts` — added no-role startEdit test
+- `apps/weatheredit-app/src/app/remote-entry/entry.spec.ts` — added null-summary openEdit test
+- `.claude/agents/test.md` — added Code Coverage guidance section
+- `SUMMARY.md` — added this step

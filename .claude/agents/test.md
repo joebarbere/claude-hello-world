@@ -138,6 +138,26 @@ await expect(page.locator('.success-message')).toBeVisible({ timeout: 15000 });
 4. **Test observable behavior, not implementation**: Assert on what the user sees (rendered output, API response, route navigation), not internal state. This makes tests resilient to refactoring.
 5. **Consult the docs**: Verify Vitest APIs, Playwright selectors, xUnit assertions, and Angular testing utilities against official documentation.
 
+## Code Coverage
+
+### Coverage Thresholds
+This project enforces **80% thresholds** on statements, branches, functions, and lines for Angular apps. CI runs `npx nx test <project> --coverage` and fails if thresholds are not met. Threshold definitions live in the vitest workspace config — consult it for the authoritative values.
+
+### Branch Coverage Is the Most Common Failure Point
+Branches (if/else, ternary, switch cases, `@if`/`@else` template blocks) require explicit tests for **each path**. A component with 5 if-branches needs tests that exercise all 5 paths, not just the happy path.
+
+### How to Diagnose Coverage Gaps
+Run `npx nx test <project> --coverage` locally and check the **"Uncovered Line #s"** column in the output. Map those lines back to the source to identify which branches or statements are untested.
+
+### Common Patterns That Need Branch Coverage
+- **Angular `@if`/`@else` template blocks** — test both the truthy and falsy states.
+- **Error handlers in HTTP subscribe callbacks** — test both the success and error paths.
+- **Variant/mapping functions** (like `tempVariant()`) — test every return path including boundary values.
+- **Null/undefined guards** — test with and without the value.
+
+### When Adding Tests for Coverage
+Add mock data that exercises uncovered paths. For example, if a temperature variant function has 5 ranges, the mock data should include values in each range so every branch is hit.
+
 ## Test Suite Architecture
 
 ### Feature-Level Tests (Fast Feedback)
