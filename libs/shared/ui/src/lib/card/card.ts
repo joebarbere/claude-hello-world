@@ -11,10 +11,10 @@ import { Component } from '@angular/core';
   styles: [
     `
       .ui-card {
-        background: #ffffff;
-        border: 1px solid #e9ecef;
+        background: var(--bg-surface);
+        border: 1px solid var(--border-color);
         border-radius: 12px;
-        box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+        box-shadow: var(--shadow-sm);
         overflow: hidden;
       }
     `,

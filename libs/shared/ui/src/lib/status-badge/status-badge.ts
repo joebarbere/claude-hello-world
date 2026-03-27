@@ -20,44 +20,44 @@ import { Component, input } from '@angular/core';
         white-space: nowrap;
       }
       .status-info {
-        background: #eff6ff;
-        color: #1d4ed8;
+        background: rgba(59, 130, 246, 0.15);
+        color: #60a5fa;
       }
       .status-success {
-        background: #f0fdf4;
-        color: #15803d;
+        background: rgba(34, 197, 94, 0.15);
+        color: #4ade80;
       }
       .status-warning {
-        background: #fffbeb;
-        color: #b45309;
+        background: rgba(245, 158, 11, 0.15);
+        color: #fbbf24;
       }
       .status-danger {
-        background: #fff1f2;
-        color: #be123c;
+        background: rgba(239, 68, 68, 0.15);
+        color: #f87171;
       }
       .status-neutral {
-        background: #f1f5f9;
-        color: #475569;
+        background: rgba(148, 163, 184, 0.15);
+        color: var(--text-secondary);
       }
       .status-cold {
-        background: #eff6ff;
-        color: #1d4ed8;
+        background: rgba(59, 130, 246, 0.15);
+        color: #60a5fa;
       }
       .status-cool {
-        background: #f0f9ff;
-        color: #0369a1;
+        background: rgba(6, 182, 212, 0.15);
+        color: #22d3ee;
       }
       .status-mild {
-        background: #f0fdf4;
-        color: #15803d;
+        background: rgba(34, 197, 94, 0.15);
+        color: #4ade80;
       }
       .status-warm {
-        background: #fffbeb;
-        color: #b45309;
+        background: rgba(245, 158, 11, 0.15);
+        color: #fbbf24;
       }
       .status-hot {
-        background: #fff1f2;
-        color: #be123c;
+        background: rgba(239, 68, 68, 0.15);
+        color: #f87171;
       }
     `,
   ],

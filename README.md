@@ -42,21 +42,23 @@ An Nx monorepo demonstrating Angular Module Federation micro-frontends with a .N
 
 ## Demo
 
+All apps use a dark-mode-first design with the Inter font and consistent indigo accent colors.
+
 ### Shell — Home Dashboard
 
-The shell app is the Module Federation host. It provides the sidebar layout, navigation, and session-aware greeting banner.
+The shell app is the Module Federation host. It provides the dark sidebar layout, navigation, and session-aware greeting banner.
 
 ![Shell Home Dashboard](docs/screenshots/shell-home.png)
 
 ### Weather Forecast (read-only)
 
-Displays weather data from the .NET API in a clean table with color-coded summary badges.
+Displays weather data from the .NET API in a dark-themed table with color-coded summary badges.
 
 ![Weather Forecast App](docs/screenshots/weather-app.png)
 
 ### Manage Forecasts (CRUD)
 
-Full create, edit, and delete workflow for weather forecasts. Requires authentication.
+Full create, edit, and delete workflow for weather forecasts with dark form styling. Requires authentication.
 
 ![Manage Forecasts App](docs/screenshots/weatheredit-app.png)
 
@@ -278,6 +280,19 @@ export const appConfig: ApplicationConfig = {
   providers: [...provideSharedUI()],
 };
 ```
+
+## Design
+
+The application uses a **dark-mode-first** design system with consistent theming across all apps.
+
+| Aspect | Details |
+|--------|---------|
+| **Theme** | PrimeNG Aura preset with dark mode enabled by default |
+| **Font** | [Inter](https://rsms.me/inter/) via Google Fonts — optimized for screen readability |
+| **Colors** | CSS custom properties in `libs/shared/ui/src/lib/styles/shared-styles.css` |
+| **Palette** | Slate dark backgrounds (`#0f172a`, `#1e293b`) with indigo accents (`#818cf8`) |
+
+All colors are managed through CSS variables (`--bg-body`, `--bg-surface`, `--text-primary`, `--accent`, etc.) defined in the shared styles file. Components use these variables instead of hardcoded hex values, ensuring visual consistency across the shell, admin, weather, and streaming apps.
 
 ## WeatherStream App (`weatherstream-app`)
 

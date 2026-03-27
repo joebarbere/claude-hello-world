@@ -29,13 +29,13 @@ import { Component, input } from '@angular/core';
         margin: 0;
         font-size: 1.5rem;
         font-weight: 700;
-        color: #1e293b;
+        color: var(--text-primary);
         letter-spacing: -0.01em;
       }
       .page-subtitle {
         margin: 4px 0 0;
         font-size: 0.875rem;
-        color: #64748b;
+        color: var(--text-secondary);
       }
       .page-header-actions {
         display: flex;

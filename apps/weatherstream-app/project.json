@@ -19,7 +19,10 @@
             "input": "apps/weatherstream-app/public"
           }
         ],
-        "styles": ["apps/weatherstream-app/src/styles.css"]
+        "styles": [
+          "libs/shared/ui/src/lib/styles/shared-styles.css",
+          "apps/weatherstream-app/src/styles.css"
+        ]
       },
       "configurations": {
         "production": {
@@ -35,7 +38,12 @@
               "maximumError": "8kb"
             }
           ],
-          "outputHashing": "all"
+          "outputHashing": "all",
+          "optimization": {
+            "scripts": true,
+            "styles": true,
+            "fonts": false
+          }
         },
         "development": {
           "optimization": false,

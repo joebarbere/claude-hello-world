@@ -44,6 +44,11 @@
             }
           ],
           "outputHashing": "all",
+          "optimization": {
+            "scripts": true,
+            "styles": true,
+            "fonts": false
+          },
           "customWebpackConfig": {
             "path": "apps/shell/webpack.prod.config.ts"
           }

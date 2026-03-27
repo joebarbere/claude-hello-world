@@ -20,7 +20,11 @@
             "input": "apps/weather-app/public"
           }
         ],
-        "styles": ["apps/weather-app/src/styles.css"],
+        "styles": [
+          "node_modules/primeicons/primeicons.css",
+          "libs/shared/ui/src/lib/styles/shared-styles.css",
+          "apps/weather-app/src/styles.css"
+        ],
         "customWebpackConfig": {
           "path": "apps/weather-app/webpack.config.ts"
         }
@@ -40,6 +44,11 @@
             }
           ],
           "outputHashing": "all",
+          "optimization": {
+            "scripts": true,
+            "styles": true,
+            "fonts": false
+          },
           "baseHref": "/weather-app/",
           "customWebpackConfig": {
             "path": "apps/weather-app/webpack.prod.config.ts"

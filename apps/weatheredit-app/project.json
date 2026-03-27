@@ -20,7 +20,11 @@
             "input": "apps/weatheredit-app/public"
           }
         ],
-        "styles": ["apps/weatheredit-app/src/styles.css"],
+        "styles": [
+          "node_modules/primeicons/primeicons.css",
+          "libs/shared/ui/src/lib/styles/shared-styles.css",
+          "apps/weatheredit-app/src/styles.css"
+        ],
         "customWebpackConfig": {
           "path": "apps/weatheredit-app/webpack.config.ts"
         }
@@ -40,6 +44,11 @@
             }
           ],
           "outputHashing": "all",
+          "optimization": {
+            "scripts": true,
+            "styles": true,
+            "fonts": false
+          },
           "baseHref": "/weatheredit-app/",
           "customWebpackConfig": {
             "path": "apps/weatheredit-app/webpack.prod.config.ts"

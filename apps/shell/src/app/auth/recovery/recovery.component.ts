@@ -25,12 +25,13 @@ import { AuthService } from '../auth.service';
       display: flex;
       align-items: center;
       justify-content: center;
-      background: #f3f4f6;
+      background: var(--bg-body);
+      font-family: var(--font-sans);
     }
     .recovery-card {
-      background: #fff;
+      background: var(--bg-surface);
       border-radius: 8px;
-      box-shadow: 0 2px 16px rgba(0,0,0,0.1);
+      box-shadow: var(--shadow-md);
       padding: 2.5rem 2rem;
       width: 100%;
       max-width: 400px;
@@ -40,25 +41,30 @@ import { AuthService } from '../auth.service';
       font-size: 1.5rem;
       font-weight: 700;
       margin: 0 0 0.75rem;
+      color: var(--text-primary);
     }
     .recovery-desc {
-      color: #6b7280;
+      color: var(--text-secondary);
       font-size: 0.875rem;
       margin: 0 0 1.5rem;
     }
     .recovery-loading {
-      color: #6b7280;
+      color: var(--text-secondary);
     }
     .btn-link {
       display: inline-block;
       padding: 0.625rem 1.5rem;
-      background: #6366f1;
+      background: var(--accent-solid);
       color: #fff;
       border-radius: 4px;
       text-decoration: none;
       font-weight: 600;
     }
     .btn-link:hover { background: #4f46e5; }
+    @media (max-width: 480px) {
+      .recovery-wrapper { padding: 1rem; }
+      .recovery-card { padding: 1.5rem 1.25rem; }
+    }
   `],
 })
 export class RecoveryComponent implements OnInit {

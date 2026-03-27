@@ -12,13 +12,14 @@
         <i [class]="sidebarCollapsed() ? 'pi pi-angle-right' : 'pi pi-angle-left'"></i>
       </button>
     </div>
-    <nav class="sidebar-nav">
+    <nav class="sidebar-nav" aria-label="Main navigation">
       @for (item of navItems; track item.route) {
         <a
           class="nav-item"
           [class.active]="isActive(item.route)"
           [routerLink]="item.route"
           [attr.title]="sidebarCollapsed() ? item.label : null"
+          [attr.aria-label]="item.label"
         >
           <i [class]="item.icon"></i>
           @if (!sidebarCollapsed()) {

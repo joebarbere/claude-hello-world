@@ -1,9 +1,9 @@
 .dashboard {
-  font-family: 'Segoe UI', system-ui, sans-serif;
+  font-family: var(--font-sans);
   max-width: 1200px;
   margin: 0 auto;
   padding: 1rem;
-  color: #e2e8f0;
+  color: var(--text-primary);
 }
 
 .dashboard-header {
@@ -13,7 +13,7 @@
 .dashboard-header h1 {
   font-size: 1.75rem;
   margin: 0 0 0.75rem 0;
-  color: #f8fafc;
+  color: var(--text-primary);
 }
 
 .status-bar {
@@ -28,7 +28,7 @@
   align-items: center;
   gap: 0.4rem;
   font-size: 0.85rem;
-  color: #ef4444;
+  color: var(--color-danger);
 }
 
 .status-indicator::before {
@@ -36,16 +36,16 @@
   width: 8px;
   height: 8px;
   border-radius: 50%;
-  background: #ef4444;
+  background: var(--color-danger);
 }
 
 .status-indicator.connected {
-  color: #22c55e;
+  color: var(--color-success);
 }
 
 .status-indicator.connected::before {
-  background: #22c55e;
-  box-shadow: 0 0 6px #22c55e;
+  background: var(--color-success);
+  box-shadow: 0 0 6px var(--color-success);
 }
 
 .badge {
@@ -68,7 +68,7 @@
 
 .event-count {
   font-size: 0.85rem;
-  color: #94a3b8;
+  color: var(--text-secondary);
 }
 
 .btn {
@@ -81,12 +81,12 @@
 }
 
 .btn-clear {
-  background: #334155;
-  color: #e2e8f0;
+  background: var(--bg-surface-hover);
+  color: var(--text-primary);
 }
 
 .btn-clear:hover {
-  background: #475569;
+  background: var(--border-color-light);
 }
 
 .btn-reconnect {
@@ -114,8 +114,8 @@
 }
 
 .event-card {
-  background: #1e293b;
-  border: 1px solid #334155;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-color);
   border-radius: 10px;
   padding: 0.85rem;
   animation: fadeIn 0.3s ease-out;
@@ -145,7 +145,7 @@
 
 .condition {
   font-size: 0.8rem;
-  color: #94a3b8;
+  color: var(--text-secondary);
 }
 
 .event-metrics {
@@ -162,7 +162,7 @@
 .metric-label {
   font-size: 0.65rem;
   text-transform: uppercase;
-  color: #64748b;
+  color: var(--text-muted);
   letter-spacing: 0.05em;
 }
 
@@ -173,12 +173,12 @@
 
 .event-time {
   font-size: 0.7rem;
-  color: #475569;
+  color: var(--text-muted);
 }
 
 .empty-state {
   grid-column: 1 / -1;
   text-align: center;
   padding: 3rem;
-  color: #64748b;
+  color: var(--text-muted);
 }
