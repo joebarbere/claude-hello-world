@@ -3669,3 +3669,77 @@ npm exec nx run datascience:kube-down  # Stop the stack
 - `apps/lightning-app/src/kafka-consumer.spec.mjs` — import real module for coverage
 - `apps/weatherstream-app/vite.config.mts` — updated coverage output path
 - `SUMMARY.md` — added this step
+
+---
+
+## Step 147: Implement — Jupyter notebooks, Airflow DAGs, and shared helpers for the weather data science stack
+
+Added concrete, runnable implementations for the data science infrastructure.
+
+**Shared helpers (`apps/datascience/shared/`):**
+- `minio_helper.py` — reusable MinIO client factory, `object_exists()` check, `upload_file()`, `upload_dataframe()`, `read_csv()`, `read_parquet()`. Works identically in Jupyter and Airflow.
+- `weather_sources.py` — download functions for NOAA GHCN-Daily per-station CSVs (`download_ghcn_station()`) and Open-Meteo historical API (`download_open_meteo()`). Includes curated station/location lists with long records: New York Central Park, LA LAX, London Heathrow, Tokyo, Melbourne.
+
+**Airflow DAGs (`apps/datascience/airflow/dags/`):**
+- `dag_download_weather.py` — DAG 1. Daily at 02:00 UTC. One `ShortCircuitOperator` per data source checks MinIO before downloading; if the object already exists the download is skipped. Downloads GHCN-Daily CSVs for 5 stations and Open-Meteo daily data for 5 cities. Uploads results to `weather-raw/` bucket.
+- `dag_kafka_cdc_to_duckdb.py` — DAG 2. Runs every 5 minutes. Consumes Avro-encoded Debezium CDC events from `weather.public.WeatherForecasts`, decodes them via confluent-kafka + Schema Registry, upserts into a DuckDB file stored in `weather-analytics/` in MinIO. Handles create/update/delete/snapshot ops. Manual offset commit after batch write.
+
+**DuckDB schema (defined in DAG 2):**
+- `weather_forecasts_cdc` — primary CDC table (id, date, temperature_c, summary, op, event_ts, loaded_at)
+- `weather_observations_raw` — GHCN observation table for cross-source joins
+- `daily_summary` — view aggregating CDC rows by date (count, avg/min/max temp)
+
+**Jupyter notebooks (`apps/datascience/jupyter/notebooks/`):**
+- `01_eda_open_meteo.ipynb` — 14-cell EDA notebook. Data quality checks, descriptive stats, histogram, monthly line chart with fill_between, box plot by month, correlation heatmap, multi-location pivot_table heatmap, DuckDB SQL window function query, grouped bar chart.
+- `02_cdc_duckdb_analysis.ipynb` — 10-cell notebook. Downloads DuckDB from MinIO (read-only), inspects CDC schema, operation breakdown bar chart, violin plot by Summary label, daily_summary time-series, cross-source scatter vs Open-Meteo reference data.
+
+**Infrastructure changes:**
+- `apps/datascience/jupyter/Containerfile` — added `matplotlib seaborn requests confluent-kafka fastavro`
+- `apps/datascience/airflow/Containerfile` — added `requests confluent-kafka fastavro`
+- `apps/datascience/jupyter/requirements.txt` — updated to match
+- `k8s/datascience-pod.yaml` — added `datascience-shared` and `jupyter-notebooks` volumes; shared helpers mounted at `/opt/airflow/dags/shared` and `/home/jovyan/work/shared`
+- `apps/datascience/project.json` — added `sync-files` target
+- `scripts/sync-datascience.sh` — copies DAGs, shared helpers, and notebooks into `/tmp/datascience/` host paths for the pod mounts
+
+**Files changed:**
+- `apps/datascience/shared/minio_helper.py` — new
+- `apps/datascience/shared/weather_sources.py` — new
+- `apps/datascience/airflow/dags/dag_download_weather.py` — new
+- `apps/datascience/airflow/dags/dag_kafka_cdc_to_duckdb.py` — new
+- `apps/datascience/jupyter/notebooks/01_eda_open_meteo.ipynb` — new
+- `apps/datascience/jupyter/notebooks/02_cdc_duckdb_analysis.ipynb` — new
+- `apps/datascience/jupyter/Containerfile` — updated
+- `apps/datascience/jupyter/requirements.txt` — updated
+- `apps/datascience/airflow/Containerfile` — updated
+- `apps/datascience/project.json` — updated
+- `k8s/datascience-pod.yaml` — updated
+- `scripts/sync-datascience.sh` — new
+- `SUMMARY.md` — added this step
+
+---
+
+## Step 146: Specify — data science initiative for realistic minion weather profiles
+
+Authored a full product specification for using open historical weather datasets to replace the uniform-random forecast generator in `MinionSchedulerService.cs` with statistically realistic profiles.
+
+**Datasets selected:**
+- NOAA GSOD (daily station data, public domain, direct CSV download, no API key)
+- Open-Meteo historical archive API (daily aggregates in Celsius, CC-BY 4.0, no API key for batch use)
+- NOAA CDO monthly normals (30-year averages for validation cross-checks, free API key)
+
+**Jupyter notebooks specified (4):**
+1. `01_getting_started.ipynb` — download GSOD, load into pandas, save to MinIO
+2. `02_cleaning_and_munging.ipynb` — handle NOAA sentinel values, normalize units, map temps to Summary labels using `temp_to_summary()` thresholds aligned with the existing UI color scheme
+3. `03_visualizing_patterns.ipynb` — seasonal cycle line plots, temperature box plots, city-month heatmap, DuckDB-over-MinIO queries
+4. `04_building_profiles.ipynb` — Gaussian temperature profiles per city/month, conditional summary label probabilities, `generate_forecast()` function, output `weather_profiles_v1.json`
+
+**Airflow DAGs specified (3):**
+1. `weather_dataset_ingestion` — daily 03:00 UTC; MinIO-check-before-download pattern; idempotent
+2. `weather_kafka_to_duckdb` — every 15 min; polls `weather.public.WeatherForecasts` Kafka topic; at-least-once upsert into DuckDB
+3. `weather_quality_report` — daily 06:00 UTC; z-score anomaly detection against NOAA norms; label consistency checks; quality score 0–100
+
+**MinIO bucket structure defined:** `raw-weather/`, `clean-weather/`, `analytics/`, `notebooks/`
+
+**Files changed:**
+- `docs/spec-data-science-initiative.md` — new specification document
+- `SUMMARY.md` — added this step

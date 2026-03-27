@@ -3,3 +3,8 @@ pandas
 pyarrow
 minio
 boto3
+matplotlib
+seaborn
+requests
+confluent-kafka
+fastavro

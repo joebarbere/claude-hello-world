@@ -44,6 +44,13 @@
         "command": "podman play kube k8s/datascience-pod.yaml --down || true",
         "cwd": "{workspaceRoot}"
       }
+    },
+    "sync-files": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "bash scripts/sync-datascience.sh",
+        "cwd": "{workspaceRoot}"
+      }
     }
   }
 }
