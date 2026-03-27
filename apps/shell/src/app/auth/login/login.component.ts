@@ -1,10 +1,11 @@
 import { ChangeDetectorRef, Component, OnInit, inject } from '@angular/core';
-import { ActivatedRoute } from '@angular/router';
+import { ActivatedRoute, RouterLink } from '@angular/router';
 import { AuthService, KratosFlowNode, KratosLoginFlow } from '../auth.service';
 
 @Component({
   selector: 'app-login',
   standalone: true,
+  imports: [RouterLink],
   template: `
     <div class="login-wrapper">
       <div class="login-card">
@@ -69,6 +70,8 @@ import { AuthService, KratosFlowNode, KratosLoginFlow } from '../auth.service';
         } @else if (!errorMessage) {
           <p class="login-loading">Loading&hellip;</p>
         }
+
+        <p class="signup-link">Don't have an account? <a routerLink="/auth/signup">Request Access</a></p>
       </div>
     </div>
   `,
@@ -148,6 +151,19 @@ import { AuthService, KratosFlowNode, KratosLoginFlow } from '../auth.service';
     }
     .btn-submit:hover {
       background: #4f46e5;
+    }
+    .signup-link {
+      text-align: center;
+      margin-top: 1.25rem;
+      font-size: 0.875rem;
+      color: #6b7280;
+    }
+    .signup-link a {
+      color: #6366f1;
+      text-decoration: none;
+    }
+    .signup-link a:hover {
+      text-decoration: underline;
     }
   `],
 })

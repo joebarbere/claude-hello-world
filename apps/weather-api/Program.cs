@@ -3,6 +3,7 @@ using Prometheus;
 using Scalar.AspNetCore;
 using WeatherApi.Data;
 using WeatherApi.Middleware;
+using System.Net.Http.Json;
 using WeatherApi.Models;
 using WeatherApi.Repositories;
 
@@ -97,6 +98,40 @@ forecasts.MapDelete("/{id:int}", async (int id, IWeatherForecastRepository repo)
     }
 })
 .WithName("DeleteWeatherForecast");
+
+app.MapPost("/signup", async (SignupRequest request, IConfiguration config) =>
+{
+    if (string.IsNullOrWhiteSpace(request.Email))
+        return Results.BadRequest(new { error = "Email is required" });
+
+    var kratosAdminUrl = config.GetValue<string>("OryKratosAdminUrl") ?? "http://localhost:4434";
+    using var httpClient = new HttpClient();
+
+    var payload = new
+    {
+        schema_id = "default",
+        traits = new { email = request.Email.Trim() },
+        state = "inactive",
+        credentials = new
+        {
+            password = new { config = new { password = Guid.NewGuid().ToString() } }
+        }
+    };
+
+    var response = await httpClient.PostAsJsonAsync($"{kratosAdminUrl}/admin/identities", payload);
+
+    if (response.StatusCode == System.Net.HttpStatusCode.Conflict)
+        return Results.Conflict(new { error = "An account with this email already exists" });
+
+    if (!response.IsSuccessStatusCode)
+    {
+        var body = await response.Content.ReadAsStringAsync();
+        return Results.Problem($"Failed to create identity: {body}");
+    }
+
+    return Results.Ok(new { message = "Access request submitted. An admin will review your request." });
+})
+.WithName("Signup");
 
 app.MapMetrics();
 

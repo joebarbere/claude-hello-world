@@ -3500,3 +3500,37 @@ CI failed because weather-app branch coverage was 50% (threshold: 80%). The `tem
 - `apps/weatheredit-app/src/app/remote-entry/entry.spec.ts` — added null-summary openEdit test
 - `.claude/agents/test.md` — added Code Coverage guidance section
 - `SUMMARY.md` — added this step
+
+---
+
+## Step 141: Add — user signup with magic links and admin approval
+
+**Root cause:** Users had no way to self-register. Only pre-seeded admin accounts existed, requiring manual identity creation via the Kratos Admin API.
+
+**What changed:**
+
+*Kratos config* — Enabled recovery flow with `link` strategy and added `link` selfservice method. Added recovery/settings return URLs and SMTP `from_address`. This allows the admin to generate one-time magic links via the Kratos Admin API.
+
+*Signup API + page* — Added `POST /signup` endpoint to weather-api that creates inactive Kratos identities with a random password (user never sees it). Added Traefik route for `/signup`. Excluded `/signup` from KratosAuthMiddleware. Created Angular signup component at `/auth/signup` with email-only form and success/error messaging. Added "Request Access" link to the login page.
+
+*Admin user management* — Enhanced KratosAdminService with `activateIdentity()`, `deactivateIdentity()`, and `generateRecoveryLink()` methods. Updated KratosAdminComponent with: Approve button (for inactive users, with role selector), Deactivate button (for active users), Generate Magic Link button (with copy-to-clipboard), and removed password requirement from the create form (auto-generates random password).
+
+*Auth flow polish* — Created RecoveryComponent that checks for an active session and redirects to home (handles magic link callback). Added `/auth/recovery` and `/auth/settings` routes. Updated unauthorized page with "Request Access" link and improved messaging.
+
+**Architecture:** New users are created with Kratos `state: "inactive"`, which prevents them from obtaining sessions at the Kratos level (no custom guard changes needed). Admin approves by setting state to active and assigning a role. Magic links are Kratos recovery links generated via the Admin API — clicking one creates a valid session.
+
+**Files changed:**
+- `apps/ory/kratos.yml` — enabled link method, recovery flow, return URLs, from_address
+- `apps/weather-api/Program.cs` — added POST /signup endpoint
+- `apps/weather-api/Models/SignupRequest.cs` — new request DTO
+- `apps/weather-api/appsettings.json` — added OryKratosAdminUrl
+- `apps/weather-api/Middleware/KratosAuthMiddleware.cs` — skip auth for /signup
+- `traefik/traefik-dynamic.yml` — added signup-router
+- `apps/shell/src/app/auth/signup/signup.component.ts` — new signup page
+- `apps/shell/src/app/auth/recovery/recovery.component.ts` — new recovery handler
+- `apps/shell/src/app/auth/login/login.component.ts` — added Request Access link
+- `apps/shell/src/app/auth/unauthorized/unauthorized.component.ts` — added Request Access link
+- `apps/shell/src/app/app.routes.ts` — added signup, recovery, settings routes
+- `apps/admin-app/src/app/kratos-admin/kratos-admin.service.ts` — added activate, deactivate, generateRecoveryLink
+- `apps/admin-app/src/app/kratos-admin/kratos-admin.component.ts` — approve/deactivate/magic link UI
+- `SUMMARY.md` — added this step

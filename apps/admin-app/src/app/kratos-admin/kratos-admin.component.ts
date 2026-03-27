@@ -44,14 +44,6 @@ import {
             required
             class="form-input"
           />
-          <input
-            type="password"
-            [(ngModel)]="newPassword"
-            name="password"
-            placeholder="Password"
-            required
-            class="form-input"
-          />
           <select [(ngModel)]="newRole" name="role" class="form-input">
             <option value="">No role</option>
             <option value="admin">admin</option>
@@ -61,6 +53,7 @@ import {
             {{ creating() ? 'Creating...' : 'Create' }}
           </button>
         </form>
+        <p class="create-hint">Identity is created as inactive. Approve it below to grant access.</p>
         @if (createError()) {
           <div class="msg msg-error">{{ createError() }}</div>
         }
@@ -123,12 +116,42 @@ import {
                       @if (editingId() === identity.id) {
                         <button class="btn btn-sm btn-primary" (click)="saveRole(identity)" [disabled]="saving()">Save</button>
                         <button class="btn btn-sm btn-secondary" (click)="cancelEdit()">Cancel</button>
+                      } @else if (approvingId() === identity.id) {
+                        <select [(ngModel)]="approveRole" class="form-input form-input-sm">
+                          <option value="">No role</option>
+                          <option value="admin">admin</option>
+                          <option value="weather_admin">weather_admin</option>
+                        </select>
+                        <button class="btn btn-sm btn-primary" (click)="approveUser(identity)">Confirm</button>
+                        <button class="btn btn-sm btn-secondary" (click)="cancelApprove()">Cancel</button>
                       } @else {
-                        <button class="btn btn-sm btn-secondary" (click)="startEdit(identity)">Edit Role</button>
+                        @if (identity.state === 'inactive') {
+                          <button class="btn btn-sm btn-approve" (click)="startApprove(identity)">Approve</button>
+                        }
+                        @if (identity.state === 'active') {
+                          <button class="btn btn-sm btn-secondary" (click)="startEdit(identity)">Edit Role</button>
+                          <button class="btn btn-sm btn-secondary" (click)="generateLink(identity)"
+                            [disabled]="generatingLinkId() === identity.id">
+                            {{ generatingLinkId() === identity.id ? 'Generating...' : 'Magic Link' }}
+                          </button>
+                          <button class="btn btn-sm btn-warning" (click)="deactivateUser(identity)">Deactivate</button>
+                        }
                         <button class="btn btn-sm btn-danger" (click)="deleteIdentity(identity)" [disabled]="deletingId() === identity.id">Delete</button>
                       }
                     </td>
                   </tr>
+                  @if (magicLink()?.id === identity.id) {
+                    <tr class="magic-link-row">
+                      <td colspan="5">
+                        <div class="magic-link-container">
+                          <input type="text" [value]="magicLink()!.link" readonly class="form-input magic-link-input" />
+                          <button class="btn btn-sm btn-primary" (click)="copyLink()">
+                            {{ linkCopied() ? 'Copied!' : 'Copy' }}
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  }
                 }
               </tbody>
             </table>
@@ -282,7 +305,15 @@ import {
     }
     .state-badge.active { background: #dcfce7; color: #166534; }
     .state-badge.inactive { background: #fee2e2; color: #991b1b; }
-    .actions { white-space: nowrap; display: flex; gap: 0.35rem; }
+    .actions { white-space: nowrap; display: flex; gap: 0.35rem; align-items: center; }
+    .btn-approve { background: #dcfce7; color: #166534; }
+    .btn-approve:hover:not(:disabled) { background: #bbf7d0; }
+    .btn-warning { background: #fef3c7; color: #92400e; }
+    .btn-warning:hover:not(:disabled) { background: #fde68a; }
+    .magic-link-row td { background: #f0f9ff; padding: 0.5rem 0.75rem; }
+    .magic-link-container { display: flex; gap: 0.5rem; align-items: center; }
+    .magic-link-input { flex: 1; font-size: 0.8rem; font-family: monospace; }
+    .create-hint { color: #6b7280; font-size: 0.8rem; margin-top: 0.5rem; }
     .empty { color: #6b7280; font-style: italic; }
   `],
 })
@@ -299,7 +330,6 @@ export class KratosAdminComponent implements OnInit {
 
   // Create form
   newEmail = '';
-  newPassword = '';
   newRole = '';
   creating = signal(false);
   createError = signal('');
@@ -312,6 +342,15 @@ export class KratosAdminComponent implements OnInit {
 
   // Delete
   deletingId = signal<string | null>(null);
+
+  // Approve
+  approvingId = signal<string | null>(null);
+  approveRole = '';
+
+  // Magic link
+  magicLink = signal<{ id: string; link: string } | null>(null);
+  generatingLinkId = signal<string | null>(null);
+  linkCopied = signal(false);
 
   ngOnInit(): void {
     this.checkHealth();
@@ -344,13 +383,12 @@ export class KratosAdminComponent implements OnInit {
         ...(this.newRole ? { role: this.newRole } : {}),
       },
       credentials: {
-        password: { config: { password: this.newPassword } },
+        password: { config: { password: crypto.randomUUID() } },
       },
     }).subscribe({
       next: (created) => {
         this.createSuccess.set(`Created identity for ${created.traits.email}`);
         this.newEmail = '';
-        this.newPassword = '';
         this.newRole = '';
         this.creating.set(false);
         this.loadIdentities();
@@ -401,6 +439,57 @@ export class KratosAdminComponent implements OnInit {
         this.deletingId.set(null);
       },
     });
+  }
+
+  startApprove(identity: KratosIdentity): void {
+    this.approvingId.set(identity.id);
+    this.approveRole = '';
+  }
+
+  cancelApprove(): void {
+    this.approvingId.set(null);
+    this.approveRole = '';
+  }
+
+  approveUser(identity: KratosIdentity): void {
+    const traits = {
+      email: identity.traits.email,
+      ...(this.approveRole ? { role: this.approveRole } : {}),
+    };
+    this.kratosService.activateIdentity(identity.id, traits).subscribe({
+      next: () => {
+        this.approvingId.set(null);
+        this.loadIdentities();
+      },
+      error: () => this.approvingId.set(null),
+    });
+  }
+
+  deactivateUser(identity: KratosIdentity): void {
+    this.kratosService.deactivateIdentity(identity.id, identity.traits).subscribe({
+      next: () => this.loadIdentities(),
+    });
+  }
+
+  generateLink(identity: KratosIdentity): void {
+    this.generatingLinkId.set(identity.id);
+    this.magicLink.set(null);
+    this.linkCopied.set(false);
+    this.kratosService.generateRecoveryLink(identity.id).subscribe({
+      next: (resp) => {
+        this.magicLink.set({ id: identity.id, link: resp.recovery_link });
+        this.generatingLinkId.set(null);
+      },
+      error: () => this.generatingLinkId.set(null),
+    });
+  }
+
+  copyLink(): void {
+    const link = this.magicLink()?.link;
+    if (link) {
+      navigator.clipboard.writeText(link);
+      this.linkCopied.set(true);
+    }
   }
 
   formatDate(iso: string): string {
