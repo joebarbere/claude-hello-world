@@ -19,6 +19,7 @@ switch (repositoryType)
         var connectionString = builder.Configuration.GetConnectionString("DefaultConnection");
         builder.Services.AddDbContext<WeatherDbContext>(options => options.UseNpgsql(connectionString));
         builder.Services.AddScoped<IWeatherForecastRepository, EfWeatherForecastRepository>();
+        builder.Services.AddScoped<IMinionRepository, EfMinionRepository>();
         break;
     case "InMemory":
         builder.Services.AddSingleton<IWeatherForecastRepository, InMemoryWeatherForecastRepository>();
