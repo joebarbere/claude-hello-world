@@ -3743,3 +3743,68 @@ Authored a full product specification for using open historical weather datasets
 **Files changed:**
 - `docs/spec-data-science-initiative.md` — new specification document
 - `SUMMARY.md` — added this step
+
+---
+
+## Step 148: Add — Notebook 03: Weather Data Cleaning & Munging
+
+Educational notebook teaching data cleaning fundamentals with real GHCN-Daily and Open-Meteo weather data.
+
+**What it covers:**
+- Loading raw GHCN-Daily CSVs (long format with tenths-of-degree units)
+- Pivoting from long to wide format using `pivot_table()`
+- Missing value detection with `isnull()`, linear interpolation for temperatures, zero-fill for precipitation
+- Unit conversion (GHCN tenths of °C → actual °C)
+- Mapping temperatures to the app's 10 Summary labels using `pd.cut()` with defined thresholds
+- Processing all 5 GHCN stations and 5 Open-Meteo cities
+- Saving cleaned Parquet files to MinIO `clean-weather/` bucket
+- Loading cleaned data into DuckDB `weather_observations_clean` table
+
+**Visualizations:** missing data heatmap, before/after histograms, label distribution bar chart, temperature-by-label box plot, cross-location label frequency heatmap.
+
+**Files changed:**
+- `apps/datascience/jupyter/notebooks/03_cleaning_and_munging.ipynb` — new
+- `SUMMARY.md` — added this step
+
+---
+
+## Step 149: Add — Notebook 04: Building Realistic Weather Profiles
+
+Capstone notebook that builds statistical weather profiles from cleaned historical data for use by the minion scheduler.
+
+**What it covers:**
+- Computing monthly temperature statistics (`groupby` + `agg`) per location
+- Building Summary label probability distributions with Laplace smoothing
+- Visualizing profiles with heatmaps, stacked bar charts, violin plots, and radar charts
+- Validating profiles by sampling and overlaying against real data distributions
+- Exporting the profile as JSON to MinIO (`weather-analytics/profiles/weather_profiles_v1.json`)
+- Documentation of how `MinionSchedulerService` can consume the profile
+
+**Profile structure:** `{location: {month: {temp_mean, temp_std, temp_min, temp_max, labels: {Freezing: prob, ...}}}}`
+
+**Files changed:**
+- `apps/datascience/jupyter/notebooks/04_weather_profiles.ipynb` — new
+- `SUMMARY.md` — added this step
+
+---
+
+## Step 150: Add — DAG 3: Weather Quality Report
+
+Daily Airflow DAG that compares minion-generated forecasts against historical weather profiles to produce a quality score.
+
+**Tasks:**
+1. `load_profile` — Downloads weather profile JSON from MinIO
+2. `load_recent_forecasts` — Queries DuckDB CDC table for last 24h forecasts
+3. `generate_quality_report` — Computes temperature z-scores, checks label-temperature consistency, produces quality score (0-100)
+4. `save_report` — Uploads report JSON to MinIO `weather-analytics/reports/quality_YYYY-MM-DD.json`
+
+**Quality checks:**
+- Temperature z-score: how many standard deviations from the historical mean
+- Label consistency: does the Summary label match the temperature thresholds (e.g., "Scorching" should only appear above 40°C)
+- Overall score: 100 = all realistic, <50 = mostly anomalous (expected before profile integration)
+
+**Schedule:** daily at 06:00 UTC, after the download DAG runs at 02:00 UTC.
+
+**Files changed:**
+- `apps/datascience/airflow/dags/dag_quality_report.py` — new
+- `SUMMARY.md` — added this step
