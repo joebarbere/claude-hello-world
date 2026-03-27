@@ -20,7 +20,11 @@
             "input": "apps/admin-app/public"
           }
         ],
-        "styles": ["apps/admin-app/src/styles.css"],
+        "styles": [
+          "node_modules/primeicons/primeicons.css",
+          "libs/shared/ui/src/lib/styles/shared-styles.css",
+          "apps/admin-app/src/styles.css"
+        ],
         "customWebpackConfig": {
           "path": "apps/admin-app/webpack.config.ts"
         }
