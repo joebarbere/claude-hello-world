@@ -3808,3 +3808,15 @@ Daily Airflow DAG that compares minion-generated forecasts against historical we
 **Files changed:**
 - `apps/datascience/airflow/dags/dag_quality_report.py` — new
 - `SUMMARY.md` — added this step
+
+---
+
+## Step 151: Fix — CI container build fails with "workspace is out of sync"
+
+**Root cause:** The `Containerfile.nginx` runs `nx run-many --target=build` inside a fresh container where TypeScript project references have never been synced. Locally this works because `nx sync` was previously run (or auto-applied in interactive mode), but in CI the container starts from a clean `npm ci` with no prior sync state.
+
+**Fix:** Added `RUN npx nx sync` before the build step in `Containerfile.nginx` to ensure TypeScript project references are up to date before building.
+
+**Files changed:**
+- `Containerfile.nginx` — added `npx nx sync` step before the production build
+- `SUMMARY.md` — added this step

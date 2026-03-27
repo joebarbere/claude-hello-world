@@ -4,6 +4,7 @@ WORKDIR /app
 COPY package*.json ./
 RUN npm ci --ignore-scripts
 COPY . .
+RUN npx nx sync
 RUN npx nx run-many --target=build --projects=shell,weather-app,weatheredit-app,admin-app --configuration=production --parallel=1
 
 # Stage 2: Serve
