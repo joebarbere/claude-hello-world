@@ -3866,4 +3866,5 @@ Merged all 10 open Dependabot PRs with the `dependencies` label. Applied lessons
 
 **Files changed:**
 - `package-lock.json` — regenerated to include all missing transitive dependencies
+- `.github/workflows/ci.yml` — updated Node version from 20 to 24 to match local environment
 - `SUMMARY.md` — added this step
