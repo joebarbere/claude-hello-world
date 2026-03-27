@@ -6,73 +6,38 @@
 [![CodeQL](https://github.com/joebarbere/claude-hello-world/actions/workflows/codeql.yml/badge.svg)](https://github.com/joebarbere/claude-hello-world/actions/workflows/codeql.yml)
 [![Dependabot enabled](https://img.shields.io/badge/dependabot-enabled-blue?logo=dependabot)](https://github.com/joebarbere/claude-hello-world/blob/main/.github/dependabot.yml)
 
-> **This project is for learning [Claude Code](https://claude.ai/code) only. It is not intended for production use.**
-
----
-
-## Security Disclaimer
-
-**DO NOT deploy this project to any internet-facing or shared environment.** It contains numerous intentional shortcuts that are insecure by design. The following issues exist in the codebase as shipped:
-
-### Hardcoded secrets in source control
-
-- **Kratos cookie and cipher secrets** (`apps/ory/kratos.yml`) are placeholder strings committed to the repository:
-  ```yaml
-  secrets:
-    cookie:
-      - CHANGE-ME-COOKIE-SECRET-32-CHARS!!
-    cipher:
-      - CHANGE-ME-CIPHER-SECRET-32-CHARS
-  ```
-  Anyone with read access to this repo can forge or decrypt Kratos session cookies.
-
-- **PostgreSQL credentials** are hardcoded in `k8s/postgres-pod.yaml` and `k8s/ory-kratos-pod.yaml` (`appuser` / `apppassword`) and exposed as plaintext environment variables in the pod spec. They are also hardcoded in the `ConnectionStrings__DefaultConnection` passed to the weather-api container.
-
-- **Default application user passwords** are hardcoded in `apps/ory/init-users.sh` and seeded on every fresh deployment:
-  | Email | Password |
-  |-------|----------|
-  | `admin@example.com` | `Admin1234!` |
-  | `weatheradmin@example.com` | `WeatherAdmin1234!` |
-
-### TLS private key committed to the repository
-
-- `ssl/localhost.key` — a private RSA key — is checked into source control. Any party with access to this repository can perform TLS interception or impersonation against any deployment using this certificate.
-
-### Unauthenticated admin API exposed
-
-- The **Ory Kratos admin API** (port `4434`) is bound to the host with no authentication, no network policy, and no firewall rule (`hostPort: 4434` in `k8s/ory-kratos-pod.yaml`). Anyone who can reach this port can create, modify, or delete identities without credentials.
-
-### No Kubernetes Secrets — credentials in pod spec env vars
-
-- All secrets (DB password, connection strings) are passed as plaintext `env` values directly in the pod spec files (`k8s/postgres-pod.yaml`, `k8s/ory-kratos-pod.yaml`, `k8s/apps-pod.yaml`) rather than Kubernetes `Secret` objects. They appear in `kubectl describe pod` output and are visible to any user with read access to the cluster or the repo.
-
-### Self-signed TLS certificate
-
-- The self-signed certificate in `ssl/localhost.crt` is not issued by any trusted CA. Browsers will reject it unless users manually install and trust it. No certificate rotation or expiry monitoring is in place.
-
-### Plaintext credentials in Kratos DSN
-
-- Kratos is configured with a PostgreSQL DSN that contains the database username and password in plaintext (`apps/ory/kratos.yml`). The connection string is committed to source control and visible to anyone with repo access.
-
-### No rate limiting or brute-force protection on the login endpoint
-
-- Traefik does not apply any rate limiting to `/.ory/kratos/public/`. The Kratos login flow has no lockout policy configured, making credential stuffing and brute-force attacks trivial.
-
-### Kratos CORS allows all configured origins unconditionally
-
-- The CORS `allowed_origins` list in `kratos.yml` includes development origins (`http://localhost:4200`) alongside production-style origins. Cross-origin requests from those origins are accepted for all methods including `POST`, `PUT`, `DELETE`, and `PATCH`.
-
-### Client-side-only route guard for the Angular auth flow
-
-- The Angular `weatherEditAuthGuard` is a client-side control. It can be bypassed by any user who modifies local state or disables JavaScript. The weather-api does enforce server-side session validation for write operations, but the Angular frontend itself is not a security boundary.
-
-### No container image scanning
-
-- Container images are built from base images (`node:20-alpine`, `nginx:alpine`, `traefik:v3.3-alpine`, `dotnet/sdk:9.0-alpine`, `postgres:17-alpine`, `oryd/kratos:v1.3.0-distroless`) with no CVE scanning, no image signing, and no dependency pinning beyond the tag.
-
----
-
 An Nx monorepo demonstrating Angular Module Federation micro-frontends with a .NET 9 Weather API backend and PostgreSQL, all containerized with Podman and orchestrated via `podman play kube`. Traefik handles SSL termination and reverse proxying, while nginx serves the Angular static files. Authentication is handled by [Ory Kratos](https://www.ory.sh/kratos/).
+
+> **This project is for learning [Claude Code](https://claude.ai/code) only. It is not intended for production use.** See the [Security Disclaimer](#security-disclaimer) for details.
+
+---
+
+## Table of Contents
+
+- [Demo](#demo)
+- [Architecture](#architecture)
+- **Getting Started**
+  - [Prerequisites](#prerequisites)
+  - [SSL / HTTPS](#ssl--https)
+  - [Development](#development)
+  - [Build](#build)
+  - [Run (containers)](#run-containers)
+- **Applications**
+  - [Shared UI Library](#shared-ui-library)
+  - [WeatherStream App](#weatherstream-app-weatherstream-app)
+  - [Lightning App](#lightning-app-lightning-app)
+- **Infrastructure**
+  - [Authentication](#authentication)
+  - [Observability](#observability)
+  - [Kafka & CDC](#kafka--cdc)
+- **Testing**
+  - [Test & Lint](#test--lint)
+  - [E2E Tests (Playwright)](#e2e-tests-playwright)
+  - [CI](#ci)
+- [Weather API Repository Mode](#weather-api-repository-mode)
+- [Security Disclaimer](#security-disclaimer)
+
+---
 
 ## Demo
 
@@ -148,187 +113,6 @@ Kafka CDC (separate pod, not started by kube-up shell)
   ├── Kafka UI (:8090 / https://localhost:8443/kafka-ui/) — topic, connector, and schema browser
   └── slot-guard — replication slot lag monitor; drops stale slots >5 GB as a safety net
 ```
-
-## Shared UI Library
-
-All Angular applications share a common design system provided by the `@org/ui` library at `libs/shared/ui/`. It uses [PrimeNG](https://primeng.org/) with the Aura theme preset for a professional, minimal look.
-
-### Components
-
-| Component | Selector | Purpose |
-|-----------|----------|---------|
-| `LayoutComponent` | `<ui-layout>` | App shell with collapsible sidebar navigation and router outlet |
-| `PageHeaderComponent` | `<ui-page-header>` | Page title, optional subtitle, and action slot |
-| `CardComponent` | `<ui-card>` | Content card with subtle border and shadow |
-| `StatusBadgeComponent` | `<ui-status-badge>` | Color-coded badges (cold/cool/mild/warm/hot, success/danger/neutral) |
-
-### Usage
-
-Import components from `@org/ui` in any Angular standalone component:
-
-```typescript
-import { PageHeaderComponent, CardComponent } from '@org/ui';
-
-@Component({
-  imports: [PageHeaderComponent, CardComponent],
-  template: `
-    <ui-page-header title="My Page" subtitle="Description"></ui-page-header>
-    <ui-card>Content here</ui-card>
-  `,
-})
-export class MyComponent {}
-```
-
-Add `provideSharedUI()` to the app config for PrimeNG theme and animations:
-
-```typescript
-import { provideSharedUI } from '@org/ui';
-
-export const appConfig: ApplicationConfig = {
-  providers: [...provideSharedUI()],
-};
-```
-
-## Observability
-
-The observability stack runs as a **separate pod** and is never started by `kube-up shell` or during e2e tests. It provides metrics, log aggregation, and dashboards for local development.
-
-### Components
-
-| Component | Port | Purpose |
-|-----------|------|---------|
-| Prometheus | 9090 | Scrapes metrics from weather-api, nginx-exporter, traefik, postgres-exporter, Debezium, and itself |
-| Loki | 3100 | Log storage (single-instance, filesystem backend) |
-| Promtail | — | Collects CRI pod logs, Podman container logs, and Traefik/nginx access logs; ships to Loki |
-| Grafana | 3000 | Dashboards and log exploration; served at `https://localhost:8443/grafana/` via Traefik |
-| auth-proxy | 4180 | Validates Kratos sessions for Grafana SSO (Traefik forwardAuth middleware) |
-| postgres-exporter | 9187 | Scrapes `pg_replication_slots` metrics from PostgreSQL for CDC lag visibility |
-
-### Metrics scraped by Prometheus
-
-- `weather-api` — ASP.NET Core HTTP metrics via `prometheus-net` at `host.containers.internal:5221/metrics`
-- `nginx` — connection stats via the `nginx-prometheus-exporter` sidecar at `host.containers.internal:9113`
-- `traefik` — request counts, error rates, latency histograms at `host.containers.internal:8081/metrics`
-- `postgres` — replication slot lag and status via `postgres-exporter` at `localhost:9187`
-- `debezium` — CDC consumer lag and throughput via Debezium JMX Prometheus agent at `host.containers.internal:9404`
-- `prometheus` — self-scrape at `localhost:9090`
-
-### Logs collected by Promtail
-
-- `/var/log/pods/*/*/*.log` — CRI-format pod logs
-- `/var/lib/containers/storage/overlay-containers/*/userdata/ctr.log` — raw Podman container logs
-- `/var/log/traefik/access.log` — Traefik JSON access logs (client IP, User-Agent, status, route, service)
-- `/var/log/nginx/access.log` — nginx JSON access logs (remote_addr, request, status, request_time)
-
-### Grafana dashboards
-
-Three pre-provisioned dashboards are available:
-
-- **Weather API** — HTTP request rate, p99 latency, in-flight requests, process memory, nginx active connections
-- **System Health** — system health %, running pods, container health table, HTTP request/error rates by service, top IP + User-Agent, recent error logs (status >= 400)
-- **Kafka & CDC** — replication slot lag (bytes), slot active status, Debezium time-behind-source, events processed rate, queue capacity, connector task status (requires kafka pod)
-
-### Grafana SSO via Ory Kratos
-
-Grafana is accessible at `https://localhost:8443/grafana/` with automatic SSO through Ory Kratos:
-
-1. Traefik routes `/grafana` through a `forwardAuth` middleware to the auth-proxy
-2. The auth-proxy reads the Kratos session cookie and calls `/sessions/whoami`
-3. If valid, it returns `200` with `X-Webauth-User: <email>`; Traefik copies this header to the proxied request
-4. If invalid, it redirects to the Kratos login page with `return_to` pointing back to Grafana
-5. Grafana's `auth.proxy` trusts the `X-Webauth-User` header and auto-signs-up/logs in the user
-
-> **macOS note:** Podman containers run inside a Linux VM. The `hostPath` volume mounts (`/var/log`, `/var/lib/containers`) refer to paths inside that VM, not the macOS host filesystem. Log collection works automatically when `kube-up shell` and `kube-up observability` are both running inside the same Podman Machine.
-
-## Kafka & CDC
-
-The Kafka pod runs as a **separate pod** and is never started by `kube-up shell`. It captures every row-level change from PostgreSQL (via Debezium logical replication) and publishes them to Kafka topics, enabling event-driven consumers to react to database mutations without polling.
-
-### Components
-
-| Container | Image | Port | Purpose |
-|-----------|-------|------|---------|
-| kafka | `apache/kafka:3.9` | 9092 | KRaft single-node broker (no Zookeeper) |
-| schema-registry | `confluentinc/cp-schema-registry:7.7.1` | 8081 (container), 8085 (host) | Confluent Schema Registry for Avro schema storage and evolution |
-| debezium-connect | `localhost/debezium-connect:latest` | 8083 (REST), 9404 (JMX metrics) | CDC connector; reads Postgres WAL, Avro-encodes, and publishes to Kafka |
-| debezium-init | `localhost/debezium-init:latest` | — | One-shot sidecar that registers the Postgres connector via REST |
-| kafka-ui | `kafbat/kafka-ui:latest` | 8090 | Web UI for topics, connectors, and Avro schemas |
-| slot-guard | `localhost/slot-guard:latest` | — | Periodically checks `pg_replication_slots`; drops inactive Debezium slots exceeding 5 GB lag |
-
-### CDC flow
-
-PostgreSQL has logical replication enabled (`wal_level=logical`). Debezium creates the `debezium_weather` replication slot and `dbz_publication` publication on the `appdb` database, then streams changes from all `public` schema tables. Topics are named with the prefix `weather` (e.g., `weather.public.WeatherForecasts`). Messages are Avro-encoded using Confluent Schema Registry — schemas are auto-registered on first write and can be browsed in Kafka UI.
-
-### Monitoring — three layers
-
-| Layer | Source | What it measures |
-|-------|--------|-----------------|
-| `postgres_exporter` → Prometheus → Grafana | `pg_replication_slots` view | Byte lag accumulating in the WAL on the producer side |
-| Debezium JMX → Prometheus → Grafana | Debezium JMX exporter (port 9404) | Time-behind-source lag on the consumer side |
-| slot-guard | `pg_replication_slots` via `psql` | Last-resort automated cleanup — drops inactive slots >5 GB to prevent WAL disk exhaustion |
-
-### Alerting thresholds
-
-| Severity | Condition |
-|----------|-----------|
-| Warning | Slot lag >500 MB or slot inactive >10 min |
-| Critical | Slot lag >2 GB or slot inactive >30 min |
-| Emergency (slot-guard triggers) | Slot lag >5 GB (slot is dropped automatically) |
-
-> **macOS note:** The kafka pod uses `host.containers.internal` to reach the apps pod (Postgres). Both pods must be running inside the same Podman Machine.
-
-## WeatherStream App (`weatherstream-app`)
-
-![WeatherStream Demo](docs/weatherstream-demo.png)
-
-Angular application that displays a real-time weather event streaming dashboard. Features:
-
-- Live weather event cards showing temperature, humidity, wind speed, and conditions for cities worldwide
-- Dark-themed responsive UI with animated event cards
-- Kafka consumer integration via Electron IPC when running inside `lightning-app`
-- Falls back to simulated weather events when running standalone in the browser
-- Port: 4203 (dev server)
-
-**Serve standalone:** `npx nx serve weatherstream-app`
-
-## Lightning App (`lightning-app`)
-
-Electron desktop application that hosts `weatherstream-app` and provides native Kafka connectivity. Architecture:
-
-- **Main process** — Connects to Kafka via `kafkajs`, consumes from `weather-events` topic
-- **Preload script** — Exposes `electronKafka` API via `contextBridge` (context isolation enabled)
-- **Renderer** — Loads `weatherstream-app` Angular build, receives weather events over IPC
-
-**Serve (dev mode):** `npx nx serve-dev lightning-app`
-**Serve (production build):** `npx nx serve lightning-app`
-
-### Environment Variables
-
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `KAFKA_BROKERS` | `localhost:9092` | Comma-separated Kafka broker addresses |
-| `KAFKA_TOPIC` | `weather-events` | Kafka topic to consume |
-| `KAFKA_GROUP_ID` | `lightning-app-group` | Consumer group ID |
-
-## Authentication
-
-Access to the **weatheredit-app** and all **write operations** on the weather-api is restricted to users with `admin` or `weather_admin` roles, enforced by [Ory Kratos](https://www.ory.sh/kratos/).
-
-### Default users
-
-| User | Email | Password | Role |
-|------|-------|----------|------|
-| Admin | `admin@example.com` | `Admin1234!` | `admin` |
-| Weather Admin | `weatheradmin@example.com` | `WeatherAdmin1234!` | `weather_admin` |
-
-> **Note:** Change these credentials before deploying to any non-local environment.
-
-### Auth flow
-
-1. Navigate to `/weatheredit-app` — the Angular auth guard checks your Kratos session.
-2. If unauthenticated, you are redirected to `/auth/login` which initiates a Kratos browser login flow.
-3. After successful login, your session is set via a cookie and you are redirected back.
-4. The weather-api independently validates the session cookie on every write request.
 
 ## Prerequisites
 
@@ -502,22 +286,193 @@ npx nx podman-down shell
 npx nx podman-down weather-api
 ```
 
+## Shared UI Library
+
+All Angular applications share a common design system provided by the `@org/ui` library at `libs/shared/ui/`. It uses [PrimeNG](https://primeng.org/) with the Aura theme preset for a professional, minimal look.
+
+### Components
+
+| Component | Selector | Purpose |
+|-----------|----------|---------|
+| `LayoutComponent` | `<ui-layout>` | App shell with collapsible sidebar navigation and router outlet |
+| `PageHeaderComponent` | `<ui-page-header>` | Page title, optional subtitle, and action slot |
+| `CardComponent` | `<ui-card>` | Content card with subtle border and shadow |
+| `StatusBadgeComponent` | `<ui-status-badge>` | Color-coded badges (cold/cool/mild/warm/hot, success/danger/neutral) |
+
+### Usage
+
+Import components from `@org/ui` in any Angular standalone component:
+
+```typescript
+import { PageHeaderComponent, CardComponent } from '@org/ui';
+
+@Component({
+  imports: [PageHeaderComponent, CardComponent],
+  template: `
+    <ui-page-header title="My Page" subtitle="Description"></ui-page-header>
+    <ui-card>Content here</ui-card>
+  `,
+})
+export class MyComponent {}
+```
+
+Add `provideSharedUI()` to the app config for PrimeNG theme and animations:
+
+```typescript
+import { provideSharedUI } from '@org/ui';
+
+export const appConfig: ApplicationConfig = {
+  providers: [...provideSharedUI()],
+};
+```
+
+## WeatherStream App (`weatherstream-app`)
+
+![WeatherStream Demo](docs/weatherstream-demo.png)
+
+Angular application that displays a real-time weather event streaming dashboard. Features:
+
+- Live weather event cards showing temperature, humidity, wind speed, and conditions for cities worldwide
+- Dark-themed responsive UI with animated event cards
+- Kafka consumer integration via Electron IPC when running inside `lightning-app`
+- Falls back to simulated weather events when running standalone in the browser
+- Port: 4203 (dev server)
+
+**Serve standalone:** `npx nx serve weatherstream-app`
+
+## Lightning App (`lightning-app`)
+
+Electron desktop application that hosts `weatherstream-app` and provides native Kafka connectivity. Architecture:
+
+- **Main process** — Connects to Kafka via `kafkajs`, consumes from `weather-events` topic
+- **Preload script** — Exposes `electronKafka` API via `contextBridge` (context isolation enabled)
+- **Renderer** — Loads `weatherstream-app` Angular build, receives weather events over IPC
+
+**Serve (dev mode):** `npx nx serve-dev lightning-app`
+**Serve (production build):** `npx nx serve lightning-app`
+
+### Environment Variables
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `KAFKA_BROKERS` | `localhost:9092` | Comma-separated Kafka broker addresses |
+| `KAFKA_TOPIC` | `weather-events` | Kafka topic to consume |
+| `KAFKA_GROUP_ID` | `lightning-app-group` | Consumer group ID |
+
+## Authentication
+
+Access to the **weatheredit-app** and all **write operations** on the weather-api is restricted to users with `admin` or `weather_admin` roles, enforced by [Ory Kratos](https://www.ory.sh/kratos/).
+
+### Default users
+
+| User | Email | Password | Role |
+|------|-------|----------|------|
+| Admin | `admin@example.com` | `Admin1234!` | `admin` |
+| Weather Admin | `weatheradmin@example.com` | `WeatherAdmin1234!` | `weather_admin` |
+
+> **Note:** Change these credentials before deploying to any non-local environment.
+
+### Auth flow
+
+1. Navigate to `/weatheredit-app` — the Angular auth guard checks your Kratos session.
+2. If unauthenticated, you are redirected to `/auth/login` which initiates a Kratos browser login flow.
+3. After successful login, your session is set via a cookie and you are redirected back.
+4. The weather-api independently validates the session cookie on every write request.
+
+## Observability
+
+The observability stack runs as a **separate pod** and is never started by `kube-up shell` or during e2e tests. It provides metrics, log aggregation, and dashboards for local development.
+
+### Components
+
+| Component | Port | Purpose |
+|-----------|------|---------|
+| Prometheus | 9090 | Scrapes metrics from weather-api, nginx-exporter, traefik, postgres-exporter, Debezium, and itself |
+| Loki | 3100 | Log storage (single-instance, filesystem backend) |
+| Promtail | — | Collects CRI pod logs, Podman container logs, and Traefik/nginx access logs; ships to Loki |
+| Grafana | 3000 | Dashboards and log exploration; served at `https://localhost:8443/grafana/` via Traefik |
+| auth-proxy | 4180 | Validates Kratos sessions for Grafana SSO (Traefik forwardAuth middleware) |
+| postgres-exporter | 9187 | Scrapes `pg_replication_slots` metrics from PostgreSQL for CDC lag visibility |
+
+### Metrics scraped by Prometheus
+
+- `weather-api` — ASP.NET Core HTTP metrics via `prometheus-net` at `host.containers.internal:5221/metrics`
+- `nginx` — connection stats via the `nginx-prometheus-exporter` sidecar at `host.containers.internal:9113`
+- `traefik` — request counts, error rates, latency histograms at `host.containers.internal:8081/metrics`
+- `postgres` — replication slot lag and status via `postgres-exporter` at `localhost:9187`
+- `debezium` — CDC consumer lag and throughput via Debezium JMX Prometheus agent at `host.containers.internal:9404`
+- `prometheus` — self-scrape at `localhost:9090`
+
+### Logs collected by Promtail
+
+- `/var/log/pods/*/*/*.log` — CRI-format pod logs
+- `/var/lib/containers/storage/overlay-containers/*/userdata/ctr.log` — raw Podman container logs
+- `/var/log/traefik/access.log` — Traefik JSON access logs (client IP, User-Agent, status, route, service)
+- `/var/log/nginx/access.log` — nginx JSON access logs (remote_addr, request, status, request_time)
+
+### Grafana dashboards
+
+Three pre-provisioned dashboards are available:
+
+- **Weather API** — HTTP request rate, p99 latency, in-flight requests, process memory, nginx active connections
+- **System Health** — system health %, running pods, container health table, HTTP request/error rates by service, top IP + User-Agent, recent error logs (status >= 400)
+- **Kafka & CDC** — replication slot lag (bytes), slot active status, Debezium time-behind-source, events processed rate, queue capacity, connector task status (requires kafka pod)
+
+### Grafana SSO via Ory Kratos
+
+Grafana is accessible at `https://localhost:8443/grafana/` with automatic SSO through Ory Kratos:
+
+1. Traefik routes `/grafana` through a `forwardAuth` middleware to the auth-proxy
+2. The auth-proxy reads the Kratos session cookie and calls `/sessions/whoami`
+3. If valid, it returns `200` with `X-Webauth-User: <email>`; Traefik copies this header to the proxied request
+4. If invalid, it redirects to the Kratos login page with `return_to` pointing back to Grafana
+5. Grafana's `auth.proxy` trusts the `X-Webauth-User` header and auto-signs-up/logs in the user
+
+> **macOS note:** Podman containers run inside a Linux VM. The `hostPath` volume mounts (`/var/log`, `/var/lib/containers`) refer to paths inside that VM, not the macOS host filesystem. Log collection works automatically when `kube-up shell` and `kube-up observability` are both running inside the same Podman Machine.
+
+## Kafka & CDC
+
+The Kafka pod runs as a **separate pod** and is never started by `kube-up shell`. It captures every row-level change from PostgreSQL (via Debezium logical replication) and publishes them to Kafka topics, enabling event-driven consumers to react to database mutations without polling.
+
+### Components
+
+| Container | Image | Port | Purpose |
+|-----------|-------|------|---------|
+| kafka | `apache/kafka:3.9` | 9092 | KRaft single-node broker (no Zookeeper) |
+| schema-registry | `confluentinc/cp-schema-registry:7.7.1` | 8081 (container), 8085 (host) | Confluent Schema Registry for Avro schema storage and evolution |
+| debezium-connect | `localhost/debezium-connect:latest` | 8083 (REST), 9404 (JMX metrics) | CDC connector; reads Postgres WAL, Avro-encodes, and publishes to Kafka |
+| debezium-init | `localhost/debezium-init:latest` | — | One-shot sidecar that registers the Postgres connector via REST |
+| kafka-ui | `kafbat/kafka-ui:latest` | 8090 | Web UI for topics, connectors, and Avro schemas |
+| slot-guard | `localhost/slot-guard:latest` | — | Periodically checks `pg_replication_slots`; drops inactive Debezium slots exceeding 5 GB lag |
+
+### CDC flow
+
+PostgreSQL has logical replication enabled (`wal_level=logical`). Debezium creates the `debezium_weather` replication slot and `dbz_publication` publication on the `appdb` database, then streams changes from all `public` schema tables. Topics are named with the prefix `weather` (e.g., `weather.public.WeatherForecasts`). Messages are Avro-encoded using Confluent Schema Registry — schemas are auto-registered on first write and can be browsed in Kafka UI.
+
+### Monitoring — three layers
+
+| Layer | Source | What it measures |
+|-------|--------|-----------------|
+| `postgres_exporter` → Prometheus → Grafana | `pg_replication_slots` view | Byte lag accumulating in the WAL on the producer side |
+| Debezium JMX → Prometheus → Grafana | Debezium JMX exporter (port 9404) | Time-behind-source lag on the consumer side |
+| slot-guard | `pg_replication_slots` via `psql` | Last-resort automated cleanup — drops inactive slots >5 GB to prevent WAL disk exhaustion |
+
+### Alerting thresholds
+
+| Severity | Condition |
+|----------|-----------|
+| Warning | Slot lag >500 MB or slot inactive >10 min |
+| Critical | Slot lag >2 GB or slot inactive >30 min |
+| Emergency (slot-guard triggers) | Slot lag >5 GB (slot is dropped automatically) |
+
+> **macOS note:** The kafka pod uses `host.containers.internal` to reach the apps pod (Postgres). Both pods must be running inside the same Podman Machine.
+
 ## Test & Lint
 
 ```sh
 npx nx run-many --target=test --all
 npx nx run-many --target=lint --all
 ```
-
-## Weather API repository mode
-
-Change `"Repository"` in `apps/weather-api/appsettings.json`:
-
-| Value | Behavior |
-|-------|----------|
-| `"Random"` (default) | Read-only, no DB needed |
-| `"InMemory"` | Full CRUD, in-process |
-| `"EfCore"` | Full CRUD, PostgreSQL |
 
 ## E2E Tests (Playwright)
 
@@ -566,3 +521,73 @@ In CI, each Playwright config emits:
 - **GitHub annotations** — inline pass/fail markers on the diff
 - **HTML report** — uploaded as a 30-day artifact
 - **JUnit XML** — consumed by `dorny/test-reporter` to create a Check Run visible in the PR Checks tab
+
+## Weather API Repository Mode
+
+Change `"Repository"` in `apps/weather-api/appsettings.json`:
+
+| Value | Behavior |
+|-------|----------|
+| `"Random"` (default) | Read-only, no DB needed |
+| `"InMemory"` | Full CRUD, in-process |
+| `"EfCore"` | Full CRUD, PostgreSQL |
+
+## Security Disclaimer
+
+**DO NOT deploy this project to any internet-facing or shared environment.** It contains numerous intentional shortcuts that are insecure by design. The following issues exist in the codebase as shipped:
+
+### Hardcoded secrets in source control
+
+- **Kratos cookie and cipher secrets** (`apps/ory/kratos.yml`) are placeholder strings committed to the repository:
+  ```yaml
+  secrets:
+    cookie:
+      - CHANGE-ME-COOKIE-SECRET-32-CHARS!!
+    cipher:
+      - CHANGE-ME-CIPHER-SECRET-32-CHARS
+  ```
+  Anyone with read access to this repo can forge or decrypt Kratos session cookies.
+
+- **PostgreSQL credentials** are hardcoded in `k8s/postgres-pod.yaml` and `k8s/ory-kratos-pod.yaml` (`appuser` / `apppassword`) and exposed as plaintext environment variables in the pod spec. They are also hardcoded in the `ConnectionStrings__DefaultConnection` passed to the weather-api container.
+
+- **Default application user passwords** are hardcoded in `apps/ory/init-users.sh` and seeded on every fresh deployment:
+  | Email | Password |
+  |-------|----------|
+  | `admin@example.com` | `Admin1234!` |
+  | `weatheradmin@example.com` | `WeatherAdmin1234!` |
+
+### TLS private key committed to the repository
+
+- `ssl/localhost.key` — a private RSA key — is checked into source control. Any party with access to this repository can perform TLS interception or impersonation against any deployment using this certificate.
+
+### Unauthenticated admin API exposed
+
+- The **Ory Kratos admin API** (port `4434`) is bound to the host with no authentication, no network policy, and no firewall rule (`hostPort: 4434` in `k8s/ory-kratos-pod.yaml`). Anyone who can reach this port can create, modify, or delete identities without credentials.
+
+### No Kubernetes Secrets — credentials in pod spec env vars
+
+- All secrets (DB password, connection strings) are passed as plaintext `env` values directly in the pod spec files (`k8s/postgres-pod.yaml`, `k8s/ory-kratos-pod.yaml`, `k8s/apps-pod.yaml`) rather than Kubernetes `Secret` objects. They appear in `kubectl describe pod` output and are visible to any user with read access to the cluster or the repo.
+
+### Self-signed TLS certificate
+
+- The self-signed certificate in `ssl/localhost.crt` is not issued by any trusted CA. Browsers will reject it unless users manually install and trust it. No certificate rotation or expiry monitoring is in place.
+
+### Plaintext credentials in Kratos DSN
+
+- Kratos is configured with a PostgreSQL DSN that contains the database username and password in plaintext (`apps/ory/kratos.yml`). The connection string is committed to source control and visible to anyone with repo access.
+
+### No rate limiting or brute-force protection on the login endpoint
+
+- Traefik does not apply any rate limiting to `/.ory/kratos/public/`. The Kratos login flow has no lockout policy configured, making credential stuffing and brute-force attacks trivial.
+
+### Kratos CORS allows all configured origins unconditionally
+
+- The CORS `allowed_origins` list in `kratos.yml` includes development origins (`http://localhost:4200`) alongside production-style origins. Cross-origin requests from those origins are accepted for all methods including `POST`, `PUT`, `DELETE`, and `PATCH`.
+
+### Client-side-only route guard for the Angular auth flow
+
+- The Angular `weatherEditAuthGuard` is a client-side control. It can be bypassed by any user who modifies local state or disables JavaScript. The weather-api does enforce server-side session validation for write operations, but the Angular frontend itself is not a security boundary.
+
+### No container image scanning
+
+- Container images are built from base images (`node:20-alpine`, `nginx:alpine`, `traefik:v3.3-alpine`, `dotnet/sdk:9.0-alpine`, `postgres:17-alpine`, `oryd/kratos:v1.3.0-distroless`) with no CVE scanning, no image signing, and no dependency pinning beyond the tag.
