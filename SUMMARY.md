@@ -3870,4 +3870,56 @@ Merged all 10 open Dependabot PRs with the `dependencies` label. Applied lessons
 - `.github/workflows/eks-e2e.yml` — updated Node version from 20 to 24
 - `.github/workflows/eks-e2e-full.yml` — updated Node version from 20 to 24
 - `Containerfile.nginx` — updated base image from node:20-alpine to node:24-alpine
+
+## Step 154: add — dark mode CSS foundation with Inter font
+
+**What:** Established a dark-mode-first design system for all apps. Added CSS custom properties (design tokens) in shared-styles.css, Inter font via Google Fonts CDN, and activated PrimeNG dark mode by adding `.dark-mode` class to all index.html files. Disabled font inlining in production builds.
+
+**Files changed:**
+- `libs/shared/ui/src/lib/styles/shared-styles.css` — added `:root` CSS variables for dark theme
+- `apps/*/src/index.html` — added Inter font links and `class="dark-mode"` to `<html>`
+- `apps/*/project.json` — set `optimization.fonts: false` for production builds
+
+## Step 155: update — shared UI components for dark mode
+
+**What:** Converted all shared UI library components (layout, card, page-header, status-badge) from hardcoded hex colors to CSS custom properties.
+
+**Files changed:**
+- `libs/shared/ui/src/lib/layout/layout.css` — sidebar, nav, borders use CSS variables
+- `libs/shared/ui/src/lib/card/card.ts` — card background, border, shadow use variables
+- `libs/shared/ui/src/lib/page-header/page-header.ts` — title, subtitle colors use variables
+- `libs/shared/ui/src/lib/status-badge/status-badge.ts` — dark-friendly translucent badge colors
+
+## Step 156: update — app component styles for dark mode
+
+**What:** Updated all app-level component inline styles across shell, admin-app, weather-app, and weatheredit-app to use CSS custom properties instead of hardcoded light-theme colors.
+
+**Files changed:**
+- `apps/shell/src/app/home/home.component.ts`
+- `apps/shell/src/app/auth/login/login.component.ts`
+- `apps/shell/src/app/auth/signup/signup.component.ts`
+- `apps/shell/src/app/auth/recovery/recovery.component.ts`
+- `apps/shell/src/app/auth/unauthorized/unauthorized.component.ts`
+- `apps/admin-app/src/app/kratos-admin/kratos-admin.component.ts`
+- `apps/admin-app/src/app/minions/minions.component.ts`
+- `apps/admin-app/src/app/remote-entry/entry.ts`
+- `apps/weather-app/src/app/remote-entry/entry.ts`
+- `apps/weatheredit-app/src/app/remote-entry/entry.ts`
+
+## Step 157: update — align weatherstream-app with shared CSS variables
+
+**What:** Replaced weatherstream-app's hardcoded dark theme colors with shared CSS variables for consistency. Added shared-styles.css to its build config so CSS variables are available.
+
+**Files changed:**
+- `apps/weatherstream-app/src/styles.css`
+- `apps/weatherstream-app/src/app/weather-dashboard/weather-dashboard.css`
+- `apps/weatherstream-app/project.json`
+
+## Step 158: update — README design section and demo descriptions
+
+**What:** Added a Design section to README documenting the dark-mode-first design system, Inter font, and CSS variable approach. Updated Demo section descriptions to reflect the new dark theme.
+
+**Files changed:**
+- `README.md` — added Design section, updated Demo descriptions
+- `SUMMARY.md` — added steps 154-158
 - `SUMMARY.md` — added this step
