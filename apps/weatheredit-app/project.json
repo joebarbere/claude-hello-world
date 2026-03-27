@@ -40,6 +40,11 @@
             }
           ],
           "outputHashing": "all",
+          "optimization": {
+            "scripts": true,
+            "styles": true,
+            "fonts": false
+          },
           "baseHref": "/weatheredit-app/",
           "customWebpackConfig": {
             "path": "apps/weatheredit-app/webpack.prod.config.ts"

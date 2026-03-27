@@ -40,6 +40,11 @@
             }
           ],
           "outputHashing": "all",
+          "optimization": {
+            "scripts": true,
+            "styles": true,
+            "fonts": false
+          },
           "baseHref": "/weather-app/",
           "customWebpackConfig": {
             "path": "apps/weather-app/webpack.prod.config.ts"

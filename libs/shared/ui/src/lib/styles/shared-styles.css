@@ -1,5 +1,45 @@
 /* ── Shared UI Global Styles ─────────────────── */
 
+/* ── Design Tokens (dark-mode-first) ─────────── */
+:root {
+  /* Backgrounds */
+  --bg-body: #0f172a;
+  --bg-surface: #1e293b;
+  --bg-surface-hover: #334155;
+  --bg-surface-active: #1e1b4b;
+  --bg-inset: #0b1120;
+
+  /* Text */
+  --text-primary: #e2e8f0;
+  --text-secondary: #94a3b8;
+  --text-muted: #64748b;
+
+  /* Borders */
+  --border-color: #334155;
+  --border-color-light: #475569;
+
+  /* Accent */
+  --accent: #818cf8;
+  --accent-hover: #a5b4fc;
+  --accent-muted: rgba(129, 140, 248, 0.15);
+  --accent-solid: #6366f1;
+
+  /* Semantic */
+  --color-success: #22c55e;
+  --color-warning: #f59e0b;
+  --color-danger: #ef4444;
+  --color-info: #3b82f6;
+
+  /* Shadows */
+  --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.3);
+  --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.4);
+
+  /* Typography */
+  --font-sans: 'Inter', system-ui, -apple-system, 'Segoe UI', Roboto,
+    'Helvetica Neue', sans-serif;
+  --font-mono: ui-monospace, 'Cascadia Code', 'Fira Code', monospace;
+}
+
 *,
 *::before,
 *::after {
@@ -10,12 +50,11 @@ html,
 body {
   margin: 0;
   padding: 0;
-  font-family: system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue',
-    sans-serif;
+  font-family: var(--font-sans);
   font-size: 16px;
   line-height: 1.5;
-  color: #1e293b;
-  background: #f8f9fa;
+  color: var(--text-primary);
+  background: var(--bg-body);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }
@@ -36,7 +75,7 @@ h5,
 h6 {
   margin: 0;
   font-weight: 600;
-  color: #1e293b;
+  color: var(--text-primary);
 }
 
 p {
@@ -44,10 +83,10 @@ p {
 }
 
 a {
-  color: #4f46e5;
+  color: var(--accent);
   text-decoration: none;
 }
 
 a:hover {
-  color: #4338ca;
+  color: var(--accent-hover);
 }

@@ -40,6 +40,11 @@
             }
           ],
           "outputHashing": "all",
+          "optimization": {
+            "scripts": true,
+            "styles": true,
+            "fonts": false
+          },
           "baseHref": "/admin-app/",
           "customWebpackConfig": {
             "path": "apps/admin-app/webpack.prod.config.ts"
