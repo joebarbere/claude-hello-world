@@ -74,6 +74,8 @@ interface ForecastFormData {
     .form-input:focus { border-color: var(--accent-solid); box-shadow: 0 0 0 3px rgba(99,102,241,0.12); }
     .form-input::placeholder { color: var(--text-secondary); }
     .form-actions { display: flex; gap: 8px; justify-content: flex-end; padding-top: 16px; border-top: 1px solid var(--border-color); }
+    .spinner-icon { font-size: 1.5rem; color: var(--accent); }
+    .empty-icon { font-size: 2.5rem; color: var(--text-muted); }
   `],
   template: `
     <div class="page-container">
@@ -103,12 +105,12 @@ interface ForecastFormData {
       <ui-card>
         @if (loading()) {
           <div class="loading-state">
-            <i class="pi pi-spin pi-spinner" style="font-size: 1.5rem; color: #6366f1;"></i>
+            <i class="pi pi-spin pi-spinner spinner-icon"></i>
             <span>Loading forecasts...</span>
           </div>
         } @else if (forecasts().length === 0) {
           <div class="empty-state">
-            <i class="pi pi-cloud" style="font-size: 2.5rem; color: #cbd5e1;"></i>
+            <i class="pi pi-cloud empty-icon"></i>
             <p class="empty-title">No forecasts yet</p>
             <p class="empty-sub">Create your first weather forecast to get started.</p>
             <button class="btn btn-primary" (click)="openCreate()">Add Forecast</button>

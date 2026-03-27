@@ -22,7 +22,7 @@ interface WeatherForecast {
       @if (loading()) {
         <ui-card>
           <div class="loading-state">
-            <i class="pi pi-spin pi-spinner" style="font-size: 1.5rem; color: #6366f1;"></i>
+            <i class="pi pi-spin pi-spinner spinner-icon"></i>
             <span>Loading forecasts...</span>
           </div>
         </ui-card>
@@ -142,6 +142,10 @@ interface WeatherForecast {
       }
       .dash {
         color: var(--text-muted);
+      }
+      .spinner-icon {
+        font-size: 1.5rem;
+        color: var(--accent);
       }
     `,
   ],
