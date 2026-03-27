@@ -125,7 +125,7 @@ describe('RemoteEntry (admin-app)', () => {
     httpMock.expectOne(HEALTH_ENDPOINT).flush('OK');
     const compiled = fixture.nativeElement as HTMLElement;
     const cards = compiled.querySelectorAll('.link-card-inner');
-    expect(cards.length).toBe(6);
+    expect(cards.length).toBe(9);
   });
 
   it('should render external links with target="_blank"', () => {
@@ -134,7 +134,7 @@ describe('RemoteEntry (admin-app)', () => {
     httpMock.expectOne(HEALTH_ENDPOINT).flush('OK');
     const compiled = fixture.nativeElement as HTMLElement;
     const externalCards = compiled.querySelectorAll('a[target="_blank"]');
-    expect(externalCards.length).toBe(4);
+    expect(externalCards.length).toBe(7);
   });
 
   it('should render category section titles', () => {

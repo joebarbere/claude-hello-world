@@ -51,6 +51,7 @@ export class KafkaStreamService implements OnDestroy {
     'Windy', 'Foggy', 'Clear', 'Hail', 'Drizzle',
   ];
 
+  // eslint-disable-next-line @angular-eslint/prefer-inject -- tests instantiate directly with `new KafkaStreamService(mockNgZone)`
   constructor(private ngZone: NgZone) {
     this.init();
   }

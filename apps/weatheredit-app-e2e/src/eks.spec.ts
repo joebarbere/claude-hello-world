@@ -96,7 +96,7 @@ test.describe('weatheredit-app – forecast table', () => {
   test.beforeEach(async ({ page }) => {
     await page.goto('/');
     // Wait for loading spinner to disappear
-    await page.waitForSelector('.loading-state', { state: 'hidden', timeout: 15000 }).catch(() => {});
+    await page.waitForSelector('.loading-state', { state: 'hidden', timeout: 15000 }).catch(() => { /* loading state may not appear */ });
   });
 
   test('displays the table or empty state', async ({ page }) => {
@@ -266,7 +266,7 @@ test.describe('weatheredit-app – error handling', () => {
     page,
   }) => {
     await page.goto('/');
-    await page.waitForSelector('.loading-state', { state: 'hidden', timeout: 15000 }).catch(() => {});
+    await page.waitForSelector('.loading-state', { state: 'hidden', timeout: 15000 }).catch(() => { /* loading state may not appear */ });
     await expect(page.locator('.alert-error')).not.toBeVisible();
   });
 });
