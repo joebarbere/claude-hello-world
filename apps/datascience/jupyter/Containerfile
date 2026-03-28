@@ -13,4 +13,5 @@ RUN pip install --no-cache-dir \
         fastavro && \
     fix-permissions "${CONDA_DIR}" && \
     fix-permissions "/home/${NB_USER}"
+COPY overrides.json /opt/conda/share/jupyter/lab/settings/overrides.json
 USER ${NB_UID}

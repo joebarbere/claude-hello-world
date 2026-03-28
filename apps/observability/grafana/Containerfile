@@ -1,2 +1,7 @@
 FROM docker.io/grafana/grafana:latest
+
+USER root
+RUN grafana cli plugins install grafana-lokiexplore-app
+USER grafana
+
 COPY provisioning/ /etc/grafana/provisioning/

@@ -25,7 +25,6 @@ import {
             <h1>Identity Management</h1>
           </div>
           <div class="header-actions">
-            <span class="status-badge" [ngClass]="healthState()">{{ healthLabel() }}</span>
             <a routerLink="/admin-app" class="back-link">Back to Dashboard</a>
           </div>
         </div>

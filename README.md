@@ -368,14 +368,18 @@ The observability stack runs as a **separate pod** and is never started by `kube
 | Grafana | 3000 | Dashboards and log exploration; served at `https://localhost:8443/grafana/` via Traefik |
 | auth-proxy | 4180, 4181 | Validates Kratos sessions for SSO (Traefik forwardAuth) and provides MinIO auto-login |
 | postgres-exporter | 9187 | Scrapes `pg_replication_slots` metrics from PostgreSQL for CDC lag visibility |
+| Blackbox exporter | 9115 | HTTP probes for Airflow and Jupyter health endpoints |
+| Podman exporter | 9882 | Pod and container metrics via the Podman API (TCP) |
 
 ### Grafana dashboards
 
 Three pre-provisioned dashboards at `https://localhost:8443/grafana/` (SSO via Kratos):
 
 - **Weather API** — HTTP request rate, p99 latency, in-flight requests, process memory, nginx active connections
-- **System Health** — system health %, running pods, container health table, HTTP request/error rates by service, top IP + User-Agent, recent error logs (status >= 400)
+- **System Health** — system health %, service probes (Airflow, Jupyter), pods & containers by state, container health table, HTTP request/error rates by service, top IP + User-Agent, recent error logs (status >= 400)
 - **Kafka & CDC** — replication slot lag (bytes), slot active status, Debezium time-behind-source, events processed rate, queue capacity, connector task status (requires kafka pod)
+
+Grafana Explore and Logs Drilldown are also enabled for ad-hoc log queries against Loki.
 
 <details>
 <summary>Metrics scraped by Prometheus</summary>
@@ -391,6 +395,8 @@ Three pre-provisioned dashboards at `https://localhost:8443/grafana/` (SSO via K
 | loki | `localhost:3100/metrics` | Loki internal metrics |
 | kratos | `host.containers.internal:4434/admin/metrics/prometheus` | Ory Kratos identity metrics |
 | minio | `host.containers.internal:9000/minio/v2/metrics/cluster` | MinIO cluster metrics |
+| blackbox | `localhost:9115` | HTTP probe results for Airflow and Jupyter health endpoints |
+| podman | `host.containers.internal:9882` | Pod and container state metrics via `prometheus-podman-exporter` |
 | prometheus | `localhost:9090` | Self-scrape |
 </details>
 
@@ -473,8 +479,8 @@ npx nx run datascience:kube-down  # Stop the pod
 
 | Component | Port | Image | Purpose |
 |-----------|------|-------|---------|
-| Apache Airflow | 8280 | `apache/airflow:slim-2.10.4-python3.11` | DAG-based workflow orchestration (SequentialExecutor + SQLite) |
-| Jupyter Lab | 8888 | `quay.io/jupyter/minimal-notebook` + DuckDB | Interactive notebooks with DuckDB, pandas, pyarrow, boto3 |
+| Apache Airflow | 8280 | `apache/airflow:slim-2.10.4-python3.11` | DAG-based workflow orchestration (SequentialExecutor + SQLite, dark mode default) |
+| Jupyter Lab | 8888 | `quay.io/jupyter/minimal-notebook` + DuckDB | Interactive notebooks with DuckDB, pandas, pyarrow, boto3 (dark mode default) |
 | MinIO | 9000 (API), 9001 (Console) | `quay.io/minio/minio` | S3-compatible object storage for datasets, models, and artifacts |
 
 ### Authentication

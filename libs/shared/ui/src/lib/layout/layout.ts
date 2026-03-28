@@ -1,6 +1,11 @@
-import { Component, inject, signal } from '@angular/core';
+import { Component, inject, input, output, signal } from '@angular/core';
 import { Router, RouterModule, NavigationEnd } from '@angular/router';
 import { filter } from 'rxjs/operators';
+
+export interface NavSession {
+  email: string;
+  role?: string;
+}
 
 interface NavItem {
   label: string;
@@ -17,6 +22,9 @@ interface NavItem {
 })
 export class LayoutComponent {
   private readonly router = inject(Router);
+
+  session = input<NavSession | null>(null);
+  logoutRequest = output<void>();
 
   sidebarCollapsed = signal(false);
   currentRoute = signal('/');

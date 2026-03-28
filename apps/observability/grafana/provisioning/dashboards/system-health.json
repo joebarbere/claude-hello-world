@@ -127,11 +127,108 @@
       }
     },
     {
+      "id": 16,
+      "type": "row",
+      "title": "Pods & Containers",
+      "gridPos": { "x": 0, "y": 4, "w": 24, "h": 1 },
+      "collapsed": false
+    },
+    {
+      "id": 17,
+      "type": "bargauge",
+      "title": "Containers per Pod",
+      "description": "Number of containers in each Podman pod",
+      "gridPos": { "x": 0, "y": 5, "w": 12, "h": 8 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        {
+          "expr": "count by (pod_name) (podman_container_state{pod_name!=\"\"})",
+          "legendFormat": "{{pod_name}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null }
+            ]
+          },
+          "color": { "mode": "palette-classic" }
+        }
+      },
+      "options": {
+        "orientation": "horizontal",
+        "displayMode": "gradient",
+        "reduceOptions": { "calcs": ["lastNotNull"] }
+      }
+    },
+    {
+      "id": 18,
+      "type": "bargauge",
+      "title": "Containers by State",
+      "description": "Podman container counts grouped by state (2=running, 5=exited, 3=stopped, 0=created)",
+      "gridPos": { "x": 12, "y": 5, "w": 12, "h": 8 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        {
+          "expr": "count(podman_container_state == 2) or vector(0)",
+          "legendFormat": "running"
+        },
+        {
+          "expr": "count(podman_container_state == 5) or vector(0)",
+          "legendFormat": "exited"
+        },
+        {
+          "expr": "count(podman_container_state == 3) or vector(0)",
+          "legendFormat": "stopped"
+        },
+        {
+          "expr": "count(podman_container_state == 0) or vector(0)",
+          "legendFormat": "created"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null }
+            ]
+          },
+          "color": { "mode": "palette-classic" }
+        },
+        "overrides": [
+          {
+            "matcher": { "id": "byName", "options": "running" },
+            "properties": [{ "id": "color", "value": { "fixedColor": "green", "mode": "fixed" } }]
+          },
+          {
+            "matcher": { "id": "byName", "options": "exited" },
+            "properties": [{ "id": "color", "value": { "fixedColor": "red", "mode": "fixed" } }]
+          },
+          {
+            "matcher": { "id": "byName", "options": "stopped" },
+            "properties": [{ "id": "color", "value": { "fixedColor": "orange", "mode": "fixed" } }]
+          },
+          {
+            "matcher": { "id": "byName", "options": "created" },
+            "properties": [{ "id": "color", "value": { "fixedColor": "blue", "mode": "fixed" } }]
+          }
+        ]
+      },
+      "options": {
+        "orientation": "horizontal",
+        "displayMode": "gradient",
+        "reduceOptions": { "calcs": ["lastNotNull"] }
+      }
+    },
+    {
       "id": 5,
       "type": "table",
       "title": "Target Health",
       "description": "Per-target health status",
-      "gridPos": { "x": 0, "y": 4, "w": 24, "h": 10 },
+      "gridPos": { "x": 0, "y": 13, "w": 24, "h": 10 },
       "datasource": { "type": "prometheus", "uid": "prometheus" },
       "targets": [
         {
@@ -184,10 +281,81 @@
       ]
     },
     {
+      "id": 13,
+      "type": "row",
+      "title": "Service Probes",
+      "gridPos": { "x": 0, "y": 23, "w": 24, "h": 1 },
+      "collapsed": false
+    },
+    {
+      "id": 14,
+      "type": "stat",
+      "title": "Airflow",
+      "description": "Airflow webserver health probe via blackbox exporter",
+      "gridPos": { "x": 0, "y": 24, "w": 12, "h": 4 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        {
+          "expr": "probe_success{job=\"blackbox-airflow\"}",
+          "legendFormat": "Airflow"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "mappings": [
+            { "type": "value", "options": { "1": { "text": "UP", "color": "green" }, "0": { "text": "DOWN", "color": "red" } } }
+          ],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "red", "value": null },
+              { "color": "green", "value": 1 }
+            ]
+          }
+        }
+      },
+      "options": {
+        "colorMode": "background",
+        "reduceOptions": { "calcs": ["lastNotNull"] }
+      }
+    },
+    {
+      "id": 15,
+      "type": "stat",
+      "title": "Jupyter",
+      "description": "Jupyter Lab health probe via blackbox exporter",
+      "gridPos": { "x": 12, "y": 24, "w": 12, "h": 4 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        {
+          "expr": "probe_success{job=\"blackbox-jupyter\"}",
+          "legendFormat": "Jupyter"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "mappings": [
+            { "type": "value", "options": { "1": { "text": "UP", "color": "green" }, "0": { "text": "DOWN", "color": "red" } } }
+          ],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "red", "value": null },
+              { "color": "green", "value": 1 }
+            ]
+          }
+        }
+      },
+      "options": {
+        "colorMode": "background",
+        "reduceOptions": { "calcs": ["lastNotNull"] }
+      }
+    },
+    {
       "id": 6,
       "type": "timeseries",
       "title": "HTTP Request Rate by Service",
-      "gridPos": { "x": 0, "y": 14, "w": 12, "h": 8 },
+      "gridPos": { "x": 0, "y": 28, "w": 12, "h": 8 },
       "datasource": { "type": "prometheus", "uid": "prometheus" },
       "targets": [
         {
@@ -205,7 +373,7 @@
       "id": 7,
       "type": "timeseries",
       "title": "HTTP Error Rate (4xx + 5xx)",
-      "gridPos": { "x": 12, "y": 14, "w": 12, "h": 8 },
+      "gridPos": { "x": 12, "y": 28, "w": 12, "h": 8 },
       "datasource": { "type": "prometheus", "uid": "prometheus" },
       "targets": [
         {
@@ -228,7 +396,7 @@
       "id": 8,
       "type": "stat",
       "title": "Total 5xx Errors (last 1h)",
-      "gridPos": { "x": 0, "y": 22, "w": 8, "h": 4 },
+      "gridPos": { "x": 0, "y": 36, "w": 8, "h": 4 },
       "datasource": { "type": "prometheus", "uid": "prometheus" },
       "targets": [
         {
@@ -257,7 +425,7 @@
       "id": 9,
       "type": "stat",
       "title": "Total 4xx Errors (last 1h)",
-      "gridPos": { "x": 8, "y": 22, "w": 8, "h": 4 },
+      "gridPos": { "x": 8, "y": 36, "w": 8, "h": 4 },
       "datasource": { "type": "prometheus", "uid": "prometheus" },
       "targets": [
         {
@@ -286,7 +454,7 @@
       "id": 10,
       "type": "stat",
       "title": "Total Requests (last 1h)",
-      "gridPos": { "x": 16, "y": 22, "w": 8, "h": 4 },
+      "gridPos": { "x": 16, "y": 36, "w": 8, "h": 4 },
       "datasource": { "type": "prometheus", "uid": "prometheus" },
       "targets": [
         {
@@ -314,7 +482,7 @@
       "type": "table",
       "title": "Top IP + User-Agent (last 1h)",
       "description": "Top client IP and User-Agent combinations by request count from Traefik access logs",
-      "gridPos": { "x": 0, "y": 26, "w": 24, "h": 10 },
+      "gridPos": { "x": 0, "y": 40, "w": 24, "h": 10 },
       "datasource": { "type": "loki", "uid": "loki" },
       "targets": [
         {
@@ -344,7 +512,7 @@
       "type": "logs",
       "title": "Recent Error Logs",
       "description": "Recent 4xx and 5xx entries from Traefik access logs",
-      "gridPos": { "x": 0, "y": 36, "w": 24, "h": 8 },
+      "gridPos": { "x": 0, "y": 50, "w": 24, "h": 8 },
       "datasource": { "type": "loki", "uid": "loki" },
       "targets": [
         {

@@ -179,7 +179,7 @@ async function main() {
 
   const browser = await chromium.launch({
     headless: true,
-    executablePath: '/root/.cache/ms-playwright/chromium-1194/chrome-linux/chrome',
+    executablePath: process.env.CHROME_PATH || undefined,
   });
   const servers = [];
 

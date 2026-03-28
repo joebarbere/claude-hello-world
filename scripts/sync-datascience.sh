@@ -58,6 +58,18 @@ echo "Syncing notebooks..."
 cp -r "${REPO_ROOT}/apps/datascience/jupyter/notebooks/." /tmp/datascience/jupyter/notebooks/
 echo "  Notebooks → /tmp/datascience/jupyter/notebooks/"
 
+# ---------------------------------------------------------------------------
+# Fix permissions for rootless Podman UID namespace remapping.
+# Host UID 1000 maps to UID 0 (root) inside the container, but Airflow
+# runs as UID 50000 and Jupyter as UID 1000 (jovyan).  Making files
+# world-readable lets any container UID read them.
+# ---------------------------------------------------------------------------
+echo "Fixing permissions for rootless Podman..."
+chmod -R a+rX /tmp/datascience/airflow/dags
+chmod -R a+rX /tmp/datascience/shared
+chmod -R a+rX /tmp/datascience/jupyter/work
+chmod -R a+rX /tmp/datascience/jupyter/notebooks
+
 echo ""
 echo "Sync complete. Contents:"
 echo ""

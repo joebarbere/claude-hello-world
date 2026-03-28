@@ -25,7 +25,6 @@ const ADMIN_LINKS: AdminLink[] = [
     routerLink: '/admin-app/kratos',
     description: 'Manage user identities, roles, and authentication.',
     category: 'Identity',
-    badge: { type: 'health', endpoint: '/.ory/kratos/admin/health/alive' },
   },
   {
     name: 'Grafana Dashboard',
@@ -163,7 +162,9 @@ const ADMIN_LINKS: AdminLink[] = [
         gap: 12px;
       }
       .link-card-inner {
-        display: block;
+        display: flex;
+        flex-direction: column;
+        flex: 1;
         padding: 18px 20px;
         text-decoration: none;
         color: inherit;
@@ -194,6 +195,7 @@ const ADMIN_LINKS: AdminLink[] = [
         color: var(--accent);
         font-family: var(--font-mono);
         word-break: break-all;
+        margin-top: auto;
       }
       .credentials {
         display: flex;

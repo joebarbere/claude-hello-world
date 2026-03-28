@@ -4191,3 +4191,62 @@ MinIO Console doesn't support header-based authentication (REMOTE_USER), so afte
 - `apps/observability/auth-proxy/auth-proxy.py` — split internal/external MinIO URLs
 - `README.md` — updated MinIO Console routing to reflect direct port 9001 access
 - `SUMMARY.md` — added this step
+
+## Step 170: feat — Admin dashboard UI polish, user profile nav, and expanded observability
+
+**Five improvements across frontend and infrastructure:**
+
+1. **Remove Kratos health badge** — Removed the "Checking..." / "Healthy" / "Down" badge from the Ory Kratos Admin card on the admin dashboard. The health check infrastructure remains for future use.
+
+2. **Consistent card sizing** — Admin dashboard link cards now use flex layout so all cards in the same row are equal height, with URLs anchored at the bottom. Updated `ui-card` host to `display: flex` and card inner to flex-column.
+
+3. **User profile in navigation** — Added a user profile section at the bottom of the sidebar nav showing the logged-in user's email, role badge, and a "Sign out" button. `LayoutComponent` now accepts a `session` input and emits `logoutRequest`. The shell `App` component fetches the Kratos session and wires both.
+
+4. **Blackbox exporter for Airflow & Jupyter** — Added a blackbox-exporter container to the observability pod that probes Airflow (`/airflow/health`) and Jupyter (`/jupyter/api/status`) health endpoints. New Prometheus scrape configs use relabel to probe via the exporter. Grafana system health dashboard has a new "Service Probes" row with Airflow and Jupyter UP/DOWN stat panels.
+
+5. **Podman exporter for pod/container counts** — Added `prometheus-podman-exporter` container (mounts the Podman socket) to the observability pod. New Grafana dashboard row "Pods & Containers" shows bar gauge panels for pod count by status and container count by state, color-coded by health.
+
+**Files changed:**
+- `apps/admin-app/src/app/remote-entry/entry.ts` — removed Kratos badge, flex card layout
+- `libs/shared/ui/src/lib/card/card.ts` — host flex display for consistent sizing
+- `libs/shared/ui/src/lib/layout/layout.ts` — session input, logoutRequest output
+- `libs/shared/ui/src/lib/layout/layout.html` — user profile section in sidebar
+- `libs/shared/ui/src/lib/layout/layout.css` — user profile styles
+- `libs/shared/ui/src/index.ts` — export NavSession type
+- `apps/shell/src/app/app.ts` — wire session and logout to layout
+- `apps/observability/blackbox/blackbox.yml` — blackbox exporter config (new)
+- `apps/observability/blackbox/Containerfile` — blackbox exporter image (new)
+- `apps/observability/project.json` — added blackbox-exporter build target
+- `apps/observability/prometheus/prometheus.yml` — added podman, blackbox-airflow, blackbox-jupyter scrape configs
+- `k8s/observability-pod.yaml` — added blackbox-exporter and podman-exporter containers
+- `apps/observability/grafana/provisioning/dashboards/system-health.json` — added Service Probes and Pods & Containers panels
+- `SUMMARY.md` — added this step
+
+## Step 171: fix — Datascience volume permissions, dark mode, Grafana Explore, and README refresh
+
+**Root cause:** Rootless Podman UID namespace remapping prevented Airflow (UID 50000) and Jupyter (UID 1000/jovyan) from reading host-mounted files. Host UID 1000 maps to UID 0 (root) inside the container; other UIDs have no access.
+
+**Fix:** Added `chmod -R a+rX` to `scripts/sync-datascience.sh` after syncing files, making DAGs, notebooks, and shared helpers world-readable so any container UID can access them.
+
+**Additional changes in this batch:**
+1. **Airflow dark mode** — Flask blueprint plugin (`dark_theme.py`) injects a `<script>` before `</head>` that sets `localStorage.darkTheme=true` on first visit
+2. **Jupyter dark mode** — `overrides.json` sets JupyterLab Dark theme, baked into the container image
+3. **Grafana Explore & Logs Drilldown** — Pre-installed `grafana-lokiexplore-app` plugin in Containerfile, provisioned via `apps.yaml`, enabled Explore in Grafana config
+4. **Podman exporter via TCP** — Switched from socket mount to `CONTAINER_HOST=tcp://host.containers.internal:9999` to avoid UID permission issues
+5. **Grafana Pods & Containers panels** — Rewrote from `podman_pod_info` (not available) to `podman_container_state` grouped by `pod_name`
+6. **Screenshot script** — Fixed hardcoded Chromium path to use `CHROME_PATH` env var or Playwright default
+7. **README** — Added blackbox exporter, podman exporter, Grafana Logs Drilldown, and dark mode documentation; regenerated all 4 demo screenshots
+
+**Files changed:**
+- `scripts/sync-datascience.sh` — added `chmod -R a+rX` for world-readable volume permissions
+- `scripts/take-screenshots.mjs` — fixed hardcoded Chromium executable path
+- `apps/datascience/airflow/plugins/dark_theme.py` — Airflow dark mode Flask plugin (new)
+- `apps/datascience/jupyter/overrides.json` — JupyterLab Dark theme config (new)
+- `apps/datascience/jupyter/Containerfile` — copy overrides.json into image
+- `apps/observability/grafana/Containerfile` — pre-install grafana-lokiexplore-app plugin
+- `apps/observability/grafana/provisioning/plugins/apps.yaml` — enable Logs Drilldown plugin (new)
+- `k8s/observability-pod.yaml` — Grafana Explore enabled, dark theme, Admin auto-sign-up role
+- `apps/observability/grafana/provisioning/dashboards/system-health.json` — taller Pods & Containers panels, rewritten queries
+- `docs/screenshots/` — regenerated all 4 demo screenshots
+- `README.md` — added observability components, updated dashboard descriptions, dark mode notes
+- `SUMMARY.md` — added this step

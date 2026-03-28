@@ -27,6 +27,33 @@
           }
         </a>
       }
+
+      @if (session()) {
+        <div class="user-profile">
+          <div class="user-info">
+            <i class="pi pi-user user-avatar"></i>
+            @if (!sidebarCollapsed()) {
+              <div class="user-details">
+                <span class="user-email" [title]="session()!.email">{{ session()!.email }}</span>
+                @if (session()!.role) {
+                  <span class="user-role">{{ session()!.role }}</span>
+                }
+              </div>
+            }
+          </div>
+          <button
+            class="sign-out-btn"
+            (click)="logoutRequest.emit()"
+            [attr.title]="sidebarCollapsed() ? 'Sign out' : null"
+            aria-label="Sign out"
+          >
+            <i class="pi pi-sign-out"></i>
+            @if (!sidebarCollapsed()) {
+              <span>Sign out</span>
+            }
+          </button>
+        </div>
+      }
     </nav>
   </aside>
 

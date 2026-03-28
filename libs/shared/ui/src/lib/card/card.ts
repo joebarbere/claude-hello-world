@@ -10,12 +10,19 @@ import { Component } from '@angular/core';
   `,
   styles: [
     `
+      :host {
+        display: flex;
+        flex-direction: column;
+      }
       .ui-card {
         background: var(--bg-surface);
         border: 1px solid var(--border-color);
         border-radius: 12px;
         box-shadow: var(--shadow-sm);
         overflow: hidden;
+        flex: 1;
+        display: flex;
+        flex-direction: column;
       }
     `,
   ],

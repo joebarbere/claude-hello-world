@@ -49,3 +49,37 @@ scrape_configs:
     static_configs:
       - targets: ['host.containers.internal:9000']
     metrics_path: /minio/v2/metrics/cluster
+
+  - job_name: 'podman'
+    static_configs:
+      - targets: ['host.containers.internal:9882']
+
+  - job_name: 'blackbox-airflow'
+    metrics_path: /probe
+    params:
+      module: [http_2xx]
+      target: ['http://host.containers.internal:8280/airflow/health']
+    static_configs:
+      - targets: ['localhost:9115']
+        labels:
+          service: airflow
+    relabel_configs:
+      - source_labels: [__param_target]
+        target_label: instance
+      - source_labels: [__param_target]
+        target_label: __param_target
+
+  - job_name: 'blackbox-jupyter'
+    metrics_path: /probe
+    params:
+      module: [http_2xx]
+      target: ['http://host.containers.internal:8888/jupyter/api/status']
+    static_configs:
+      - targets: ['localhost:9115']
+        labels:
+          service: jupyter
+    relabel_configs:
+      - source_labels: [__param_target]
+        target_label: instance
+      - source_labels: [__param_target]
+        target_label: __param_target

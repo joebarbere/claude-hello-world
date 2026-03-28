@@ -40,6 +40,13 @@
         "cwd": "{workspaceRoot}"
       }
     },
+    "podman-build-blackbox-exporter": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "podman build -t blackbox-exporter -f apps/observability/blackbox/Containerfile apps/observability/blackbox",
+        "cwd": "{workspaceRoot}"
+      }
+    },
     "podman-build": {
       "executor": "nx:run-commands",
       "options": {
@@ -51,13 +58,18 @@
         "podman-build-grafana",
         "podman-build-loki",
         "podman-build-promtail",
-        "podman-build-auth-proxy"
+        "podman-build-auth-proxy",
+        "podman-build-blackbox-exporter"
       ]
     },
     "kube-up": {
       "executor": "nx:run-commands",
       "options": {
-        "command": "podman play kube k8s/observability-pod.yaml",
+        "commands": [
+          "podman system service --time=0 tcp:0.0.0.0:9999 &",
+          "podman play kube k8s/observability-pod.yaml"
+        ],
+        "parallel": false,
         "cwd": "{workspaceRoot}"
       },
       "dependsOn": ["podman-build"]

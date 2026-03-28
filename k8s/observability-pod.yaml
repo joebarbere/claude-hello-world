@@ -44,6 +44,27 @@ spec:
           value: "true"
         - name: GF_AUTH_DISABLE_SIGNOUT_MENU
           value: "true"
+        - name: GF_EXPLORE_ENABLED
+          value: "true"
+        - name: GF_USERS_DEFAULT_THEME
+          value: "dark"
+        - name: GF_AUTH_PROXY_AUTO_SIGN_UP_ORG_ROLE
+          value: "Admin"
+
+    - name: blackbox-exporter
+      image: localhost/blackbox-exporter:latest
+      ports:
+        - containerPort: 9115
+          hostPort: 9115
+
+    - name: podman-exporter
+      image: quay.io/navidys/prometheus-podman-exporter:latest
+      ports:
+        - containerPort: 9882
+          hostPort: 9882
+      env:
+        - name: CONTAINER_HOST
+          value: "tcp://host.containers.internal:9999"
 
     - name: auth-proxy
       image: localhost/auth-proxy:latest
