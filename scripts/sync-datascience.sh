@@ -32,9 +32,10 @@ mkdir -p /tmp/datascience/shared
 mkdir -p /tmp/datascience/jupyter/work
 mkdir -p /tmp/datascience/jupyter/notebooks
 mkdir -p /tmp/datascience/minio/data
-# MinIO needs the container_file_t SELinux label to write to the host volume
+# All host-mounted volumes need the container_file_t SELinux label so that
+# containers can access them (Fedora/RHEL enforce this by default).
 if command -v chcon &>/dev/null; then
-  chcon -R -t container_file_t -l s0 /tmp/datascience/minio/data
+  chcon -R -t container_file_t -l s0 /tmp/datascience
 fi
 
 # ---------------------------------------------------------------------------
