@@ -4045,3 +4045,13 @@ Merged all 10 open Dependabot PRs with the `dependencies` label. Applied lessons
 **Files changed:**
 - `apps/datascience/project.json` — added `sync-files` to `kube-up.dependsOn`
 - `SUMMARY.md` — added this step
+
+## Step 160: fix — redirect nginx logs to stdout/stderr to fix crash loop
+
+**Root cause:** The nginx container in the `claude-hello-world` pod was crash-looping because it could not open `/var/log/nginx/error.log` and `/var/log/nginx/access.log` (permission denied in rootless podman). Traefik returned 502 Bad Gateway because its upstream (nginx on port 8080) was down.
+
+**Fix:** Changed `nginx.conf` to log to `/dev/stdout` and `/dev/stderr` instead of log files — standard container practice that avoids permission issues and keeps logs visible via `podman logs`.
+
+**Files changed:**
+- `nginx/nginx.conf` — replaced file-based logging with `/dev/stdout` and `/dev/stderr`
+- `SUMMARY.md` — added this step
