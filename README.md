@@ -6,9 +6,63 @@
 [![CodeQL](https://github.com/joebarbere/claude-hello-world/actions/workflows/codeql.yml/badge.svg)](https://github.com/joebarbere/claude-hello-world/actions/workflows/codeql.yml)
 [![Dependabot enabled](https://img.shields.io/badge/dependabot-enabled-blue?logo=dependabot)](https://github.com/joebarbere/claude-hello-world/blob/main/.github/dependabot.yml)
 
-An Nx monorepo demonstrating Angular Module Federation micro-frontends with a .NET 9 Weather API backend and PostgreSQL, all containerized with Podman and orchestrated via `podman play kube`. Traefik handles SSL termination and reverse proxying, while nginx serves the Angular static files. Authentication is handled by [Ory Kratos](https://www.ory.sh/kratos/).
+What started as a simple "hello world" became an absurdly over-engineered, weather-themed Nx monorepo — a full-stack playground built entirely through conversation with [Claude Code](https://claude.ai/code). It spans Angular Module Federation micro-frontends, a .NET 9 Weather API, real-time Kafka event streaming via an Electron desktop app, Change Data Capture with Debezium, a complete observability stack (Prometheus + Grafana + Loki), a data science platform (Airflow + Jupyter + MinIO), Ory Kratos identity management with SSO across every service, and more — all containerized with Podman and orchestrated via `podman play kube` with Traefik SSL termination tying it all together.
 
 > **This project is for learning [Claude Code](https://claude.ai/code) only. It is not intended for production use.** See the [Security Disclaimer](#security-disclaimer) for details.
+
+### Built with Claude Code
+
+This entire monorepo — **260 commits**, **53,500+ lines of code**, and **188 documented build steps** — was produced in just **21 days** (March 7–28, 2026) through a single human collaborating with Claude Code. Every application, every container image, every Kubernetes pod manifest, every Grafana dashboard, every Airflow DAG, every Playwright E2E test, and every line of this README was written through natural language conversation. The [SUMMARY.md](SUMMARY.md) chronicles every step of the journey, from the first `nx g @nx/angular:app` scaffold to wiring SSO across five independent services. This is what happens when you hand an AI pair programmer a blank repo and say "let's build something."
+
+### Tech Stack
+
+| Technology | Role |
+|---|---|
+| **Nx 22** | Monorepo orchestration, task caching, dependency graph, and code generation |
+| **Angular 21** | Frontend framework for all micro-frontend applications |
+| **Module Federation (Webpack)** | Micro-frontend architecture — shell host with independently deployable remotes |
+| **PrimeNG 21** | UI component library (Aura theme, dark mode) with shared design system |
+| **TypeScript 5.9** | Type-safe language across all frontend and tooling code |
+| **Vite / SWC** | Fast dev server and Rust-based transpiler for frontend builds |
+| **.NET 9 / ASP.NET Core** | Weather API backend with OpenAPI docs (Scalar) |
+| **Entity Framework Core 9** | ORM with PostgreSQL provider (Npgsql) for weather data persistence |
+| **PostgreSQL 17** | Primary relational database with logical replication enabled for CDC |
+| **Ory Kratos** | Self-hosted identity and access management — login, registration, sessions, RBAC |
+| **Traefik 3.3** | Reverse proxy with SSL termination, path-based routing, and forwardAuth SSO |
+| **nginx** | Static file server for production Angular builds inside containers |
+| **Podman** | OCI-compliant container runtime (rootless, daemonless Docker alternative) |
+| **Kubernetes (podman play kube)** | Pod orchestration using standard K8s YAML manifests |
+| **Apache Kafka 3.9 (KRaft)** | Event streaming broker — no Zookeeper, single-node KRaft mode |
+| **Debezium** | Change Data Capture — streams PostgreSQL WAL changes to Kafka topics |
+| **Confluent Schema Registry** | Avro schema storage and compatibility enforcement for Kafka messages |
+| **KafkaJS** | JavaScript Kafka client for the Electron desktop consumer |
+| **Kafka UI** | Web interface for browsing topics, connectors, and Avro schemas |
+| **Electron** | Desktop app (Lightning App) — native Kafka consumer with Angular renderer |
+| **Prometheus** | Metrics collection and alerting — scrapes 11 targets across all services |
+| **Grafana** | Dashboards for Weather API, System Health, and Kafka & CDC metrics |
+| **Loki** | Log aggregation with label-based queries (tsdb/filesystem backend) |
+| **Promtail** | Log shipper — collects CRI pod logs, container logs, and access logs |
+| **Blackbox Exporter** | HTTP endpoint probing for Airflow and Jupyter health checks |
+| **postgres-exporter** | PostgreSQL metrics — replication slot lag and status |
+| **nginx-exporter** | nginx connection and request metrics for Prometheus |
+| **Podman Exporter** | Container and pod state metrics via the Podman API |
+| **Apache Airflow 2.10** | DAG-based workflow orchestration for data pipelines |
+| **Jupyter Lab** | Interactive notebooks with DuckDB, pandas, and pyarrow |
+| **MinIO** | S3-compatible object storage for datasets and artifacts |
+| **DuckDB** | Embedded columnar analytics database for notebook and DAG queries |
+| **pandas / pyarrow / boto3** | Data manipulation, Arrow format support, and S3 API access |
+| **fastavro / confluent-kafka** | Avro serialization and Kafka consumption in Python |
+| **auth-proxy** | Custom SSO bridge — validates Kratos sessions for Grafana, Airflow, Jupyter, MinIO |
+| **slot-guard** | Custom safety net — monitors and drops stale Debezium replication slots |
+| **Playwright** | E2E browser testing across three test suites (shell, weather, CRUD) |
+| **Vitest** | Unit test framework (Vite-native, with V8 coverage) |
+| **xUnit / dotnet test** | .NET backend unit and integration testing |
+| **ESLint 9 / Prettier** | Linting and code formatting across the monorepo |
+| **GitHub Actions** | CI/CD — lint, build, E2E smoke + full suites, Claude Code review |
+| **CodeQL** | Static application security testing (SAST) |
+| **OWASP Dependency-Check** | Software composition analysis for known vulnerabilities |
+| **Dependabot** | Automated dependency updates for npm, NuGet, and GitHub Actions |
+| **OpenSSL** | Self-signed TLS certificate generation for local HTTPS |
 
 ---
 
