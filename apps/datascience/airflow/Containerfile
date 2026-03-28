@@ -5,6 +5,8 @@ RUN pip install --no-cache-dir \
         duckdb \
         duckdb-engine \
         minio \
+        pandas \
+        pyarrow \
         requests \
         confluent-kafka \
         fastavro

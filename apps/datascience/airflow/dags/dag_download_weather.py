@@ -50,7 +50,7 @@ from airflow.operators.python import PythonOperator, ShortCircuitOperator
 # so that `import minio_helper` resolves correctly.
 # ---------------------------------------------------------------------------
 _DAG_DIR = os.path.dirname(os.path.abspath(__file__))
-_SHARED_DIR = os.path.join(_DAG_DIR, "..", "shared")
+_SHARED_DIR = os.path.join(_DAG_DIR, "shared")
 if _SHARED_DIR not in sys.path:
     sys.path.insert(0, _SHARED_DIR)
 

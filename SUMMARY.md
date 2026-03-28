@@ -4250,3 +4250,21 @@ MinIO Console doesn't support header-based authentication (REMOTE_USER), so afte
 - `docs/screenshots/` — regenerated all 4 demo screenshots
 - `README.md` — added observability components, updated dashboard descriptions, dark mode notes
 - `SUMMARY.md` — added this step
+
+## Step 172: fix — Airflow DAG import errors (shared path and missing pandas)
+
+**Two issues prevented Airflow DAGs from loading:**
+
+1. **Wrong shared helper path** — DAGs used `os.path.join(_DAG_DIR, "..", "shared")` which resolves to `/opt/airflow/shared`, but the shared volume is mounted *inside* the dags directory at `/opt/airflow/dags/shared`. Fixed by changing to `os.path.join(_DAG_DIR, "shared")`.
+
+2. **Missing `pandas` and `pyarrow`** — `minio_helper.py` imports pandas but it wasn't installed in the Airflow container image. Added `pandas` and `pyarrow` to the Airflow Containerfile pip install.
+
+**Also fixed:** SELinux `container_file_t` context was only applied to the MinIO subdirectory. Extended `chcon` to cover all of `/tmp/datascience/` so Airflow and Jupyter containers can access all mounted volumes on Fedora/RHEL.
+
+**Files changed:**
+- `apps/datascience/airflow/dags/dag_download_weather.py` — shared path `../"shared"` → `"shared"`
+- `apps/datascience/airflow/dags/dag_kafka_cdc_to_duckdb.py` — same path fix
+- `apps/datascience/airflow/dags/dag_quality_report.py` — same path fix
+- `apps/datascience/airflow/Containerfile` — added `pandas` and `pyarrow` to pip install
+- `scripts/sync-datascience.sh` — apply `container_file_t` SELinux context to all of `/tmp/datascience/`
+- `SUMMARY.md` — added this step
