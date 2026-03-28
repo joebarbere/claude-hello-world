@@ -4035,3 +4035,13 @@ Merged all 10 open Dependabot PRs with the `dependencies` label. Applied lessons
 - `apps/ory/Containerfile` — `oryd/kratos` → `docker.io/oryd/kratos`
 - `apps/kafka/debezium-init/Containerfile` — `alpine:3.21` → `docker.io/library/alpine:3.21`
 - `SUMMARY.md` — added this step
+
+## Step 159: fix — add sync-files dependency to datascience kube-up target
+
+**Root cause:** The `kube-up` target ran `podman play kube` without first creating the host directories that the pod's `hostPath` volumes reference (`/tmp/datascience/airflow/dags`, etc.). The `sync-files` target (which runs `scripts/sync-datascience.sh` to create these directories and copy DAGs/notebooks) existed but was not wired as a dependency.
+
+**Fix:** Added `sync-files` to the `dependsOn` array of the `kube-up` target so host directories are always created before the pod starts.
+
+**Files changed:**
+- `apps/datascience/project.json` — added `sync-files` to `kube-up.dependsOn`
+- `SUMMARY.md` — added this step

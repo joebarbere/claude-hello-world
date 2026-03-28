@@ -36,7 +36,7 @@
         "command": "podman play kube k8s/datascience-pod.yaml",
         "cwd": "{workspaceRoot}"
       },
-      "dependsOn": ["podman-build"]
+      "dependsOn": ["podman-build", "sync-files"]
     },
     "kube-down": {
       "executor": "nx:run-commands",
