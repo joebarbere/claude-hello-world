@@ -3982,3 +3982,15 @@ Merged all 10 open Dependabot PRs with the `dependencies` label. Applied lessons
 **Files changed:**
 - `apps/shell/project.json` — rewrote log-directory setup to avoid interactive sudo
 - `SUMMARY.md` — added this step
+
+## Step 155: fix — fully qualify container image names to avoid interactive registry prompt
+
+**Root cause:** Several pod manifests used short image names (e.g., `nginx/nginx-prometheus-exporter:latest`) without a registry prefix. Podman couldn't resolve which registry to pull from and opened an interactive selection prompt, which hangs and cancels under Nx's non-interactive runner.
+
+**Fix:** Prefixed all short image names with `docker.io/` so podman resolves them directly without prompting.
+
+**Files changed:**
+- `k8s/apps-pod.yaml` — `nginx/nginx-prometheus-exporter`
+- `k8s/kafka-pod.yaml` — `apache/kafka`, `confluentinc/cp-schema-registry`, `kafbat/kafka-ui`
+- `k8s/observability-pod.yaml` — `prometheuscommunity/postgres-exporter`
+- `SUMMARY.md` — added this step

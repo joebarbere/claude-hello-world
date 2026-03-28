@@ -7,7 +7,7 @@ metadata:
 spec:
   containers:
     - name: kafka
-      image: apache/kafka:3.9.0
+      image: docker.io/apache/kafka:3.9.0
       ports:
         - containerPort: 9092
           hostPort: 9092
@@ -42,7 +42,7 @@ spec:
           value: "-Xmx256m -Xms256m"
 
     - name: schema-registry
-      image: confluentinc/cp-schema-registry:7.7.1
+      image: docker.io/confluentinc/cp-schema-registry:7.7.1
       ports:
         - containerPort: 8081
           hostPort: 8085
@@ -98,7 +98,7 @@ spec:
           value: "http://localhost:8083"
 
     - name: kafka-ui
-      image: kafbat/kafka-ui:latest
+      image: docker.io/kafbat/kafka-ui:latest
       ports:
         - containerPort: 8080
           hostPort: 8090
