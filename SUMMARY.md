@@ -3994,3 +3994,13 @@ Merged all 10 open Dependabot PRs with the `dependencies` label. Applied lessons
 - `k8s/kafka-pod.yaml` — `apache/kafka`, `confluentinc/cp-schema-registry`, `kafbat/kafka-ui`
 - `k8s/observability-pod.yaml` — `prometheuscommunity/postgres-exporter`
 - `SUMMARY.md` — added this step
+
+## Step 156: fix — fully qualify promtail container image name
+
+**Root cause:** The promtail Containerfile used the short image name `grafana/promtail:latest` without a registry prefix. Podman opened an interactive registry selection prompt, which hangs under Nx's non-interactive runner.
+
+**Fix:** Prefixed the image name with `docker.io/` so podman resolves it directly.
+
+**Files changed:**
+- `apps/observability/promtail/Containerfile` — `grafana/promtail` → `docker.io/grafana/promtail`
+- `SUMMARY.md` — added this step
