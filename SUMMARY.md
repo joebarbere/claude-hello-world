@@ -4134,3 +4134,13 @@ Added single sign-on access to all three datascience services via the existing O
 - `k8s/datascience-pod.yaml` — updated Airflow base_url/proxy_fix, Jupyter token/base_url, MinIO redirect URL
 - `k8s/pod.yaml` — deleted (unused since Step 50, superseded by split pod files)
 - `SUMMARY.md` — added this step
+
+---
+
+## Step 166: fix — update admin dashboard links to use Traefik-proxied SSO paths
+
+The admin dashboard (admin-app) had links for Airflow, Jupyter, and MinIO pointing to direct container ports (e.g., `http://localhost:8280`) instead of the Traefik-proxied SSO paths. Updated all three to use relative paths (`/airflow/`, `/jupyter/`, `/minio/`) so they route through Traefik and benefit from Kratos SSO. Removed hardcoded credentials for Grafana, Airflow, and Jupyter since SSO handles auth. Kept MinIO credentials since it still requires its own login after Kratos gate.
+
+**Files changed:**
+- `apps/admin-app/src/app/remote-entry/entry.ts` — updated URLs and removed credentials for SSO-protected services
+- `SUMMARY.md` — added this step

@@ -29,10 +29,9 @@ const ADMIN_LINKS: AdminLink[] = [
   },
   {
     name: 'Grafana Dashboard',
-    url: 'http://localhost:3000',
+    url: '/grafana',
     description: 'Metrics dashboards, alerting, and log exploration.',
     category: 'Observability',
-    credentials: { username: 'admin', password: 'admin' },
   },
   {
     name: 'Kafka UI',
@@ -54,21 +53,19 @@ const ADMIN_LINKS: AdminLink[] = [
   },
   {
     name: 'Apache Airflow',
-    url: 'http://localhost:8280',
+    url: '/airflow/',
     description: 'Orchestrate and monitor data pipelines and DAG workflows.',
     category: 'Data Science',
-    credentials: { username: 'admin', password: 'admin' },
   },
   {
     name: 'Jupyter Lab',
-    url: 'http://localhost:8888',
+    url: '/jupyter/',
     description: 'Interactive notebooks with DuckDB, pandas, and MinIO integration.',
     category: 'Data Science',
-    credentials: { username: 'token', password: 'datascience' },
   },
   {
     name: 'MinIO Console',
-    url: 'http://localhost:9001',
+    url: '/minio/',
     description: 'S3-compatible object storage for datasets, models, and artifacts.',
     category: 'Data Science',
     credentials: { username: 'minioadmin', password: 'minioadmin' },
