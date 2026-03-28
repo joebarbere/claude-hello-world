@@ -86,8 +86,7 @@ Traefik (reverse proxy, :8080 → redirects to HTTPS, :8443 SSL termination)
   ├── /grafana                 → Grafana (:3000) [SSO via kratos-auth]
   ├── /airflow                 → Airflow (:8280) [SSO via kratos-auth]
   ├── /jupyter                 → Jupyter (:8888) [SSO via kratos-auth]
-  ├── /minio-login             → auth-proxy (:4181) [SSO + auto-login] → /minio/
-  ├── /minio                   → MinIO Console (:9001) [SSO via kratos-auth]
+  ├── /minio-login             → auth-proxy (:4181) [SSO + auto-login] → localhost:9001
   ├── /.ory/kratos/public/     → Ory Kratos public API (:4433)
   └── /.ory/kratos/admin/      → Ory Kratos admin API (:4434)
 
@@ -124,7 +123,7 @@ Kafka CDC (separate pod, not started by kube-up shell)
 Data Science (separate pod, not started by kube-up shell)
   ├── Apache Airflow (:8280 / https://localhost:8443/airflow/) — DAG orchestration, SSO via Kratos
   ├── Jupyter Lab (:8888 / https://localhost:8443/jupyter/) — notebooks, SSO via Kratos
-  └── MinIO (:9000 API / :9001 console / https://localhost:8443/minio-login) — S3 storage, SSO via Kratos
+  └── MinIO (:9000 API / :9001 console via /minio-login) — S3 storage, SSO via Kratos auto-login
 ```
 
 ## Prerequisites
@@ -233,7 +232,8 @@ npx nx kube-down shell
 | http://localhost:8085 | Schema Registry (requires kafka pod) |
 | https://localhost:8443/airflow/ | Airflow (SSO via Kratos, requires datascience pod) |
 | https://localhost:8443/jupyter/ | Jupyter Lab (SSO via Kratos, requires datascience pod) |
-| https://localhost:8443/minio-login | MinIO Console (SSO via Kratos, requires datascience pod) |
+| https://localhost:8443/minio-login | MinIO Console auto-login (SSO via Kratos → redirects to localhost:9001, requires datascience pod) |
+| http://localhost:9001 | MinIO Console direct (requires datascience pod) |
 | http://localhost:9000 | MinIO S3 API (requires datascience pod) |
 
 ### Individual containers
@@ -418,7 +418,7 @@ All protected services (Grafana, Airflow, Jupyter, MinIO) use the same SSO patte
    - **Grafana** — `auth.proxy` trusts `X-Webauth-User` and auto-creates/logs in the user
    - **Airflow** — FAB `AUTH_REMOTE_USER` + a plugin that copies `X-Webauth-User` to `REMOTE_USER` in WSGI environ
    - **Jupyter** — token/password auth disabled; access gated entirely at the Traefik layer
-   - **MinIO** — `/minio-login` route calls MinIO's login API with admin credentials, sets the session cookie, and redirects to `/minio/` (full auto-login)
+   - **MinIO** — `/minio-login` route calls MinIO's login API with admin credentials, sets the session cookie, and redirects to `http://localhost:9001` (full auto-login, accessed directly rather than via Traefik subpath)
 
 > **macOS note:** Podman containers run inside a Linux VM. The `hostPath` volume mounts (`/var/log`, `/var/lib/containers`) refer to paths inside that VM, not the macOS host filesystem. Log collection works automatically when `kube-up shell` and `kube-up observability` are both running inside the same Podman Machine.
 </details>

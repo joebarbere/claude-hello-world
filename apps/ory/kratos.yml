@@ -45,8 +45,6 @@ selfservice:
     - https://localhost:8443/airflow/
     - https://localhost:8443/jupyter
     - https://localhost:8443/jupyter/
-    - https://localhost:8443/minio
-    - https://localhost:8443/minio/
     - https://localhost:8443/minio-login
     - https://localhost:8443/auth/recovery
     - https://localhost:8443/auth/settings

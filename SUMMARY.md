@@ -4160,3 +4160,34 @@ MinIO Console doesn't support header-based authentication (REMOTE_USER), so afte
 - `apps/admin-app/src/app/remote-entry/entry.ts` — changed MinIO link to `/minio-login`, removed credentials
 - `README.md` — updated architecture diagram, URL table, SSO docs, Prometheus targets, data science auth section
 - `SUMMARY.md` — added this step
+
+---
+
+## Step 168: fix — MinIO Console blank page when accessed via /minio subpath
+
+**Root cause:** MinIO Console's SPA cannot reliably serve its static assets (JS/CSS) when reverse-proxied under a subpath (`/minio`). Although `MINIO_BROWSER_REDIRECT_URL` was set, the Console's asset paths didn't resolve correctly through Traefik's `strip-minio-prefix` middleware, causing the React app to fail to mount (blank page).
+
+**Fix:** Redirect the auto-login flow directly to the MinIO Console at `http://localhost:9001` instead of through the `/minio/` subpath proxy. The session cookie set by the auth-proxy is port-agnostic (same `localhost` domain), so auto-login still works. Removed the unused subpath proxy infrastructure.
+
+**Files changed:**
+- `apps/observability/auth-proxy/auth-proxy.py` — redirect to `MINIO_CONSOLE` (port 9001) instead of `/minio/`
+- `traefik/traefik-dynamic.yml` — removed `minio-router`, `minio-console` service, and `strip-minio-prefix` middleware
+- `k8s/datascience-pod.yaml` — removed `MINIO_BROWSER_REDIRECT_URL` (no longer needed)
+- `apps/ory/kratos.yml` — removed `/minio` and `/minio/` from `allowed_return_urls`
+- `SUMMARY.md` — added this step
+
+---
+
+## Step 169: fix — kube-up sudo fallback for CI and direct MinIO Console redirect
+
+**Two fixes:**
+
+1. **kube-up log directory creation** — On native Linux (GitHub Actions or local without Podman Machine), `mkdir -p /var/log/traefik` fails without root. The script now falls back to `sudo` when unprivileged creation fails, covering macOS (Podman Machine SSH), local Linux (sudo prompt), and CI (passwordless sudo).
+
+2. **MinIO auto-login redirect** — The auth-proxy redirected the browser to `host.containers.internal:9001` (a Podman-internal hostname unresolvable by browsers). Split into `MINIO_API` (internal, for server-side login API call) and `MINIO_CONSOLE_URL` (external `http://localhost:9001`, for browser redirect).
+
+**Files changed:**
+- `apps/shell/project.json` — kube-up command falls back to `sudo` for log dirs
+- `apps/observability/auth-proxy/auth-proxy.py` — split internal/external MinIO URLs
+- `README.md` — updated MinIO Console routing to reflect direct port 9001 access
+- `SUMMARY.md` — added this step

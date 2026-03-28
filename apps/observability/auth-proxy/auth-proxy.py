@@ -20,7 +20,8 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 KRATOS_WHOAMI = "http://host.containers.internal:4433/sessions/whoami"
 LOGIN_URL = "https://localhost:8443/.ory/kratos/public/self-service/login/browser"
 
-MINIO_CONSOLE = "http://host.containers.internal:9001"
+MINIO_API = "http://host.containers.internal:9001"
+MINIO_CONSOLE_URL = "http://localhost:9001"
 MINIO_USER = os.environ.get("MINIO_ACCESS_KEY", "minioadmin")
 MINIO_PASS = os.environ.get("MINIO_SECRET_KEY", "minioadmin")
 
@@ -74,24 +75,26 @@ class MinioLoginHandler(BaseHTTPRequestHandler):
             {"accessKey": MINIO_USER, "secretKey": MINIO_PASS}
         ).encode()
         req = urllib.request.Request(
-            f"{MINIO_CONSOLE}/api/v1/login",
+            f"{MINIO_API}/api/v1/login",
             data=payload,
             headers={"Content-Type": "application/json"},
             method="POST",
         )
         try:
             resp = urllib.request.urlopen(req, timeout=5)
-            # Extract Set-Cookie from MinIO response and relay to browser
+            # Extract Set-Cookie from MinIO response and relay to browser.
+            # Cookie domain defaults to localhost (port-agnostic), so it is
+            # sent when the browser redirects to the Console on port 9001.
             token_cookie = resp.headers.get("Set-Cookie", "")
             self.send_response(302)
             if token_cookie:
                 self.send_header("Set-Cookie", token_cookie)
-            self.send_header("Location", "/minio/")
+            self.send_header("Location", MINIO_CONSOLE_URL)
             self.end_headers()
-        except Exception as e:
+        except Exception:
             # Fall back to MinIO Console login page
             self.send_response(302)
-            self.send_header("Location", "/minio/")
+            self.send_header("Location", MINIO_CONSOLE_URL)
             self.end_headers()
 
     def log_message(self, fmt, *args):

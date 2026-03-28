@@ -98,18 +98,6 @@ http:
         - kratos-auth
       tls: {}
 
-    # MinIO Console — access gated via Kratos auth-proxy
-    minio-router:
-      rule: "PathPrefix(`/minio`)"
-      entryPoints:
-        - websecure
-      service: minio-console
-      priority: 25
-      middlewares:
-        - kratos-auth
-        - strip-minio-prefix
-      tls: {}
-
     # Kafka UI — topic browser and Kafka Connect management
     kafka-ui-router:
       rule: "PathPrefix(`/kafka-ui`)"
@@ -186,12 +174,6 @@ http:
         servers:
           - url: "http://host.containers.internal:8888"
 
-    # MinIO Console in datascience pod
-    minio-console:
-      loadBalancer:
-        servers:
-          - url: "http://host.containers.internal:9001"
-
     # MinIO auto-login service (auth-proxy port 4181)
     minio-login:
       loadBalancer:
@@ -224,12 +206,6 @@ http:
       stripPrefix:
         prefixes:
           - "/grafana"
-
-    # Strip /minio prefix before forwarding to MinIO Console
-    strip-minio-prefix:
-      stripPrefix:
-        prefixes:
-          - "/minio"
 
     # Rewrite /weather → /weatherforecast
     weather-replace-path:
