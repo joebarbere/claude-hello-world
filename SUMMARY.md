@@ -4318,3 +4318,24 @@ Updated the Airflow `KAFKA_BROKER` env var to point to port 9094 (the external l
 **Files changed:**
 - `apps/datascience/airflow/dags/dag_kafka_cdc_to_duckdb.py` — explicit offset commit with `TopicPartition`
 - `SUMMARY.md` — added this step
+
+## Step 177: feat — Claude Code GitHub workflows
+
+**What:** Two new GitHub Actions workflows were added via PR #69:
+- `claude.yml` — runs Claude Code as an automated agent on issues and PR comments
+- `claude-code-review.yml` — runs Claude Code as a PR reviewer on pull requests
+
+**Files added:**
+- `.github/workflows/claude.yml`
+- `.github/workflows/claude-code-review.yml`
+
+## Step 178: feat — expand IDEAS.md with detailed ideas and 41 implementation plans
+
+**What:** The original IDEAS.md (7 stub ideas) was expanded into a comprehensive roadmap with 41 fully fleshed-out ideas across 11 categories: Infrastructure & Stack Hygiene, Data Ingestion DAGs, Data Quality & Analytics, Platform Observability & Reliability, Security, Developer Experience, WeatherForecast Data Model Enhancements, User-Facing Features, Machine Learning & Forecasting, Testing & CI/CD, and Future Platform Directions. Each idea includes motivation, implementation notes, risks, and cross-dependencies.
+
+A dedicated implementation plan was created for each idea in the `plans/` directory. Each plan contains: Goal, Current State (referencing actual codebase files), Implementation Steps, Files to Create/Modify, Testing strategy, Risks & Mitigations, Dependencies, and Estimated Complexity. Every idea heading in IDEAS.md links to its plan file.
+
+**Files added:**
+- `plans/` — 41 implementation plan markdown files
+- `IDEAS.md` — expanded from 7 stubs to 41 detailed ideas with plan links
+- `SUMMARY.md` — added this step
