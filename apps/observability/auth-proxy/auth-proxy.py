@@ -1,7 +1,7 @@
-"""Tiny auth-verification service for Traefik forwardAuth → Grafana SSO.
+"""Auth-verification service for Traefik forwardAuth → Ory Kratos SSO.
 
-Traefik sends every Grafana request here first.
-  * If Kratos says the session is valid → 200 + X-Webauth-User header.
+Traefik sends every protected request here first via forwardAuth.
+  * If Kratos says the session is valid → 200 + X-Webauth-User / Remote-User headers.
   * Otherwise → 302 redirect to Kratos login (return_to = original URL).
 """
 
@@ -36,13 +36,14 @@ class Handler(BaseHTTPRequestHandler):
             email = data["identity"]["traits"]["email"]
             self.send_response(200)
             self.send_header("X-Webauth-User", email)
+            self.send_header("Remote-User", email)
             self.end_headers()
         except Exception:
             self._redirect()
 
     def _redirect(self):
         # Build return_to from the original URL that Traefik forwards.
-        original = self.headers.get("X-Forwarded-Uri", "/grafana/")
+        original = self.headers.get("X-Forwarded-Uri", "/")
         host = self.headers.get("X-Forwarded-Host", "localhost:8443")
         proto = self.headers.get("X-Forwarded-Proto", "https")
         return_to = urllib.request.quote(f"{proto}://{host}{original}", safe="")

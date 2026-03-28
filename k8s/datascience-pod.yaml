@@ -19,11 +19,13 @@ spec:
         - name: AIRFLOW__CORE__LOAD_EXAMPLES
           value: "false"
         - name: AIRFLOW__WEBSERVER__BASE_URL
-          value: "http://localhost:8280"
+          value: "https://localhost:8443/airflow"
         - name: AIRFLOW__WEBSERVER__WEB_SERVER_PORT
           value: "8080"
         - name: AIRFLOW__WEBSERVER__SECRET_KEY
           value: datascience-dev-key
+        - name: AIRFLOW__WEBSERVER__ENABLE_PROXY_FIX
+          value: "true"
         - name: _AIRFLOW_WWW_USER_CREATE
           value: "true"
         - name: _AIRFLOW_WWW_USER_USERNAME
@@ -43,9 +45,15 @@ spec:
           hostPort: 8888
       env:
         - name: JUPYTER_TOKEN
-          value: datascience
+          value: ""
         - name: JUPYTER_ENABLE_LAB
           value: "yes"
+      args:
+        - "start-notebook.py"
+        - "--ServerApp.token=''"
+        - "--ServerApp.password=''"
+        - "--ServerApp.base_url=/jupyter"
+        - "--ServerApp.allow_remote_access=true"
       volumeMounts:
         - name: jupyter-work
           mountPath: /home/jovyan/work
@@ -67,6 +75,10 @@ spec:
           value: minioadmin
         - name: MINIO_ROOT_PASSWORD
           value: minioadmin
+        - name: MINIO_PROMETHEUS_AUTH_TYPE
+          value: public
+        - name: MINIO_BROWSER_REDIRECT_URL
+          value: "https://localhost:8443/minio"
       volumeMounts:
         - name: minio-data
           mountPath: /data

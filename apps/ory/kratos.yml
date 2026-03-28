@@ -41,6 +41,12 @@ selfservice:
     - https://localhost:8443/admin-app
     - https://localhost:8443/grafana
     - https://localhost:8443/grafana/
+    - https://localhost:8443/airflow
+    - https://localhost:8443/airflow/
+    - https://localhost:8443/jupyter
+    - https://localhost:8443/jupyter/
+    - https://localhost:8443/minio
+    - https://localhost:8443/minio/
     - https://localhost:8443/auth/recovery
     - https://localhost:8443/auth/settings
 

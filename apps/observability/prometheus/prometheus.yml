@@ -29,3 +29,23 @@ scrape_configs:
     static_configs:
       - targets: ['host.containers.internal:9404']
     metrics_path: /metrics
+
+  - job_name: 'grafana'
+    static_configs:
+      - targets: ['localhost:3000']
+    metrics_path: /grafana/metrics
+
+  - job_name: 'loki'
+    static_configs:
+      - targets: ['localhost:3100']
+    metrics_path: /metrics
+
+  - job_name: 'kratos'
+    static_configs:
+      - targets: ['host.containers.internal:4434']
+    metrics_path: /admin/metrics/prometheus
+
+  - job_name: 'minio'
+    static_configs:
+      - targets: ['host.containers.internal:9000']
+    metrics_path: /minio/v2/metrics/cluster

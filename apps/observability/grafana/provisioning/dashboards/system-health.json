@@ -43,8 +43,8 @@
     {
       "id": 2,
       "type": "stat",
-      "title": "Running Pods",
-      "description": "Number of scrape targets responding",
+      "title": "Targets UP",
+      "description": "Number of Prometheus scrape targets responding",
       "gridPos": { "x": 6, "y": 0, "w": 6, "h": 4 },
       "datasource": { "type": "prometheus", "uid": "prometheus" },
       "targets": [
@@ -72,8 +72,8 @@
     {
       "id": 3,
       "type": "stat",
-      "title": "Total Containers",
-      "description": "Total number of monitored scrape targets",
+      "title": "Total Targets",
+      "description": "Total number of Prometheus scrape targets",
       "gridPos": { "x": 12, "y": 0, "w": 6, "h": 4 },
       "datasource": { "type": "prometheus", "uid": "prometheus" },
       "targets": [
@@ -100,8 +100,8 @@
     {
       "id": 4,
       "type": "stat",
-      "title": "Containers Down",
-      "description": "Scrape targets not responding",
+      "title": "Targets Down",
+      "description": "Prometheus scrape targets not responding",
       "gridPos": { "x": 18, "y": 0, "w": 6, "h": 4 },
       "datasource": { "type": "prometheus", "uid": "prometheus" },
       "targets": [
@@ -129,9 +129,9 @@
     {
       "id": 5,
       "type": "table",
-      "title": "Container Health",
+      "title": "Target Health",
       "description": "Per-target health status",
-      "gridPos": { "x": 0, "y": 4, "w": 24, "h": 6 },
+      "gridPos": { "x": 0, "y": 4, "w": 24, "h": 10 },
       "datasource": { "type": "prometheus", "uid": "prometheus" },
       "targets": [
         {
@@ -187,7 +187,7 @@
       "id": 6,
       "type": "timeseries",
       "title": "HTTP Request Rate by Service",
-      "gridPos": { "x": 0, "y": 10, "w": 12, "h": 8 },
+      "gridPos": { "x": 0, "y": 14, "w": 12, "h": 8 },
       "datasource": { "type": "prometheus", "uid": "prometheus" },
       "targets": [
         {
@@ -205,7 +205,7 @@
       "id": 7,
       "type": "timeseries",
       "title": "HTTP Error Rate (4xx + 5xx)",
-      "gridPos": { "x": 12, "y": 10, "w": 12, "h": 8 },
+      "gridPos": { "x": 12, "y": 14, "w": 12, "h": 8 },
       "datasource": { "type": "prometheus", "uid": "prometheus" },
       "targets": [
         {
@@ -228,7 +228,7 @@
       "id": 8,
       "type": "stat",
       "title": "Total 5xx Errors (last 1h)",
-      "gridPos": { "x": 0, "y": 18, "w": 8, "h": 4 },
+      "gridPos": { "x": 0, "y": 22, "w": 8, "h": 4 },
       "datasource": { "type": "prometheus", "uid": "prometheus" },
       "targets": [
         {
@@ -257,7 +257,7 @@
       "id": 9,
       "type": "stat",
       "title": "Total 4xx Errors (last 1h)",
-      "gridPos": { "x": 8, "y": 18, "w": 8, "h": 4 },
+      "gridPos": { "x": 8, "y": 22, "w": 8, "h": 4 },
       "datasource": { "type": "prometheus", "uid": "prometheus" },
       "targets": [
         {
@@ -286,7 +286,7 @@
       "id": 10,
       "type": "stat",
       "title": "Total Requests (last 1h)",
-      "gridPos": { "x": 16, "y": 18, "w": 8, "h": 4 },
+      "gridPos": { "x": 16, "y": 22, "w": 8, "h": 4 },
       "datasource": { "type": "prometheus", "uid": "prometheus" },
       "targets": [
         {
@@ -314,7 +314,7 @@
       "type": "table",
       "title": "Top IP + User-Agent (last 1h)",
       "description": "Top client IP and User-Agent combinations by request count from Traefik access logs",
-      "gridPos": { "x": 0, "y": 22, "w": 24, "h": 10 },
+      "gridPos": { "x": 0, "y": 26, "w": 24, "h": 10 },
       "datasource": { "type": "loki", "uid": "loki" },
       "targets": [
         {
@@ -344,7 +344,7 @@
       "type": "logs",
       "title": "Recent Error Logs",
       "description": "Recent 4xx and 5xx entries from Traefik access logs",
-      "gridPos": { "x": 0, "y": 32, "w": 24, "h": 8 },
+      "gridPos": { "x": 0, "y": 36, "w": 24, "h": 8 },
       "datasource": { "type": "loki", "uid": "loki" },
       "targets": [
         {

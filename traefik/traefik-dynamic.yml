@@ -62,7 +62,41 @@ http:
       service: grafana
       priority: 25
       middlewares:
-        - grafana-auth
+        - kratos-auth
+      tls: {}
+
+    # Airflow — SSO via Kratos auth-proxy (Airflow handles /airflow base path natively)
+    airflow-router:
+      rule: "PathPrefix(`/airflow`)"
+      entryPoints:
+        - websecure
+      service: airflow
+      priority: 25
+      middlewares:
+        - kratos-auth
+      tls: {}
+
+    # Jupyter — SSO via Kratos auth-proxy (Jupyter handles /jupyter base_url natively)
+    jupyter-router:
+      rule: "PathPrefix(`/jupyter`)"
+      entryPoints:
+        - websecure
+      service: jupyter
+      priority: 25
+      middlewares:
+        - kratos-auth
+      tls: {}
+
+    # MinIO Console — access gated via Kratos auth-proxy
+    minio-router:
+      rule: "PathPrefix(`/minio`)"
+      entryPoints:
+        - websecure
+      service: minio-console
+      priority: 25
+      middlewares:
+        - kratos-auth
+        - strip-minio-prefix
       tls: {}
 
     # Kafka UI — topic browser and Kafka Connect management
@@ -129,6 +163,24 @@ http:
         servers:
           - url: "http://host.containers.internal:3000"
 
+    # Airflow in datascience pod
+    airflow:
+      loadBalancer:
+        servers:
+          - url: "http://host.containers.internal:8280"
+
+    # Jupyter in datascience pod (base_url=/jupyter, no strip needed)
+    jupyter:
+      loadBalancer:
+        servers:
+          - url: "http://host.containers.internal:8888"
+
+    # MinIO Console in datascience pod
+    minio-console:
+      loadBalancer:
+        servers:
+          - url: "http://host.containers.internal:9001"
+
   middlewares:
     # Strip /.ory/kratos/public prefix before forwarding to Kratos
     strip-ory-prefix:
@@ -142,18 +194,25 @@ http:
         prefixes:
           - "/.ory/kratos/admin"
 
-    # Grafana: verify Kratos session via auth-proxy, copy user email header
-    grafana-auth:
+    # Kratos SSO: verify session via auth-proxy, copy user email headers
+    kratos-auth:
       forwardAuth:
         address: "http://host.containers.internal:4180"
         authResponseHeaders:
           - X-Webauth-User
+          - Remote-User
 
     # Strip /grafana prefix before forwarding to Grafana
     strip-grafana-prefix:
       stripPrefix:
         prefixes:
           - "/grafana"
+
+    # Strip /minio prefix before forwarding to MinIO Console
+    strip-minio-prefix:
+      stripPrefix:
+        prefixes:
+          - "/minio"
 
     # Rewrite /weather → /weatherforecast
     weather-replace-path:

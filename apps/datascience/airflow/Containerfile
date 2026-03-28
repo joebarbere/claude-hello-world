@@ -8,5 +8,7 @@ RUN pip install --no-cache-dir \
         requests \
         confluent-kafka \
         fastavro
+COPY webserver_config.py /opt/airflow/webserver_config.py
+COPY plugins/ /opt/airflow/plugins/
 COPY entrypoint.sh /entrypoint.sh
 ENTRYPOINT ["/entrypoint.sh"]

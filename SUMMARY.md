@@ -4066,3 +4066,71 @@ Merged all 10 open Dependabot PRs with the `dependencies` label. Applied lessons
 - `nginx/nginx.conf` — moved `error_log` to top-level context
 - `k8s/apps-pod.yaml` — removed `nginx-logs` volume and volumeMount
 - `SUMMARY.md` — added this step
+
+## Step 162: fix — MinIO crash loop from SELinux denying hostPath writes
+
+**Root cause:** MinIO could not write to `/data` because the hostPath volume at `/tmp/datascience/minio/data` had the default `user_tmp_t` SELinux label. SELinux on Fedora blocks containers from writing to directories without the `container_file_t` label.
+
+**Fix:** Added `chcon -R -t container_file_t -l s0` to `scripts/sync-datascience.sh` to relabel the MinIO data directory before the pod starts.
+
+**Files changed:**
+- `scripts/sync-datascience.sh` — added SELinux relabeling for MinIO data directory
+- `SUMMARY.md` — added this step
+
+## Step 163: feat — add Prometheus scrape targets for Grafana, Loki, Kratos, and MinIO
+
+**Root cause:** Only 6 of 10+ services were monitored via Prometheus. Grafana, Loki, Ory Kratos, and MinIO all expose Prometheus metrics endpoints but weren't being scraped.
+
+**Fix:** Added 4 new scrape jobs to `prometheus.yml`. Added `MINIO_PROMETHEUS_AUTH_TYPE=public` env var to MinIO so its metrics endpoint doesn't require authentication.
+
+**Files changed:**
+- `apps/observability/prometheus/prometheus.yml` — added grafana, loki, kratos, minio scrape jobs
+- `k8s/datascience-pod.yaml` — added `MINIO_PROMETHEUS_AUTH_TYPE=public` to MinIO container
+- `SUMMARY.md` — added this step
+
+## Step 164: fix — rename misleading Grafana dashboard panels and increase Target Health table height
+
+**Root cause:** The System Health dashboard panels were titled "Running Pods", "Total Containers", and "Containers Down" but actually showed Prometheus scrape targets. The Target Health table was too short (h=6) to show all rows.
+
+**Fix:** Renamed panels to "Targets UP", "Total Targets", "Targets Down", "Target Health". Increased table height from 6 to 10 grid units and shifted all panels below down by 4.
+
+**Files changed:**
+- `apps/observability/grafana/provisioning/dashboards/system-health.json` — renamed panels, increased table height
+- `SUMMARY.md` — added this step
+
+## Step 165: feat — SSO via Ory Kratos for Airflow, Jupyter, and MinIO
+
+Added single sign-on access to all three datascience services via the existing Ory Kratos auth-proxy pattern. Unauthenticated users are redirected to the Kratos login page; after login they are returned to the original service.
+
+**Auth-proxy changes:**
+- Made the auth-proxy generic (was Grafana-specific) — changed default `return_to` URI from `/grafana/` to `/`
+- Added `Remote-User` response header alongside `X-Webauth-User`
+- Renamed Traefik middleware from `grafana-auth` to `kratos-auth`
+
+**Airflow (full SSO):**
+- Created `webserver_config.py` with `AUTH_TYPE = AUTH_REMOTE_USER` and auto-registration with Admin role
+- Created Airflow plugin (`plugins/proxy_auth.py`) that copies `X-Webauth-User` header to `REMOTE_USER` in WSGI environ via `before_app_request`
+- Airflow handles `/airflow` base path natively via `AIRFLOW__WEBSERVER__BASE_URL`
+- Enabled `AIRFLOW__WEBSERVER__ENABLE_PROXY_FIX` for correct HTTPS redirect URLs
+
+**Jupyter (auth-gated):**
+- Disabled built-in token/password auth (`ServerApp.token=''`, `ServerApp.password=''`)
+- Set `ServerApp.base_url=/jupyter` so internal links work under the sub-path
+- Authentication handled entirely at the Traefik layer
+
+**MinIO Console (auth-gated):**
+- Gated access via Kratos auth-proxy — only authenticated users can reach the console
+- Set `MINIO_BROWSER_REDIRECT_URL` for correct redirect behavior
+- MinIO Console doesn't support sub-path serving (uses `<base href="/">`), so stripPrefix is used for the proxy path
+- MinIO's own login page still appears after Kratos auth (not full SSO)
+
+**Files changed:**
+- `apps/observability/auth-proxy/auth-proxy.py` — generic docstring, fallback URI, added Remote-User header
+- `apps/ory/kratos.yml` — added `/airflow`, `/jupyter`, `/minio` to allowed_return_urls
+- `traefik/traefik-dynamic.yml` — renamed `grafana-auth` to `kratos-auth`, added routers/services/middlewares for all three services
+- `apps/datascience/airflow/webserver_config.py` — new, FAB remote user auth config
+- `apps/datascience/airflow/plugins/proxy_auth.py` — new, WSGI environ middleware plugin
+- `apps/datascience/airflow/Containerfile` — added COPY for webserver_config.py and plugins/
+- `k8s/datascience-pod.yaml` — updated Airflow base_url/proxy_fix, Jupyter token/base_url, MinIO redirect URL
+- `k8s/pod.yaml` — deleted (unused since Step 50, superseded by split pod files)
+- `SUMMARY.md` — added this step
