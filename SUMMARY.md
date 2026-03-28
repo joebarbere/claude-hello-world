@@ -4004,3 +4004,13 @@ Merged all 10 open Dependabot PRs with the `dependencies` label. Applied lessons
 **Files changed:**
 - `apps/observability/promtail/Containerfile` — `grafana/promtail` → `docker.io/grafana/promtail`
 - `SUMMARY.md` — added this step
+
+## Step 157: fix — fully qualify prometheus container image name
+
+**Root cause:** The prometheus Containerfile used the short image name `prom/prometheus:latest` without a registry prefix. Podman opened an interactive registry selection prompt, which hangs under Nx's non-interactive runner.
+
+**Fix:** Prefixed the image name with `docker.io/` so podman resolves it directly.
+
+**Files changed:**
+- `apps/observability/prometheus/Containerfile` — `prom/prometheus` → `docker.io/prom/prometheus`
+- `SUMMARY.md` — added this step
