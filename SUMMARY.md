@@ -4268,3 +4268,53 @@ MinIO Console doesn't support header-based authentication (REMOTE_USER), so afte
 - `apps/datascience/airflow/Containerfile` — added `pandas` and `pyarrow` to pip install
 - `scripts/sync-datascience.sh` — apply `container_file_t` SELinux context to all of `/tmp/datascience/`
 - `SUMMARY.md` — added this step
+
+## Step 173: fix — Airflow DAG `download_weather_datasets` fails on first run (NoSuchBucket)
+
+**Root cause:** `object_exists()` in `minio_helper.py` only caught `NoSuchKey` S3 errors. On first run, the `weather-raw` bucket doesn't exist yet, so MinIO returns `NoSuchBucket` — an unhandled error that crashed the `check_ghcn_*` / `check_meteo_*` ShortCircuitOperator tasks.
+
+**Fix:** Added `"NoSuchBucket"` to the set of caught error codes in `object_exists()`. A missing bucket is now treated the same as a missing object (returns `False`), allowing downstream tasks to proceed and create the bucket via `ensure_bucket()`.
+
+**Files changed:**
+- `apps/datascience/shared/minio_helper.py` — handle `NoSuchBucket` in `object_exists()`
+- `SUMMARY.md` — added this step
+
+## Step 174: fix — `kafka_cdc_to_duckdb` DAG fails with missing `authlib` module
+
+**Root cause:** The `confluent-kafka` package was installed without its `schema-registry` extras. The Schema Registry client (`confluent_kafka.schema_registry`) requires `authlib`, `httpx`, and `cachetools` at runtime, but these are optional dependencies not pulled in by a bare `pip install confluent-kafka`.
+
+**Fix:** Changed `confluent-kafka` to `confluent-kafka[schema-registry]` in the Airflow Containerfile to install all Schema Registry dependencies. Also added `KAFKA_BROKER`, `SCHEMA_REGISTRY_URL`, and `MINIO_ENDPOINT` environment variables to the Airflow container in the pod manifest so it can reach services in other pods via `host.containers.internal`.
+
+**Files changed:**
+- `apps/datascience/airflow/Containerfile` — `confluent-kafka` → `confluent-kafka[schema-registry]`
+- `k8s/datascience-pod.yaml` — added `KAFKA_BROKER`, `SCHEMA_REGISTRY_URL`, `MINIO_ENDPOINT` env vars to airflow container
+- `SUMMARY.md` — added this step
+
+## Step 175: enhance — full cross-pod Kafka connectivity for Airflow
+
+**Problem:** Even after fixing the import error, the Airflow consumer connected to Kafka's bootstrap at `host.containers.internal:9092` but Kafka's metadata response advertised `localhost:9092` (the `PLAINTEXT` listener). The client then tried to reconnect to `localhost:9092` inside the datascience pod — which has no Kafka — causing connection-refused errors.
+
+**Fix:** Added a dual-listener setup to the Kafka broker:
+- `INTERNAL://:9092` — advertised as `localhost:9092` for intra-pod clients (Schema Registry, Connect, Kafka UI)
+- `EXTERNAL://:9094` — advertised as `host.containers.internal:9094` for cross-pod clients (Airflow)
+
+Updated the Airflow `KAFKA_BROKER` env var to point to port 9094 (the external listener).
+
+**Result:** Airflow successfully consumed 402 CDC events from Kafka and resolved Avro schemas from Schema Registry.
+
+**Files changed:**
+- `k8s/kafka-pod.yaml` — added `EXTERNAL` listener on port 9094, updated `KAFKA_LISTENERS`, `KAFKA_ADVERTISED_LISTENERS`, `KAFKA_LISTENER_SECURITY_PROTOCOL_MAP`, exposed hostPort 9094
+- `k8s/datascience-pod.yaml` — `KAFKA_BROKER` updated to `host.containers.internal:9094`
+- `SUMMARY.md` — added this step
+
+## Step 176: fix — Kafka consumer offset commit fails with `_NO_OFFSET`
+
+**Root cause:** `consumer.commit(asynchronous=False)` in the `consume_cdc_events` task relied on the confluent-kafka internal offset store, which wasn't populated when using an Avro deserializer. This caused `KafkaError{code=_NO_OFFSET,str="Commit failed: Local: No offset stored"}`, preventing consumed events from being committed and the batch from reaching the DuckDB load step.
+
+**Fix:** Changed the commit call to explicitly pass the offset of the last consumed message via `consumer.commit(offsets=[TopicPartition(topic, partition, offset+1)])`. This bypasses the internal store and commits the exact position.
+
+**Result:** Full pipeline now works end-to-end: 402 CDC events consumed → committed → upserted into DuckDB → uploaded to MinIO.
+
+**Files changed:**
+- `apps/datascience/airflow/dags/dag_kafka_cdc_to_duckdb.py` — explicit offset commit with `TopicPartition`
+- `SUMMARY.md` — added this step

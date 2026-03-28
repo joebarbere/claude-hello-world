@@ -32,6 +32,14 @@ spec:
           value: admin
         - name: _AIRFLOW_WWW_USER_PASSWORD
           value: admin
+        # Kafka and Schema Registry run in a separate pod; reach them
+        # via the host network using the Podman-injected hostname.
+        - name: KAFKA_BROKER
+          value: "host.containers.internal:9094"
+        - name: SCHEMA_REGISTRY_URL
+          value: "http://host.containers.internal:8085"
+        - name: MINIO_ENDPOINT
+          value: "localhost:9000"
       volumeMounts:
         - name: airflow-dags
           mountPath: /opt/airflow/dags

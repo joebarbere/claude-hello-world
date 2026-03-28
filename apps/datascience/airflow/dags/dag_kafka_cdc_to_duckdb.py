@@ -215,6 +215,7 @@ def _consume_cdc_events(*, run_id: str, **context) -> str:
     consumer.subscribe([KAFKA_TOPIC])
 
     events = []
+    last_msg = None
     try:
         # Poll in a loop until we hit the record limit or time out
         poll_deadline = (
@@ -231,6 +232,8 @@ def _consume_cdc_events(*, run_id: str, **context) -> str:
                 continue
             if msg.error():
                 raise KafkaException(msg.error())
+
+            last_msg = msg
 
             # Deserialise the Avro value
             ctx = SerializationContext(KAFKA_TOPIC, MessageField.VALUE)
@@ -249,9 +252,19 @@ def _consume_cdc_events(*, run_id: str, **context) -> str:
                 }
             )
 
-        if events:
-            # Commit only after collecting all events
-            consumer.commit(asynchronous=False)
+        if events and last_msg is not None:
+            # Commit the offset of the last consumed message explicitly.
+            # A bare consumer.commit() can fail with _NO_OFFSET when the
+            # internal offset store hasn't been populated (e.g. when using
+            # a deserializer that bypasses the default store mechanism).
+            from confluent_kafka import TopicPartition
+
+            tp = TopicPartition(
+                last_msg.topic(),
+                last_msg.partition(),
+                last_msg.offset() + 1,  # commit next offset to read
+            )
+            consumer.commit(offsets=[tp], asynchronous=False)
             log.info("Committed offsets after consuming %d events", len(events))
 
     finally:

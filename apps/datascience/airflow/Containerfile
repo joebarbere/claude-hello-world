@@ -8,7 +8,7 @@ RUN pip install --no-cache-dir \
         pandas \
         pyarrow \
         requests \
-        confluent-kafka \
+        "confluent-kafka[schema-registry]" \
         fastavro
 COPY webserver_config.py /opt/airflow/webserver_config.py
 COPY plugins/ /opt/airflow/plugins/

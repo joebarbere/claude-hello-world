@@ -132,10 +132,10 @@ def object_exists(client: Minio, bucket: str, object_name: str) -> bool:
         log.debug("Object exists: %s/%s", bucket, object_name)
         return True
     except S3Error as err:
-        if err.code == "NoSuchKey":
+        if err.code in ("NoSuchKey", "NoSuchBucket"):
             log.debug("Object not found: %s/%s", bucket, object_name)
             return False
-        # Any other S3 error (permissions, bucket missing, etc.) is re-raised
+        # Any other S3 error (permissions, etc.) is re-raised
         raise
 
 
