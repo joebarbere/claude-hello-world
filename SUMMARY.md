@@ -4014,3 +4014,24 @@ Merged all 10 open Dependabot PRs with the `dependencies` label. Applied lessons
 **Files changed:**
 - `apps/observability/prometheus/Containerfile` — `prom/prometheus` → `docker.io/prom/prometheus`
 - `SUMMARY.md` — added this step
+
+## Step 158: fix — fully qualify all remaining container image names
+
+**Root cause:** Multiple Containerfiles used short image names without a registry prefix (e.g., `alpine:3.21`, `node:24-alpine`, `nginx:alpine`). On Fedora with Podman, this triggers an interactive registry selection prompt that hangs under Nx's non-interactive runner.
+
+**Fix:** Prefixed all unqualified image names with `docker.io/library/` (official images) or `docker.io/` (org images) so Podman resolves them directly without prompting.
+
+**Files changed:**
+- `apps/kafka/debezium/Containerfile` — `confluentinc/cp-kafka-connect` → `docker.io/confluentinc/cp-kafka-connect`
+- `Containerfile.nginx` — `node:24-alpine` → `docker.io/library/node:24-alpine`, `nginx:alpine` → `docker.io/library/nginx:alpine`
+- `traefik/Containerfile` — `traefik:v3.3` → `docker.io/library/traefik:v3.3`
+- `apps/observability/loki/Containerfile` — `grafana/loki` → `docker.io/grafana/loki`
+- `apps/observability/grafana/Containerfile` — `grafana/grafana` → `docker.io/grafana/grafana`
+- `apps/observability/auth-proxy/Containerfile` — `python:3.13-alpine` → `docker.io/library/python:3.13-alpine`
+- `apps/postgres/Containerfile` — `postgres:17-alpine` → `docker.io/library/postgres:17-alpine`
+- `apps/kafka/slot-guard/Containerfile` — `alpine:3.21` → `docker.io/library/alpine:3.21`
+- `apps/datascience/airflow/Containerfile` — `apache/airflow` → `docker.io/apache/airflow`
+- `apps/ory/Containerfile.init` — `alpine:3.21` → `docker.io/library/alpine:3.21`
+- `apps/ory/Containerfile` — `oryd/kratos` → `docker.io/oryd/kratos`
+- `apps/kafka/debezium-init/Containerfile` — `alpine:3.21` → `docker.io/library/alpine:3.21`
+- `SUMMARY.md` — added this step
