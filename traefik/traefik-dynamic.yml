@@ -87,6 +87,17 @@ http:
         - kratos-auth
       tls: {}
 
+    # MinIO auto-login — Kratos auth then auto-login to MinIO Console
+    minio-login-router:
+      rule: "Path(`/minio-login`)"
+      entryPoints:
+        - websecure
+      service: minio-login
+      priority: 26
+      middlewares:
+        - kratos-auth
+      tls: {}
+
     # MinIO Console — access gated via Kratos auth-proxy
     minio-router:
       rule: "PathPrefix(`/minio`)"
@@ -180,6 +191,12 @@ http:
       loadBalancer:
         servers:
           - url: "http://host.containers.internal:9001"
+
+    # MinIO auto-login service (auth-proxy port 4181)
+    minio-login:
+      loadBalancer:
+        servers:
+          - url: "http://host.containers.internal:4181"
 
   middlewares:
     # Strip /.ory/kratos/public prefix before forwarding to Kratos

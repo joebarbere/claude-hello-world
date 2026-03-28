@@ -4144,3 +4144,19 @@ The admin dashboard (admin-app) had links for Airflow, Jupyter, and MinIO pointi
 **Files changed:**
 - `apps/admin-app/src/app/remote-entry/entry.ts` — updated URLs and removed credentials for SSO-protected services
 - `SUMMARY.md` — added this step
+
+---
+
+## Step 167: feat — MinIO Console auto-login via auth-proxy
+
+MinIO Console doesn't support header-based authentication (REMOTE_USER), so after Kratos SSO the user still saw MinIO's own login page. Added an auto-login service on auth-proxy port 4181 that calls the MinIO Console login API with admin credentials, sets the session cookie on the browser, and redirects to `/minio/`. The admin dashboard now links to `/minio-login` which triggers the full SSO → auto-login → MinIO Console flow.
+
+**Files changed:**
+- `apps/observability/auth-proxy/auth-proxy.py` — added MinioLoginHandler on port 4181
+- `apps/observability/auth-proxy/Containerfile` — exposed port 4181
+- `k8s/observability-pod.yaml` — added hostPort 4181 for auth-proxy container
+- `traefik/traefik-dynamic.yml` — added minio-login-router and minio-login service
+- `apps/ory/kratos.yml` — added `/minio-login` to allowed_return_urls
+- `apps/admin-app/src/app/remote-entry/entry.ts` — changed MinIO link to `/minio-login`, removed credentials
+- `README.md` — updated architecture diagram, URL table, SSO docs, Prometheus targets, data science auth section
+- `SUMMARY.md` — added this step

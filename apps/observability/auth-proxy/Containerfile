@@ -1,4 +1,4 @@
 FROM docker.io/library/python:3.13-alpine
 COPY auth-proxy.py /app/auth-proxy.py
-EXPOSE 4180
+EXPOSE 4180 4181
 CMD ["python", "/app/auth-proxy.py"]

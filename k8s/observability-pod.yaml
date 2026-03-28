@@ -50,6 +50,8 @@ spec:
       ports:
         - containerPort: 4180
           hostPort: 4180
+        - containerPort: 4181
+          hostPort: 4181
 
     - name: postgres-exporter
       image: docker.io/prometheuscommunity/postgres-exporter:latest

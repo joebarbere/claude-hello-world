@@ -83,6 +83,11 @@ Traefik (reverse proxy, :8080 → redirects to HTTPS, :8443 SSL termination)
   ├── /weatheredit-app/        → nginx (static files) → weatheredit-app remote
   ├── /admin-app/              → nginx (static files) → admin-app remote
   ├── /weather                 → weather-api
+  ├── /grafana                 → Grafana (:3000) [SSO via kratos-auth]
+  ├── /airflow                 → Airflow (:8280) [SSO via kratos-auth]
+  ├── /jupyter                 → Jupyter (:8888) [SSO via kratos-auth]
+  ├── /minio-login             → auth-proxy (:4181) [SSO + auto-login] → /minio/
+  ├── /minio                   → MinIO Console (:9001) [SSO via kratos-auth]
   ├── /.ory/kratos/public/     → Ory Kratos public API (:4433)
   └── /.ory/kratos/admin/      → Ory Kratos admin API (:4434)
 
@@ -106,7 +111,7 @@ Observability (separate pod, not started by kube-up shell)
   ├── Loki (:3100) — log aggregation (tsdb/filesystem backend)
   ├── Promtail — log collection from pod/container logs, traefik & nginx access logs
   ├── Grafana (:3000 / https://localhost:8443/grafana/) — dashboards, SSO via Kratos
-  ├── auth-proxy (:4180) — Kratos session validation for Grafana forwardAuth
+  ├── auth-proxy (:4180 auth, :4181 MinIO auto-login) — Kratos session validation + MinIO SSO
   └── postgres-exporter (:9187) — scrapes pg_replication_slots metrics from PostgreSQL
 
 Kafka CDC (separate pod, not started by kube-up shell)
@@ -117,9 +122,9 @@ Kafka CDC (separate pod, not started by kube-up shell)
   └── slot-guard — replication slot lag monitor; drops stale slots >5 GB as a safety net
 
 Data Science (separate pod, not started by kube-up shell)
-  ├── Apache Airflow (:8280) — DAG-based workflow orchestration (slim image, SequentialExecutor + SQLite)
-  ├── Jupyter Lab (:8888) — interactive notebooks with DuckDB, pandas, pyarrow, boto3
-  └── MinIO (:9000 API / :9001 console) — S3-compatible object storage for datasets and artifacts
+  ├── Apache Airflow (:8280 / https://localhost:8443/airflow/) — DAG orchestration, SSO via Kratos
+  ├── Jupyter Lab (:8888 / https://localhost:8443/jupyter/) — notebooks, SSO via Kratos
+  └── MinIO (:9000 API / :9001 console / https://localhost:8443/minio-login) — S3 storage, SSO via Kratos
 ```
 
 ## Prerequisites
@@ -226,10 +231,10 @@ npx nx kube-down shell
 | http://localhost:9092 | Kafka broker (requires kafka pod) |
 | http://localhost:8083 | Debezium Connect REST API (requires kafka pod) |
 | http://localhost:8085 | Schema Registry (requires kafka pod) |
-| http://localhost:8280 | Airflow webserver (requires datascience pod) |
-| http://localhost:8888 | Jupyter Lab (requires datascience pod) |
+| https://localhost:8443/airflow/ | Airflow (SSO via Kratos, requires datascience pod) |
+| https://localhost:8443/jupyter/ | Jupyter Lab (SSO via Kratos, requires datascience pod) |
+| https://localhost:8443/minio-login | MinIO Console (SSO via Kratos, requires datascience pod) |
 | http://localhost:9000 | MinIO S3 API (requires datascience pod) |
-| http://localhost:9001 | MinIO Console (requires datascience pod) |
 
 ### Individual containers
 
@@ -361,7 +366,7 @@ The observability stack runs as a **separate pod** and is never started by `kube
 | Loki | 3100 | Log storage (single-instance, filesystem backend) |
 | Promtail | — | Collects CRI pod logs, Podman container logs, and Traefik/nginx access logs; ships to Loki |
 | Grafana | 3000 | Dashboards and log exploration; served at `https://localhost:8443/grafana/` via Traefik |
-| auth-proxy | 4180 | Validates Kratos sessions for Grafana SSO (Traefik forwardAuth middleware) |
+| auth-proxy | 4180, 4181 | Validates Kratos sessions for SSO (Traefik forwardAuth) and provides MinIO auto-login |
 | postgres-exporter | 9187 | Scrapes `pg_replication_slots` metrics from PostgreSQL for CDC lag visibility |
 
 ### Grafana dashboards
@@ -382,6 +387,10 @@ Three pre-provisioned dashboards at `https://localhost:8443/grafana/` (SSO via K
 | traefik | `host.containers.internal:8081/metrics` | Request counts, error rates, latency histograms |
 | postgres | `localhost:9187` | Replication slot lag and status via `postgres-exporter` |
 | debezium | `host.containers.internal:9404` | CDC consumer lag and throughput via JMX Prometheus agent |
+| grafana | `localhost:3000/grafana/metrics` | Grafana internal metrics |
+| loki | `localhost:3100/metrics` | Loki internal metrics |
+| kratos | `host.containers.internal:4434/admin/metrics/prometheus` | Ory Kratos identity metrics |
+| minio | `host.containers.internal:9000/minio/v2/metrics/cluster` | MinIO cluster metrics |
 | prometheus | `localhost:9090` | Self-scrape |
 </details>
 
@@ -397,13 +406,19 @@ Three pre-provisioned dashboards at `https://localhost:8443/grafana/` (SSO via K
 </details>
 
 <details>
-<summary>Grafana SSO via Ory Kratos</summary>
+<summary>SSO via Ory Kratos</summary>
 
-1. Traefik routes `/grafana` through a `forwardAuth` middleware to the auth-proxy
+All protected services (Grafana, Airflow, Jupyter, MinIO) use the same SSO pattern:
+
+1. Traefik routes the service path through a `forwardAuth` middleware (`kratos-auth`) to the auth-proxy on port 4180
 2. The auth-proxy reads the Kratos session cookie and calls `/sessions/whoami`
-3. If valid, it returns `200` with `X-Webauth-User: <email>`; Traefik copies this header to the proxied request
-4. If invalid, it redirects to the Kratos login page with `return_to` pointing back to Grafana
-5. Grafana's `auth.proxy` trusts the `X-Webauth-User` header and auto-signs-up/logs in the user
+3. If valid, it returns `200` with `X-Webauth-User` and `Remote-User` headers; Traefik copies these to the proxied request
+4. If invalid, it redirects to the Kratos login page with `return_to` pointing back to the original URL
+5. Each service consumes the identity header differently:
+   - **Grafana** — `auth.proxy` trusts `X-Webauth-User` and auto-creates/logs in the user
+   - **Airflow** — FAB `AUTH_REMOTE_USER` + a plugin that copies `X-Webauth-User` to `REMOTE_USER` in WSGI environ
+   - **Jupyter** — token/password auth disabled; access gated entirely at the Traefik layer
+   - **MinIO** — `/minio-login` route calls MinIO's login API with admin credentials, sets the session cookie, and redirects to `/minio/` (full auto-login)
 
 > **macOS note:** Podman containers run inside a Linux VM. The `hostPath` volume mounts (`/var/log`, `/var/lib/containers`) refer to paths inside that VM, not the macOS host filesystem. Log collection works automatically when `kube-up shell` and `kube-up observability` are both running inside the same Podman Machine.
 </details>
@@ -462,13 +477,15 @@ npx nx run datascience:kube-down  # Stop the pod
 | Jupyter Lab | 8888 | `quay.io/jupyter/minimal-notebook` + DuckDB | Interactive notebooks with DuckDB, pandas, pyarrow, boto3 |
 | MinIO | 9000 (API), 9001 (Console) | `quay.io/minio/minio` | S3-compatible object storage for datasets, models, and artifacts |
 
-### Default credentials
+### Authentication
 
-| Service | Username | Password |
-|---------|----------|----------|
-| Airflow | `admin` | `admin` |
-| Jupyter Lab | token | `datascience` |
-| MinIO Console | `minioadmin` | `minioadmin` |
+Airflow, Jupyter, and MinIO are all accessible via Traefik with Kratos SSO (see [SSO via Ory Kratos](#observability) for details). Use the admin dashboard links or the SSO URLs in the table above.
+
+| Service | Auth method |
+|---------|------------|
+| Airflow | SSO via Kratos (`REMOTE_USER` header → FAB auto-login as Admin) |
+| Jupyter Lab | SSO via Kratos (token/password disabled, access gated at Traefik) |
+| MinIO Console | SSO via Kratos (auto-login with `minioadmin` / `minioadmin` credentials) |
 
 ### Pre-installed libraries
 

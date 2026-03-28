@@ -65,10 +65,9 @@ const ADMIN_LINKS: AdminLink[] = [
   },
   {
     name: 'MinIO Console',
-    url: '/minio/',
+    url: '/minio-login',
     description: 'S3-compatible object storage for datasets, models, and artifacts.',
     category: 'Data Science',
-    credentials: { username: 'minioadmin', password: 'minioadmin' },
   },
 ];
 
