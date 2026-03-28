@@ -4055,3 +4055,14 @@ Merged all 10 open Dependabot PRs with the `dependencies` label. Applied lessons
 **Files changed:**
 - `nginx/nginx.conf` — replaced file-based logging with `/dev/stdout` and `/dev/stderr`
 - `SUMMARY.md` — added this step
+
+## Step 161: fix — move error_log to top level and remove nginx-logs hostPath volume
+
+**Root cause:** The `error_log /dev/stderr` directive inside the `http {}` block didn't apply to the nginx master process, which uses the compiled-in default (`/var/log/nginx/error.log`) at startup. Additionally, the `hostPath` volume mount for `/var/log/nginx` in `apps-pod.yaml` overwrote the directory permissions set during the image build, causing the same permission denied error.
+
+**Fix:** Moved `error_log /dev/stderr` to the top level of `nginx.conf` (before `events {}`) so it applies from the earliest startup phase. Removed the now-unnecessary `nginx-logs` hostPath volume and mount from `apps-pod.yaml`.
+
+**Files changed:**
+- `nginx/nginx.conf` — moved `error_log` to top-level context
+- `k8s/apps-pod.yaml` — removed `nginx-logs` volume and volumeMount
+- `SUMMARY.md` — added this step

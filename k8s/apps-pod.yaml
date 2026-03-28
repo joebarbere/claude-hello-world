@@ -41,9 +41,6 @@ spec:
           mountPath: /var/log/traefik
     - name: nginx
       image: localhost/claude-hello-world:latest
-      volumeMounts:
-        - name: nginx-logs
-          mountPath: /var/log/nginx
     - name: nginx-exporter
       image: docker.io/nginx/nginx-prometheus-exporter:latest
       args:
@@ -55,6 +52,3 @@ spec:
     - name: traefik-logs
       hostPath:
         path: /var/log/traefik
-    - name: nginx-logs
-      hostPath:
-        path: /var/log/nginx
