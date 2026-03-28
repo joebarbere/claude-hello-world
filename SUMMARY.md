@@ -3972,3 +3972,13 @@ Merged all 10 open Dependabot PRs with the `dependencies` label. Applied lessons
 - `apps/admin-app/src/app/kratos-admin/kratos-admin.component.ts` — same
 - `apps/admin-app/src/app/minions/minions.component.ts` — same
 - `SUMMARY.md` — added this step
+
+## Step 154: fix — avoid interactive sudo prompt in kube-up on bare-metal Linux
+
+**Root cause:** The `shell:kube-up` target's log-directory setup ran `sudo mkdir` on bare-metal Linux (no Podman machine), which prompted for a password interactively. Nx's non-interactive runner couldn't handle the prompt, causing the target to hang and get cancelled.
+
+**Fix:** Changed the bare-metal branch to first check if dirs exist and are writable (skip), then try `mkdir` without sudo, and finally print a clear error message with the manual command instead of blocking on a sudo prompt.
+
+**Files changed:**
+- `apps/shell/project.json` — rewrote log-directory setup to avoid interactive sudo
+- `SUMMARY.md` — added this step
