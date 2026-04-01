@@ -91,6 +91,7 @@ This entire monorepo — **260 commits**, **53,500+ lines of code**, and **188 d
   - [CI](#ci)
 - [Weather API Repository Mode](#weather-api-repository-mode)
 - [Security Disclaimer](#security-disclaimer)
+- [Security Audit & Exploit PoCs](#security-audit--exploit-pocs)
 
 ---
 
@@ -690,3 +691,38 @@ Change `"Repository"` in `apps/weather-api/appsettings.json`:
 ### No container image scanning
 
 - Container images are built from base images (`node:20-alpine`, `nginx:alpine`, `traefik:v3.3-alpine`, `dotnet/sdk:9.0-alpine`, `postgres:17-alpine`, `oryd/kratos:v1.3.0-distroless`) with no CVE scanning, no image signing, and no dependency pinning beyond the tag.
+
+## Security Audit & Exploit PoCs
+
+A comprehensive security audit identified **63 vulnerabilities** across 45 files. Each was verified against the actual source code — 42 confirmed exploitable, 9 partially exploitable, and 7 determined to be false positives. Full details in [`VULNERABILITIES.md`](VULNERABILITIES.md).
+
+**14 exploit proof-of-concepts** are available in [`exploits/`](exploits/):
+
+| Exploit | Severity | Description |
+|---------|----------|-------------|
+| [01-kratos-session-forgery.py](exploits/01-kratos-session-forgery.py) | CRITICAL | Forge session cookies using committed HMAC secret |
+| [02-kratos-admin-api-takeover.sh](exploits/02-kratos-admin-api-takeover.sh) | CRITICAL | Enumerate/modify/delete identities via unauthenticated admin API |
+| [03-jupyter-rce.sh](exploits/03-jupyter-rce.sh) | CRITICAL | Remote code execution via unauthenticated Jupyter kernel |
+| [04-airflow-header-spoofing.sh](exploits/04-airflow-header-spoofing.sh) | HIGH | Bypass auth via X-Webauth-User header spoofing |
+| [05-minio-session-minting.sh](exploits/05-minio-session-minting.sh) | HIGH | Obtain MinIO admin session without authentication |
+| [06-kafka-data-exfil.sh](exploits/06-kafka-data-exfil.sh) | HIGH | Exfiltrate CDC data from unauthenticated Kafka cluster |
+| [07-dag-injection.py](exploits/07-dag-injection.py) | HIGH | Inject malicious Airflow DAG via world-writable /tmp |
+| [08-slot-guard-sqli.sh](exploits/08-slot-guard-sqli.sh) | MEDIUM | SQL injection via LAG_THRESHOLD_BYTES environment variable |
+| [09-credential-harvest.sh](exploits/09-credential-harvest.sh) | HIGH | Harvest all hardcoded credentials from committed config |
+| [10-podman-socket-escape.sh](exploits/10-podman-socket-escape.sh) | CRITICAL | Container escape via unauthenticated Podman TCP socket |
+| [11-grafana-privilege-escalation.sh](exploits/11-grafana-privilege-escalation.sh) | HIGH | Any Kratos user auto-promoted to Grafana Admin |
+| [12-traefik-infra-recon.sh](exploits/12-traefik-infra-recon.sh) | HIGH | Full infrastructure mapping via insecure Traefik dashboard |
+| [13-jmx-secret-leak.sh](exploits/13-jmx-secret-leak.sh) | HIGH | Extract DB credentials from JMX wildcard metrics export |
+| [14-supply-chain-action.md](exploits/14-supply-chain-action.md) | HIGH | Supply chain risk via unpinned GitHub Action |
+
+### False positives identified
+
+7 reported vulnerabilities were found **not exploitable** after code verification:
+
+- **SSRF via /signup** — URL is from server config, not user input
+- **CRLF injection** — mitigated by .NET 6+ Kestrel HTTP parser
+- **Shell injection in init-users.sh** — all values are hardcoded literals
+- **window.electronKafka exposed** — TypeScript type declaration only, no runtime object
+- **Unsafe JSON deserialization in DAG** — Python `json.load` is safe
+- **Form action without origin validation** — standard Kratos browser flow with CSRF token
+- **Error message information leak** — Angular surfaces generic browser-level errors only
