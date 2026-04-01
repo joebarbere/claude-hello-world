@@ -4339,3 +4339,37 @@ A dedicated implementation plan was created for each idea in the `plans/` direct
 - `plans/` — 41 implementation plan markdown files
 - `IDEAS.md` — expanded from 7 stubs to 41 detailed ideas with plan links
 - `SUMMARY.md` — added this step
+
+## Step 179: security — verify vulnerability reports and create exploit PoCs
+
+**What:** Received 63 inbound vulnerability reports (documented in `VULNERABILITIES.md` across 45 `.vuln.md` files). Verified every report against the actual source code to determine real exploitability. Created 14 exploit proof-of-concepts for confirmed vulnerabilities.
+
+**Verification results:**
+- 42 confirmed exploitable
+- 9 partially exploitable (require specific conditions like env var control or network position)
+- 7 false positives identified and documented (SSRF via /signup was misidentified — URL from config not user input; CRLF injection mitigated by .NET 6+ Kestrel; shell injection in init-users.sh uses only hardcoded literals; window.electronKafka is a TypeScript type declaration only; Python `json.load` is safe; login form action follows standard Kratos CSRF flow; error messages surface generic Angular HttpErrorResponse)
+
+**Exploits created (in `exploits/` directory):**
+1. `01-kratos-session-forgery.py` — CRITICAL: forge sessions using committed HMAC secret
+2. `02-kratos-admin-api-takeover.sh` — CRITICAL: unauthenticated identity CRUD on port 4434 and via Traefik
+3. `03-jupyter-rce.sh` — CRITICAL: unauthenticated kernel execution via hostPort 8888 bypass
+4. `04-airflow-header-spoofing.sh` — HIGH: X-Webauth-User spoofing via hostPort 8280 + auto-Admin registration
+5. `05-minio-session-minting.sh` — HIGH: unauthenticated MinIO admin session on port 4181
+6. `06-kafka-data-exfil.sh` — HIGH: read CDC topics and extract Debezium connector credentials
+7. `07-dag-injection.py` — HIGH: write malicious DAGs to world-writable /tmp volume
+8. `08-slot-guard-sqli.sh` — MEDIUM: SQL injection via unquoted LAG_THRESHOLD_BYTES interpolation
+9. `09-credential-harvest.sh` — HIGH: extract all hardcoded credentials from 11 committed files
+10. `10-podman-socket-escape.sh` — CRITICAL: container escape via unauthenticated Podman TCP socket
+11. `11-grafana-privilege-escalation.sh` — HIGH: any Kratos user auto-promoted to Grafana Admin
+12. `12-traefik-infra-recon.sh` — HIGH: full route/service/middleware enumeration via insecure dashboard
+13. `13-jmx-secret-leak.sh` — HIGH: DB credentials leaked via wildcard JMX metrics export
+14. `14-supply-chain-action.md` — HIGH: dependency-check action pinned to @main branch
+
+**Files changed:**
+- `VULNERABILITIES.md` — added Verified and Exploit columns to all tables, added Not Exploitable section with 7 false positives
+- `README.md` — added Security Audit & Exploit PoCs section with exploit table and false positive list, added ToC entry
+- `SUMMARY.md` — added this step
+
+**Files added:**
+- `exploits/README.md` — index of all exploit PoCs with prerequisites
+- `exploits/01-kratos-session-forgery.py` through `exploits/14-supply-chain-action.md` — 14 exploit proof-of-concepts
